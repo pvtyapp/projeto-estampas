@@ -7,11 +7,11 @@ from pydantic import BaseModel
 from typing import List, Optional
 from uuid import UUID
 
-from job_queue import queue
-from jobs import process_render
-from auth import get_current_user
-from supabase_client import supabase
-from limits import check_limits, LimitExceeded
+from backend.job_queue import queue
+from backend.jobs import process_render
+from backend.auth import get_current_user
+from backend.supabase_client import supabase
+from backend.limits import check_limits, LimitExceeded
 
 # ---------- ENV ----------
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
