@@ -5,18 +5,26 @@ export async function api(path: string, options: RequestInit = {}) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const token = session?.access_token;
+  if (!session || !session.access_token) {
+    throw new Error("Usuário não autenticado (sem sessão)");
+  }
+
+  const token = session.access_token;
 
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
     ...options,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
     },
   });
 
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text);
+  }
+
   return res.json();
 }
