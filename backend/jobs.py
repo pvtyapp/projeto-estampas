@@ -1,6 +1,6 @@
 from datetime import datetime
-from supabase_client import supabase
-from render_engine import process_print_job
+from backend.supabase_client import supabase
+from backend.render_engine import process_print_job
 
 def process_render(job_id: str):
     job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
@@ -9,7 +9,6 @@ def process_render(job_id: str):
     if not job:
         return
 
-    # evita reprocessar
     if job["status"] != "queued":
         return
 
@@ -22,7 +21,6 @@ def process_render(job_id: str):
             "finished_at": datetime.utcnow().isoformat()
         }).eq("id", job_id).execute()
 
-        # registra uso
         total_qty = sum(item["qty"] for item in job["payload"].get("items", []))
         supabase.table("usage_logs").insert({
             "user_id": job["user_id"],

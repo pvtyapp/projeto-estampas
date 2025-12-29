@@ -2,7 +2,7 @@ import logging
 import os
 from rq import Worker, Connection
 from redis import Redis
-from job_queue import queue
+from backend.job_queue import queue
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
