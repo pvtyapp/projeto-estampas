@@ -14,7 +14,8 @@ from supabase_client import supabase
 from limits import check_limits, LimitExceeded
 
 # ---------- ENV ----------
-DEV_NO_AUTH = True
+DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
+
 # ---------- APP ----------
 app = FastAPI(title="Projeto Estampas API", version="3.6")
 
@@ -53,6 +54,8 @@ def dev_user():
 def current_user(user=Depends(get_current_user)):
     if DEV_NO_AUTH:
         return dev_user()
+    if not user:
+        raise HTTPException(status_code=401, detail="Não autenticado")
     return user
 
 # ---------- ROOT ----------
@@ -135,6 +138,10 @@ async def upload_print_file(
     if type not in ("front", "back", "extra"):
         raise HTTPException(status_code=400, detail="Tipo inválido")
 
+    owner = supabase.table("prints").select("id").eq("id", print_id).eq("user_id", user["sub"]).execute().data
+    if not owner:
+        raise HTTPException(status_code=404, detail="Estampa não encontrada")
+
     content = await file.read()
     filename = f"{print_id}/{uuid.uuid4()}-{file.filename}"
 
@@ -157,6 +164,14 @@ async def upload_print_file(
 
 @app.patch("/print-files/{file_id}")
 def update_print_file(file_id: str, width_cm: float, height_cm: float, user=Depends(current_user)):
+    pf = supabase.table("print_files").select("print_id").eq("id", file_id).execute().data
+    if not pf:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
+
+    owner = supabase.table("prints").select("id").eq("id", pf[0]["print_id"]).eq("user_id", user["sub"]).execute().data
+    if not owner:
+        raise HTTPException(status_code=403, detail="Sem permissão")
+
     supabase.table("print_files") \
         .update({"width_cm": width_cm, "height_cm": height_cm}) \
         .eq("id", file_id) \
@@ -176,11 +191,10 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     try:
         check_limits(supabase, user["sub"], total_units)
     except LimitExceeded as e:
-        raise HTTPException(status_code=402, detail=str(e))
+        raise HTTPException(status_code=429, detail=str(e))
 
     job_id = str(uuid.uuid4())
 
-    # 🔥 converter UUIDs para string no payload
     clean_payload = {
         "items": [
             {
@@ -200,7 +214,7 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         "payload": clean_payload
     }).execute()
 
-    queue.enqueue(process_render, job_id)
+    queue.enqueue(process_render, job_id, job_timeout=600)
 
     return {"job_id": job_id, "total_units": total_units}
 

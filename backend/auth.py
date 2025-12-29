@@ -3,6 +3,7 @@ import requests
 from functools import lru_cache
 from fastapi import Header, HTTPException, status
 from jose import jwt
+from typing import Optional
 
 # ---------------- CONFIG ----------------
 
@@ -37,7 +38,7 @@ def get_signing_key(token: str):
         if key["kid"] == kid:
             return key
 
-    # Se não achou, limpa cache e tenta de novo (rotacionamento de chave)
+    # possível rotação de chave → limpa cache e tenta novamente
     get_jwks.cache_clear()
     jwks = get_jwks()
 
@@ -49,7 +50,7 @@ def get_signing_key(token: str):
 
 # ---------------- DEPENDENCY ----------------
 
-async def get_current_user(authorization: str | None = Header(None)):
+async def get_current_user(authorization: Optional[str] = Header(None)):
     if DEV_NO_AUTH:
         return {"sub": DEV_USER_ID, "email": "dev@local"}
 
@@ -67,7 +68,7 @@ async def get_current_user(authorization: str | None = Header(None)):
         payload = jwt.decode(
             token,
             key,
-            algorithms=["RS256"],  # ← CORRETO PARA SUPABASE
+            algorithms=["RS256"],
             audience="authenticated",
             issuer=SUPABASE_ISSUER,
         )
@@ -77,6 +78,5 @@ async def get_current_user(authorization: str | None = Header(None)):
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
 
-    except jwt.JWTError as e:
-        print("JWT ERROR:", str(e))
+    except jwt.JWTError:
         raise HTTPException(status_code=401, detail="Token inválido")
