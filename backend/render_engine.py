@@ -1,7 +1,7 @@
 import io
 import uuid
 from PIL import Image
-from supabase_client import supabase
+from backend.supabase_client import supabase
 
 # ---------- CONFIG ----------
 SHEET_WIDTH_CM = 57
