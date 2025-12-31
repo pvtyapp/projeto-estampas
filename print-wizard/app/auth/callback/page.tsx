@@ -1,34 +1,22 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useSupabase } from '@/app/providers/SupabaseProvider'
+import { useEffect } from 'react'
+import { useSession } from '@/app/providers/SessionProvider'
 
 export default function AuthCallback() {
   const router = useRouter()
-  const supabase = useSupabase()
+  const session = useSession()
 
   useEffect(() => {
-    const run = async () => {
-      const { data, error } = await supabase.auth.getSession()
-
-      if (error) {
-        console.error(error)
-        router.replace('/?error=auth')
-        return
-      }
-
-      if (data.session) {
-        router.replace('/work')
-      }
+    if (session) {
+      router.replace('/work')
     }
-
-    run()
-  }, [router, supabase])
+  }, [session, router])
 
   return (
     <div className="min-h-screen flex items-center justify-center text-gray-600">
-      Confirmando login…
+      Confirmando login...
     </div>
   )
 }
