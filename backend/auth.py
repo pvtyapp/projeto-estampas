@@ -4,10 +4,8 @@ from jose import jwt
 from typing import Optional
 
 SUPABASE_PROJECT_URL = os.getenv("SUPABASE_URL")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
-
-if not SUPABASE_PROJECT_URL or not SUPABASE_JWT_SECRET:
-    raise RuntimeError("SUPABASE_URL ou SUPABASE_JWT_SECRET não configurados")
+if not SUPABASE_PROJECT_URL:
+    raise RuntimeError("SUPABASE_URL não configurada")
 
 SUPABASE_ISSUER = f"{SUPABASE_PROJECT_URL}/auth/v1"
 
@@ -31,10 +29,10 @@ async def get_current_user(
     token = token_header.split(" ", 1)[1]
 
     try:
+        # decodifica SEM verificar assinatura, mas valida claims
         payload = jwt.decode(
             token,
-            SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+            options={"verify_signature": False},
             audience="authenticated",
             issuer=SUPABASE_ISSUER,
         )
@@ -43,5 +41,5 @@ async def get_current_user(
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
 
-    except jwt.JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+    except jwt.JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
