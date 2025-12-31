@@ -1,28 +1,27 @@
-// app/lib/apiClient.ts
-import { supabase } from "@/lib/supabaseClient";
+// print-wizard/lib/apiClient.ts
+'use client'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL!;
+import { supabase } from './supabaseClient'
 
-export async function api<T = any>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+const API_URL = process.env.NEXT_PUBLIC_API_URL!
+
+export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
+      'Content-Type': 'application/json',
       ...(options.headers || {}),
-      "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-  });
+  })
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Erro na API (${res.status})`);
+    const txt = await res.text()
+    throw new Error(txt || 'Erro na API')
   }
 
-  return res.json();
+  return res.json()
 }
