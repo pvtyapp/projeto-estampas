@@ -1,31 +1,16 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { Session } from '@supabase/supabase-js'
 
-const SessionContext = createContext<Session | null>(null)
-
-export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null)
+export default function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-    })
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-      setSession(session)
-    })
-
-    return () => {
-      listener.subscription.unsubscribe()
-    }
+    supabase.auth.getSession().then(() => setReady(true))
   }, [])
 
-  return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>
-}
+  if (!ready) return null
 
-export function useSession() {
-  return useContext(SessionContext)
+  return <>{children}</>
 }
