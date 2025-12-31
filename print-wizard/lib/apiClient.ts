@@ -5,12 +5,17 @@ export async function api(path: string, options: RequestInit = {}) {
     throw new Error("api() called on server");
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  let session = null;
+
+  for (let i = 0; i < 10; i++) {
+    const res = await supabase.auth.getSession();
+    session = res.data.session;
+    if (session?.access_token) break;
+    await new Promise((r) => setTimeout(r, 150));
+  }
 
   if (!session?.access_token) {
-    throw new Error("Session not ready");
+    throw new Error("No session available");
   }
 
   const headers = {

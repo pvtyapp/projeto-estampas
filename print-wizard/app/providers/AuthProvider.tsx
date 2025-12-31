@@ -10,12 +10,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const pathname = usePathname()
 
   useEffect(() => {
-    let handled = false
-
     const decide = (session: any) => {
-      if (handled) return
-      handled = true
-
       if (!session) {
         if (!pathname.startsWith('/auth')) {
           router.replace('/auth')
@@ -25,12 +20,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       }
     }
 
-    // 1️⃣ Checa sessão atual
     supabase.auth.getSession().then(({ data }) => {
       decide(data.session)
     })
 
-    // 2️⃣ Escuta mudanças futuras
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
