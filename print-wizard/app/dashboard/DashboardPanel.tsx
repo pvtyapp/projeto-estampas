@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/apiClient'
 
 type Usage = {
   plan: string
@@ -15,32 +17,51 @@ type Usage = {
 
 export default function DashboardPanel() {
   const [usage, setUsage] = useState<Usage | null>(null)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sessionReady, setSessionReady] = useState(false)
   const router = useRouter()
 
+  // Espera a sessão existir
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/me/usage`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+    const init = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (data.session) setSessionReady(true)
+    }
+
+    init()
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) setSessionReady(true)
     })
-      .then(res => {
-        if (!res.ok) throw new Error()
-        return res.json()
-      })
-      .then(setUsage)
-      .catch(() => setError(true))
+
+    return () => {
+      data.subscription.unsubscribe()
+    }
   }, [])
+
+  // Só chama API quando sessão existir
+  useEffect(() => {
+    if (!sessionReady) return
+
+    api<Usage>('/me/usage')
+      .then(setUsage)
+      .catch(err => {
+        console.error(err)
+        setError('Não foi possível carregar o plano.')
+      })
+  }, [sessionReady])
 
   if (error) {
     return (
       <div className="border border-red-400 bg-red-50 text-red-600 rounded-xl p-4">
-        Não foi possível carregar o plano.
+        {error}
       </div>
     )
   }
 
-  if (!usage) return null
+  if (!usage) {
+    return <div className="p-4 text-gray-500">Carregando plano...</div>
+  }
 
   return (
     <div className="border rounded-2xl p-6 space-y-4">
