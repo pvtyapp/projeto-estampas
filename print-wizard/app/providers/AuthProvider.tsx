@@ -2,29 +2,34 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [loading, setLoading] = useState(true)
+  const [ready, setReady] = useState(false)
   const router = useRouter()
-  const pathname = usePathname()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const isPublic =
-        pathname.startsWith('/auth') ||
-        pathname === '/' ||
-        pathname.startsWith('/info')
+    const restore = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!data.session) {
+        router.replace('/auth')
+      } else {
+        setReady(true)
+      }
+    }
 
-      if (!data.session && !isPublic) {
+    restore()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
         router.replace('/auth')
       }
-
-      setLoading(false)
     })
-  }, [pathname])
 
-  if (loading) return <div>Carregando sessão...</div>
+    return () => listener.subscription.unsubscribe()
+  }, [router])
+
+  if (!ready) return <div>Carregando sessão...</div>
 
   return <>{children}</>
 }
