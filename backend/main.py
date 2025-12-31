@@ -1,6 +1,6 @@
 import uuid
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -154,45 +154,73 @@ def cancel_job(job_id: str, user=Depends(current_user)):
 
     raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
 
-@app.get("/me/usage")
-def me_usage(user=Depends(current_user)):
-    uid = user["sub"]
-    now = datetime.utcnow()
 
-    plan_res = supabase.table("plans").select("*").eq("user_id", uid).execute()
-    plan = plan_res.data[0] if plan_res.data else None
+@app.get("/me/usage")
+def get_usage(user=Depends(current_user)):
+    user_id = user["sub"]
+
+    now = datetime.now(timezone.utc)
+    year, month = now.year, now.month
+
+    usage = supabase.table("usage_monthly") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .eq("year", year) \
+        .eq("month", month) \
+        .single() \
+        .execute().data
+
+    plan = supabase.table("plans") \
+        .select("*") \
+        .eq("user_id", user_id) \
+        .single() \
+        .execute().data
+
+    packages = supabase.table("extra_packages") \
+        .select("remaining") \
+        .eq("user_id", user_id) \
+        .gt("remaining", 0) \
+        .execute().data or []
+
+    credits = sum(int(p["remaining"]) for p in packages)
 
     if not plan:
-        plan_name = "free"
-        limit = 2
+        plan = {"plan": "free", "monthly_limit": 2}
+
+    if not usage:
+        used_plan = 0
+        used_extra = 0
+        limit = int(plan["monthly_limit"])
     else:
-        plan_name = plan.get("plan", "free")
-        limit = plan.get("monthly_limit", 2)
+        used_plan = int(usage.get("used_plan", 0))
+        used_extra = int(usage.get("used_extra", 0))
+        limit = int(usage.get("limit_snapshot") or plan["monthly_limit"])
 
-    usage_res = supabase.table("usage_monthly") \
-        .select("used") \
-        .eq("user_id", uid) \
-        .eq("year", now.year) \
-        .eq("month", now.month) \
-        .execute()
+    used = used_plan + used_extra
+    percent = round((used_plan / limit) * 100, 1) if limit else 0
 
-    usage = usage_res.data[0] if usage_res.data else None
-    used = usage.get("used", 0) if usage else 0
+    if month == 12:
+        renew_at = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        renew_at = datetime(year, month + 1, 1, tzinfo=timezone.utc)
 
-    credits_res = supabase.table("extra_packages") \
-        .select("remaining") \
-        .eq("user_id", uid) \
-        .gt("remaining", 0) \
-        .execute()
+    remaining_days = max((renew_at - now).days, 0)
 
-    credits = sum(r.get("remaining", 0) for r in credits_res.data or [])
+    if used_plan >= limit and credits <= 0:
+        status = "blocked"
+    elif used_plan >= limit:
+        status = "using_credits"
+    elif percent >= 90:
+        status = "warning"
+    else:
+        status = "ok"
 
     return {
-        "plan": plan_name,
+        "plan": plan["plan"],
         "used": used,
         "limit": limit,
-        "remaining": max(limit - used, 0),
         "credits": credits,
-        "status": "Bloqueado" if used >= limit and credits == 0 else "Ativo",
-        "billing_cycle_start": now.replace(day=1).isoformat()
+        "percent": percent,
+        "remaining_days": remaining_days,
+        "status": status
     }

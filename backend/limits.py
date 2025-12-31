@@ -12,96 +12,75 @@ def _current_period():
 
 
 def check_and_consume_limits(supabase, user_id: str, units: int):
-    """
-    units = quantidade de arquivos/folhas que serão gerados agora.
-    """
-
     units = int(units or 0)
     if units <= 0:
         return
 
     year, month = _current_period()
 
-    # Buscar plano
-    plan_res = supabase.table("plans").select("*").eq("user_id", user_id).single().execute()
-    plan = plan_res.data
-
+    plan = supabase.table("plans").select("*").eq("user_id", user_id).single().execute().data
     if not plan:
-        # fallback free
         plan = {"plan": "free", "monthly_limit": 2}
 
     monthly_limit = int(plan.get("monthly_limit") or 0)
 
-    # Buscar uso do mês
-    usage_res = supabase.table("usage_monthly") \
+    usage = supabase.table("usage_monthly") \
         .select("*") \
         .eq("user_id", user_id) \
         .eq("year", year) \
         .eq("month", month) \
         .single() \
-        .execute()
+        .execute().data or {
+            "used_plan": 0,
+            "used_extra": 0,
+        }
 
-    usage = usage_res.data
-    used = int(usage["used"]) if usage else 0
+    used_plan = int(usage.get("used_plan", 0))
+    used_extra = int(usage.get("used_extra", 0))
 
-    # Dentro do plano?
-    if used + units <= monthly_limit:
-        _consume_usage(supabase, user_id, year, month, used + units)
-        return
+    available_plan = max(monthly_limit - used_plan, 0)
+    from_plan = min(available_plan, units)
+    overflow = units - from_plan
 
-    # Quanto falta?
-    overflow = (used + units) - monthly_limit
-
-    # Buscar pacotes extras (ordem FIFO)
-    packages_res = supabase.table("extra_packages") \
+    # Buscar pacotes extras
+    packages = supabase.table("extra_packages") \
         .select("*") \
         .eq("user_id", user_id) \
         .gt("remaining", 0) \
         .order("created_at") \
-        .execute()
+        .execute().data or []
 
-    packages = packages_res.data or []
     total_remaining = sum(int(p["remaining"]) for p in packages)
 
     if overflow > total_remaining:
         raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
 
-    # Consumir pacotes
-    for p in packages:
-        if overflow <= 0:
-            break
-        r = int(p["remaining"])
-        take = min(r, overflow)
+    # Consumo atômico manual
+    # (Supabase não suporta transações multi-step nativamente via REST)
 
+    # 1️⃣ Atualiza pacotes
+    remaining = overflow
+    for p in packages:
+        if remaining <= 0:
+            break
+
+        take = min(int(p["remaining"]), remaining)
         supabase.table("extra_packages") \
-            .update({"remaining": r - take}) \
+            .update({"remaining": int(p["remaining"]) - take}) \
             .eq("id", p["id"]) \
             .execute()
 
-        overflow -= take
+        remaining -= take
 
-    _consume_usage(supabase, user_id, year, month, used + units)
+    # 2️⃣ Atualiza usage
+    new_used_plan = used_plan + from_plan
+    new_used_extra = used_extra + overflow
 
-
-def _consume_usage(supabase, user_id: str, year: int, month: int, new_used: int):
-    # cria ou atualiza usage_monthly
-    exists = supabase.table("usage_monthly") \
-        .select("id") \
-        .eq("user_id", user_id) \
-        .eq("year", year) \
-        .eq("month", month) \
-        .single() \
-        .execute()
-
-    if exists.data:
-        supabase.table("usage_monthly") \
-            .update({"used": new_used}) \
-            .eq("id", exists.data["id"]) \
-            .execute()
-    else:
-        supabase.table("usage_monthly").insert({
-            "user_id": user_id,
-            "year": year,
-            "month": month,
-            "used": new_used
-        }).execute()
+    supabase.table("usage_monthly").upsert({
+        "user_id": user_id,
+        "year": year,
+        "month": month,
+        "used_plan": new_used_plan,
+        "used_extra": new_used_extra,
+        "limit_snapshot": monthly_limit,
+    }, on_conflict="user_id,year,month").execute()
