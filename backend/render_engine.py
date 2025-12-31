@@ -1,112 +1,153 @@
-import io
 import uuid
+import math
 from PIL import Image
+from backend.print_utils import load_print_image
 from backend.supabase_client import supabase
 
-# ---------- CONFIG ----------
+DPI = 300
+CM_TO_IN = 1 / 2.54
+
 SHEET_WIDTH_CM = 57
 SHEET_HEIGHT_CM = 100
-DPI = 300
-SPACING_CM = 0.02
-PX_PER_CM = DPI / 2.54
 
-MAX_CM = 200
-
-SHEET_WIDTH_PX = int(SHEET_WIDTH_CM * PX_PER_CM)
-SHEET_HEIGHT_PX = int(SHEET_HEIGHT_CM * PX_PER_CM)
-SPACING_PX = int(SPACING_CM * PX_PER_CM)
 
 def cm_to_px(cm: float) -> int:
-    return int(cm * PX_PER_CM)
+    return int(cm * CM_TO_IN * DPI)
 
-def trim_transparent(img: Image.Image) -> Image.Image:
-    bbox = img.getbbox()
-    return img.crop(bbox) if bbox else img
 
-def pack_items(items):
-    sheets = []
-    current = []
-    x, y, row_height = 0, 0, 0
+class Shelf:
+    def __init__(self, y):
+        self.y = y
+        self.height = 0
+        self.used_width = 0
+
+
+class Sheet:
+    def __init__(self):
+        self.shelves = []
+        self.used_height = 0
+
+
+def pack_items(items, sheet_width, sheet_height):
+    # ordena por maior lado (desc)
+    items = sorted(items, key=lambda i: max(i["w"], i["h"]), reverse=True)
+
+    sheets = [Sheet()]
 
     for item in items:
-        w = item["w"]
-        h = item["h"]
+        placed = False
 
-        if x + w > SHEET_WIDTH_PX:
-            x = 0
-            y += row_height + SPACING_PX
-            row_height = 0
+        for sheet in sheets:
+            for shelf in sheet.shelves:
+                for w, h in [(item["w"], item["h"]), (item["h"], item["w"])]:
+                    if shelf.used_width + w <= sheet_width and shelf.y + h <= sheet_height:
+                        item["x"] = shelf.used_width
+                        item["y"] = shelf.y
+                        item["rotated"] = (w != item["w"])
+                        shelf.used_width += w
+                        shelf.height = max(shelf.height, h)
+                        placed = True
+                        break
+                if placed:
+                    break
+            if placed:
+                break
 
-        if y + h > SHEET_HEIGHT_PX:
-            sheets.append(current)
-            current = []
-            x, y, row_height = 0, 0, 0
+            # tenta nova shelf nessa sheet
+            for w, h in [(item["w"], item["h"]), (item["h"], item["w"])]:
+                if sheet.used_height + h <= sheet_height:
+                    shelf = Shelf(sheet.used_height)
+                    shelf.used_width = w
+                    shelf.height = h
+                    item["x"] = 0
+                    item["y"] = shelf.y
+                    item["rotated"] = (w != item["w"])
+                    sheet.shelves.append(shelf)
+                    sheet.used_height += shelf.height
+                    placed = True
+                    break
 
-        current.append({**item, "x": x, "y": y})
-        x += w + SPACING_PX
-        row_height = max(row_height, h)
+            if placed:
+                break
 
-    if current:
-        sheets.append(current)
+        if not placed:
+            # cria nova folha
+            sheet = Sheet()
+            for w, h in [(item["w"], item["h"]), (item["h"], item["w"])]:
+                if h <= sheet_height:
+                    shelf = Shelf(0)
+                    shelf.used_width = w
+                    shelf.height = h
+                    item["x"] = 0
+                    item["y"] = 0
+                    item["rotated"] = (w != item["w"])
+                    sheet.shelves.append(shelf)
+                    sheet.used_height = shelf.height
+                    sheets.append(sheet)
+                    placed = True
+                    break
 
-    return sheets
+        if not placed:
+            raise ValueError(f"Item maior que a folha: {item}")
 
-def process_print_job(job_payload: dict):
-    urls = []
+    return sheets, items
 
-    raw_items = job_payload.get("items", [])
+
+def process_print_job(payload):
+    # converte items em px
     items = []
+    for it in payload["items"]:
+        w = cm_to_px(it["width_cm"])
+        h = cm_to_px(it["height_cm"])
+        for _ in range(it["qty"]):
+            items.append({
+                "print_id": it["print_id"],
+                "w": w,
+                "h": h
+            })
 
-    for item in raw_items:
-        if item["width_cm"] > MAX_CM or item["height_cm"] > MAX_CM:
-            raise ValueError("Dimensão excede limite máximo")
+    sheet_w = cm_to_px(SHEET_WIDTH_CM)
+    sheet_h = cm_to_px(SHEET_HEIGHT_CM)
 
-        items.extend([
-            {
-                "id": item["print_id"],
-                "type": "front",
-                "w": cm_to_px(item["width_cm"]),
-                "h": cm_to_px(item["height_cm"])
-            }
-        ] * item["qty"])
+    sheets, packed_items = pack_items(items, sheet_w, sheet_h)
 
-    sheets = pack_items(items)
+    results = []
 
-    for sheet in sheets:
-        try:
-            img = Image.new("RGBA", (SHEET_WIDTH_PX, SHEET_HEIGHT_PX), (0, 0, 0, 0))
+    for sheet_index, sheet in enumerate(sheets):
+        img = Image.new("RGBA", (sheet_w, sheet_h), (255, 255, 255, 0))
 
-            for item in sheet:
-                file_res = supabase.table("print_files") \
-                    .select("*") \
-                    .eq("print_id", item["id"]) \
-                    .eq("type", item["type"]) \
-                    .single() \
-                    .execute()
+        for item in packed_items:
+            if item.get("placed"):
+                continue
 
-                if not file_res.data:
-                    continue
+            if "x" not in item:
+                continue
 
-                data = supabase.storage.from_("prints-library").download(file_res.data["file_path"])
-                art = Image.open(io.BytesIO(data)).convert("RGBA")
-                art = trim_transparent(art)
-                art = art.resize((item["w"], item["h"]), Image.LANCZOS)
+            x, y = item["x"], item["y"]
 
-                img.alpha_composite(art, dest=(item["x"], item["y"]))
-                art.close()
+            if y >= sheet_h:
+                continue
 
-            buffer = io.BytesIO()
-            img.save(buffer, "PNG")
-            buffer.seek(0)
+            art = load_print_image(item["print_id"])
 
-            filename = f"jobs/{uuid.uuid4()}.png"
-            supabase.storage.from_("jobs-output").upload(filename, buffer.getvalue(), {"content-type": "image/png"})
-            urls.append(supabase.storage.from_("jobs-output").get_public_url(filename))
+            if item.get("rotated"):
+                art = art.rotate(90, expand=True)
 
-            img.close()
+            img.alpha_composite(art, dest=(x, y))
+            item["placed"] = True
 
-        except Exception as e:
-            print("Erro ao renderizar folha:", e)
-            continue
+        filename = f"jobs/{uuid.uuid4()}.png"
+        buffer = Image.new("RGBA", img.size)
+        buffer.paste(img)
 
-    return urls
+        # salva no storage
+        supabase.storage.from_("jobs-output").upload(
+            filename,
+            buffer.tobytes(),
+            {"content-type": "image/png"}
+        )
+
+        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
+        results.append(public_url)
+
+    return results
