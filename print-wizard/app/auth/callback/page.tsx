@@ -9,15 +9,15 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const run = async () => {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+      const { data, error } = await supabase.auth.getSession()
 
       if (error) {
-        console.error('Auth error:', error)
+        console.error(error)
         router.replace('/?error=auth')
         return
       }
 
-      if (data?.session) {
+      if (data.session) {
         router.replace('/work')
       }
     }
@@ -25,9 +25,5 @@ export default function AuthCallback() {
     run()
   }, [router])
 
-  return (
-    <div className="min-h-screen flex items-center justify-center text-gray-600">
-      Confirmando login…
-    </div>
-  )
+  return <div className="min-h-screen flex items-center justify-center text-gray-600">Confirmando login…</div>
 }
