@@ -17,38 +17,41 @@ export default function DashboardPanel() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
+    let cancelled = false
 
-    const load = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+    const fetchUsage = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-      if (session && mounted) {
-        try {
-          const data = await api('/me/usage')
-          setUsage(data)
-        } catch (err: any) {
-          console.error('Erro ao carregar uso:', err)
-          setError(err.message || 'Erro ao carregar plano')
-        } finally {
+        if (!session) {
           setLoading(false)
+          return
         }
+
+        const data = await api('/me/usage')
+        if (!cancelled) setUsage(data)
+      } catch (err: any) {
+        console.error('Erro ao carregar uso:', err)
+        if (!cancelled) setError(err.message || 'Erro ao carregar plano')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
 
-    load()
+    fetchUsage()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && mounted) {
-        load()
+      if (session) {
+        fetchUsage()
       }
     })
 
     return () => {
-      mounted = false
+      cancelled = true
       subscription.unsubscribe()
     }
   }, [])
@@ -65,7 +68,13 @@ export default function DashboardPanel() {
     )
   }
 
-  if (!usage) return null
+  if (!usage) {
+    return (
+      <div className="text-gray-400 text-sm mb-4">
+        Nenhuma informação de plano disponível.
+      </div>
+    )
+  }
 
   const percent =
     usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
@@ -82,13 +91,18 @@ export default function DashboardPanel() {
       </div>
 
       <div className="w-full h-2 bg-gray-200 rounded overflow-hidden mb-2">
-        <div className="h-full bg-black transition-all" style={{ width: `${percent}%` }} />
+        <div
+          className="h-full bg-black transition-all"
+          style={{ width: `${percent}%` }}
+        />
       </div>
 
       <div className="flex justify-between text-xs text-gray-500">
         <span>{percent}% utilizado</span>
         {usage.renew_at && (
-          <span>Renova em {new Date(usage.renew_at).toLocaleDateString('pt-BR')}</span>
+          <span>
+            Renova em {new Date(usage.renew_at).toLocaleDateString('pt-BR')}
+          </span>
         )}
       </div>
     </div>
