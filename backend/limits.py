@@ -1,84 +1,107 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import Optional
 
 
 class LimitExceeded(Exception):
     pass
 
 
-def check_limits(supabase, user_id: str, units: int):
+def _current_period():
+    now = datetime.utcnow()
+    return now.year, now.month
+
+
+def check_and_consume_limits(supabase, user_id: str, units: int):
     """
-    units = quantidade de SKUs/unidades a serem processadas agora
+    units = quantidade de arquivos/folhas que serão gerados agora.
     """
 
-    try:
-        units = int(units)
-    except Exception:
-        units = 0
-
+    units = int(units or 0)
     if units <= 0:
         return
 
-    # --- Buscar plano do usuário ---
-    profile_res = supabase.table("user_profiles") \
-        .select("plan_id, plans(name, max_jobs_per_month)") \
-        .eq("user_id", user_id) \
-        .limit(1) \
-        .execute()
+    year, month = _current_period()
 
-    profile = profile_res.data[0] if profile_res.data else None
+    # Buscar plano
+    plan_res = supabase.table("plans").select("*").eq("user_id", user_id).single().execute()
+    plan = plan_res.data
 
-    if not profile or not profile.get("plans"):
-        # fallback para Free
-        plan = {"name": "free", "max_jobs_per_month": 2}
-    else:
-        plan = profile["plans"]
+    if not plan:
+        # fallback free
+        plan = {"plan": "free", "monthly_limit": 2}
 
-    plan_name = str(plan.get("name", "")).lower()
-    limit = int(plan.get("max_jobs_per_month") or 0)
+    monthly_limit = int(plan.get("monthly_limit") or 0)
 
-    now = datetime.now(timezone.utc)
-
-    # Free = diário, pago = mensal
-    if plan_name == "free":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-    # --- Buscar uso ---
-    usage_res = supabase.table("usage_logs") \
+    # Buscar uso do mês
+    usage_res = supabase.table("usage_monthly") \
         .select("*") \
         .eq("user_id", user_id) \
-        .gte("created_at", start.isoformat()) \
+        .eq("year", year) \
+        .eq("month", month) \
+        .single() \
         .execute()
 
-    usage = usage_res.data or []
+    usage = usage_res.data
+    used = int(usage["used"]) if usage else 0
 
-    # Tenta somar "qty", se não existir soma 1 por registro
-    used = 0
-    for u in usage:
-        if "qty" in u:
-            try:
-                used += int(u.get("qty") or 0)
-            except Exception:
-                pass
-        else:
-            used += 1
-
-    # Dentro do plano
-    if used + units <= limit:
+    # Dentro do plano?
+    if used + units <= monthly_limit:
+        _consume_usage(supabase, user_id, year, month, used + units)
         return
 
-    # --- Buscar créditos extras ---
-    credits_res = supabase.table("user_credits") \
-        .select("remaining") \
+    # Quanto falta?
+    overflow = (used + units) - monthly_limit
+
+    # Buscar pacotes extras (ordem FIFO)
+    packages_res = supabase.table("extra_packages") \
+        .select("*") \
         .eq("user_id", user_id) \
         .gt("remaining", 0) \
+        .order("created_at") \
         .execute()
 
-    credits = credits_res.data or []
-    credit_total = sum(int(c.get("remaining") or 0) for c in credits)
+    packages = packages_res.data or []
+    total_remaining = sum(int(p["remaining"]) for p in packages)
 
-    if used + units <= limit + credit_total:
-        return
+    if overflow > total_remaining:
+        raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
 
-    raise LimitExceeded("Limite do plano e créditos atingidos.")
+    # Consumir pacotes
+    for p in packages:
+        if overflow <= 0:
+            break
+        r = int(p["remaining"])
+        take = min(r, overflow)
+
+        supabase.table("extra_packages") \
+            .update({"remaining": r - take}) \
+            .eq("id", p["id"]) \
+            .execute()
+
+        overflow -= take
+
+    _consume_usage(supabase, user_id, year, month, used + units)
+
+
+def _consume_usage(supabase, user_id: str, year: int, month: int, new_used: int):
+    # cria ou atualiza usage_monthly
+    exists = supabase.table("usage_monthly") \
+        .select("id") \
+        .eq("user_id", user_id) \
+        .eq("year", year) \
+        .eq("month", month) \
+        .single() \
+        .execute()
+
+    if exists.data:
+        supabase.table("usage_monthly") \
+            .update({"used": new_used}) \
+            .eq("id", exists.data["id"]) \
+            .execute()
+    else:
+        supabase.table("usage_monthly").insert({
+            "user_id": user_id,
+            "year": year,
+            "month": month,
+            "used": new_used
+        }).execute()

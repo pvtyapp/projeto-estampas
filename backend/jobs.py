@@ -2,6 +2,7 @@ from datetime import datetime
 from backend.supabase_client import supabase
 from backend.render_engine import process_print_job
 
+
 def process_render(job_id: str):
     job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
     job = job_res.data
@@ -20,13 +21,6 @@ def process_render(job_id: str):
             "result_urls": urls,
             "finished_at": datetime.utcnow().isoformat()
         }).eq("id", job_id).execute()
-
-        total_qty = sum(item["qty"] for item in job["payload"].get("items", []))
-        supabase.table("usage_logs").insert({
-            "user_id": job["user_id"],
-            "qty": total_qty,
-            "created_at": datetime.utcnow().isoformat()
-        }).execute()
 
     except Exception as e:
         supabase.table("jobs").update({

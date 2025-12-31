@@ -11,13 +11,13 @@ from backend.job_queue import queue
 from backend.jobs import process_render
 from backend.auth import get_current_user
 from backend.supabase_client import supabase
-from backend.limits import check_limits, LimitExceeded
+from backend.limits import check_and_consume_limits, LimitExceeded
 
 # ---------- ENV ----------
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
 # ---------- APP ----------
-app = FastAPI(title="Projeto Estampas API", version="3.6")
+app = FastAPI(title="Projeto Estampas API", version="3.7")
 
 app.add_middleware(
     CORSMiddleware,
@@ -189,7 +189,7 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Limite máximo de 100 unidades.")
 
     try:
-        check_limits(supabase, user["sub"], total_units)
+        check_and_consume_limits(supabase, user["sub"], total_units)
     except LimitExceeded as e:
         raise HTTPException(status_code=429, detail=str(e))
 
@@ -239,30 +239,40 @@ def get_job(job_id: str, user=Depends(current_user)):
 def me_usage(user=Depends(current_user)):
     uid = user["sub"]
     now = datetime.utcnow()
+    year, month = now.year, now.month
 
-    sub_res = supabase.table("subscriptions").select("plan_id, renew_at").eq("user_id", uid).limit(1).execute()
-    sub = sub_res.data[0] if sub_res.data else None
-
-    if not sub:
-        plan_name = "Free"
+    plan = supabase.table("plans").select("*").eq("user_id", uid).single().execute().data
+    if not plan:
+        plan_name = "free"
         limit = 2
-        used = 0
-        renew_at = now + timedelta(days=30)
     else:
-        plan = supabase.table("plans").select("name, max_jobs_per_month").eq("id", sub["plan_id"]).limit(1).execute().data[0]
-        used = sum(r["qty"] for r in supabase.table("usage_logs").select("qty").eq("user_id", uid).gte("created_at", now.replace(day=1).isoformat()).execute().data)
-        limit = plan["max_jobs_per_month"]
-        renew_at = datetime.fromisoformat(sub["renew_at"])
-        plan_name = plan["name"]
+        plan_name = plan["plan"]
+        limit = plan["monthly_limit"]
 
-    credits = sum(c["remaining"] for c in supabase.table("user_credits").select("remaining").eq("user_id", uid).gt("remaining", 0).execute().data)
+    usage = supabase.table("usage_monthly") \
+        .select("used") \
+        .eq("user_id", uid) \
+        .eq("year", year) \
+        .eq("month", month) \
+        .single() \
+        .execute().data
+
+    used = usage["used"] if usage else 0
+
+    credits = sum(
+        c["remaining"]
+        for c in supabase.table("extra_packages")
+        .select("remaining")
+        .eq("user_id", uid)
+        .gt("remaining", 0)
+        .execute().data
+    )
 
     return {
         "plan": plan_name,
         "used": used,
         "limit": limit,
-        "remaining_days": max((renew_at - now).days, 0),
-        "percent": min(round((used / limit) * 100), 100) if limit else 0,
+        "remaining": max(limit - used, 0),
         "credits": credits,
         "status": "Bloqueado" if used >= limit and credits == 0 else "Ativo"
     }
