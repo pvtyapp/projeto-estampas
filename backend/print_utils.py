@@ -1,4 +1,4 @@
-from print_config import PX_PER_CM
+from .print_config import PX_PER_CM
 
 def cm_to_px(cm: float) -> int:
     return int(cm * PX_PER_CM)
