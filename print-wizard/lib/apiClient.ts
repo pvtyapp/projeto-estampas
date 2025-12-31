@@ -1,11 +1,8 @@
-import { supabase } from '@/lib/supabaseClient'
+import { Session } from '@supabase/supabase-js'
 
-export async function api(path: string, options: RequestInit = {}) {
-  const { data } = await supabase.auth.getSession()
-  const session = data.session
-
+export async function api(path: string, session: Session, options: RequestInit = {}) {
   if (!session?.access_token) {
-    throw new Error('No session token available')
+    throw new Error('No session available')
   }
 
   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
@@ -17,7 +14,10 @@ export async function api(path: string, options: RequestInit = {}) {
     },
   })
 
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || res.statusText)
+  }
 
   return res.json()
 }
