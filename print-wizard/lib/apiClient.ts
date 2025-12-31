@@ -1,5 +1,3 @@
-'use client'
-
 import { supabase } from '@/lib/supabaseClient'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL!
@@ -21,15 +19,15 @@ function getAccessTokenFromStorage() {
 }
 
 export async function api(path: string, options: RequestInit = {}) {
-  if (typeof window === 'undefined') {
-    throw new Error('api() foi chamado no server — isso é inválido')
-  }
-
   const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token || getAccessTokenFromStorage()
+  let token = data.session?.access_token
 
   if (!token) {
-    console.error('❌ Token não encontrado no client')
+    token = getAccessTokenFromStorage()
+  }
+
+  if (!token) {
+    console.warn('⚠️ Nenhum token disponível ainda — abortando request:', path)
     throw new Error('Usuário não autenticado')
   }
 

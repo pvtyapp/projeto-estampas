@@ -22,18 +22,17 @@ export default function DashboardPanel() {
     const fetchUsage = async () => {
       try {
         const { data } = await supabase.auth.getSession()
-        console.log('Session:', data.session)
 
         if (!data.session) {
-          setLoading(false)
+          console.log('Sessão ainda não pronta — aguardando...')
           return
         }
 
         const result = await api('/me/usage')
         if (!cancelled) setUsage(result)
       } catch (err: any) {
-        console.error('Erro:', err)
-        if (!cancelled) setError(err.message)
+        console.error('Erro ao carregar uso:', err)
+        if (!cancelled) setError(err.message || 'Erro ao carregar plano')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -41,38 +40,78 @@ export default function DashboardPanel() {
 
     fetchUsage()
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) fetchUsage()
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        fetchUsage()
+      }
     })
 
     return () => {
       cancelled = true
-      listener.subscription.unsubscribe()
+      subscription.unsubscribe()
     }
   }, [])
 
-  if (loading) return <div>Carregando plano…</div>
-  if (error) return <div className="text-red-600">{error}</div>
-  if (!usage) return null
+  if (loading) {
+    return (
+      <div className="text-gray-500 text-sm">
+        Carregando informações do plano...
+      </div>
+    )
+  }
 
-  const percent = Math.round((usage.used / usage.limit) * 100)
+  if (error) {
+    return (
+      <div className="border border-red-400 bg-red-50 text-red-700 p-3 rounded mb-4">
+        {error}
+      </div>
+    )
+  }
+
+  if (!usage) {
+    return (
+      <div className="text-gray-400 text-sm mb-4">
+        Nenhuma informação de plano disponível.
+      </div>
+    )
+  }
+
+  const percent =
+    usage.limit > 0
+      ? Math.min(100, Math.round((usage.used / usage.limit) * 100))
+      : 0
 
   return (
-    <div className="border p-4 rounded">
-      <div className="flex justify-between">
-        <strong>{usage.plan}</strong>
-        <span>{usage.used}/{usage.limit}</span>
+    <div className="border border-gray-200 rounded-lg p-4 mb-6 bg-white shadow-sm">
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="font-semibold text-lg">Seu plano</h2>
+        <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+          {usage.plan}
+        </span>
       </div>
 
-      <div className="w-full bg-gray-200 h-2 mt-2">
-        <div className="bg-black h-2" style={{ width: `${percent}%` }} />
+      <div className="text-sm text-gray-600 mb-2">
+        Uso: {usage.used} de {usage.limit} folhas
       </div>
 
-      {usage.renew_at && (
-        <div className="text-xs mt-2">
-          Renova em {new Date(usage.renew_at).toLocaleDateString('pt-BR')}
-        </div>
-      )}
+      <div className="w-full h-2 bg-gray-200 rounded overflow-hidden mb-2">
+        <div
+          className="h-full bg-black transition-all"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      <div className="flex justify-between text-xs text-gray-500">
+        <span>{percent}% utilizado</span>
+        {usage.renew_at && (
+          <span>
+            Renova em{' '}
+            {new Date(usage.renew_at).toLocaleDateString('pt-BR')}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
