@@ -3,6 +3,8 @@ from fastapi import Header, HTTPException, status
 from jose import jwt
 from typing import Optional
 
+# ---------------- CONFIG ----------------
+
 SUPABASE_PROJECT_URL = os.getenv("SUPABASE_URL")
 if not SUPABASE_PROJECT_URL:
     raise RuntimeError("SUPABASE_URL não configurada")
@@ -11,6 +13,8 @@ SUPABASE_ISSUER = f"{SUPABASE_PROJECT_URL}/auth/v1"
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 DEV_USER_ID = os.getenv("DEV_USER_ID", "00000000-0000-0000-0000-000000000001")
+
+# ---------------- DEPENDENCY ----------------
 
 async def get_current_user(
     authorization: Optional[str] = Header(None),
@@ -29,9 +33,9 @@ async def get_current_user(
     token = token_header.split(" ", 1)[1]
 
     try:
-        # decodifica SEM verificar assinatura, mas valida claims
         payload = jwt.decode(
             token,
+            key="",
             options={"verify_signature": False},
             audience="authenticated",
             issuer=SUPABASE_ISSUER,
