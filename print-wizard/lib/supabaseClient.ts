@@ -6,16 +6,16 @@ export const supabase = createClient(
   {
     auth: {
       persistSession: true,
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      flowType: 'pkce',
+      // ❌ remover pkce
+      // flowType: 'pkce',
     },
   }
 )
 
+// Debug opcional
 if (typeof window !== 'undefined') {
   // @ts-ignore
   window.supabase = supabase
-  supabase.auth.getSession()
 }
