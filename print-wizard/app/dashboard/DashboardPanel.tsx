@@ -11,27 +11,29 @@ export default function DashboardPanel() {
   useEffect(() => {
     let mounted = true;
 
-    const load = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) return;
+    const load = async (session: any) => {
+      if (!session?.access_token) return;
 
       try {
         const data = await api("/me/usage");
         if (mounted) setUsage(data);
       } catch (e) {
-        console.warn("Usage ainda não disponível:", e);
+        console.warn("Erro ao carregar usage:", e);
       } finally {
         if (mounted) setLoading(false);
       }
     };
 
-    load();
+    // 1️⃣ tentar carregar se sessão já existir
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) load(data.session);
+    });
 
-    const { data: listener } = supabase.auth.onAuthStateChange(() => {
-      load();
+    // 2️⃣ escutar mudanças reais de login
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        load(session);
+      }
     });
 
     return () => {

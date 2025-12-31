@@ -1,6 +1,10 @@
 import { supabase } from "@/lib/supabaseClient";
 
 export async function api(path: string, options: RequestInit = {}) {
+  if (typeof window === "undefined") {
+    throw new Error("api() called on server");
+  }
+
   const {
     data: { session },
   } = await supabase.auth.getSession();
