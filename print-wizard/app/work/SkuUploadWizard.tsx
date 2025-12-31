@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { api } from '@/lib/apiClient'
 
 type Props = {
   onComplete: () => void
@@ -33,44 +33,45 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
     setLoading(true)
 
-    const { data, error } = await supabase.from('prints').insert({
-      name,
-      sku,
-      width_cm: Number(width.replace(',', '.')),
-      height_cm: Number(height.replace(',', '.')),
-      is_composite: hasVariants
-    }).select().single()
-
-    if (error) {
-      alert(error.message)
-      setLoading(false)
-      return
-    }
-
-    const upload = async (file: File, label: string) => {
-      const form = new FormData()
-      form.append('file', file)
-      form.append('label', label)
-
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/prints/${data.id}/upload`, {
+    try {
+      const print = await api('/prints', {
         method: 'POST',
-        body: form,
-        credentials: 'include'
+        body: JSON.stringify({
+          name,
+          sku,
+          width_cm: Number(width.replace(',', '.')),
+          height_cm: Number(height.replace(',', '.')),
+          is_composite: hasVariants
+        })
       })
 
-      if (!res.ok) throw new Error(`Erro ao enviar ${label}`)
-    }
+      const upload = async (file: File, type: string) => {
+        const form = new FormData()
+        form.append('file', file)
+        form.append('type', type)
 
-    try {
+        await api(`/prints/${print.id}/upload`, {
+          method: 'POST',
+          body: form,
+          headers: {} // deixa o browser setar o multipart boundary
+        })
+      }
+
       await upload(front, 'front')
       if (back) await upload(back, 'back')
       if (extra) await upload(extra, 'extra')
-    } catch (e: any) {
-      alert(e.message)
-      setLoading(false)
-      return
-    }
 
+      reset()
+      onComplete()
+
+    } catch (e: any) {
+      alert(e.message || 'Erro ao enviar estampa')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function reset() {
     setFront(null)
     setBack(null)
     setExtra(null)
@@ -79,9 +80,6 @@ export default function SkuUploadWizard({ onComplete }: Props) {
     setWidth('')
     setHeight('')
     setHasVariants(false)
-    setLoading(false)
-
-    onComplete()
   }
 
   return (
