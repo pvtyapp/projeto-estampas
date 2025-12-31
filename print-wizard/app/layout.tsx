@@ -1,19 +1,15 @@
 import './globals.css'
 import { ReactNode } from 'react'
 import AuthProvider from './providers/AuthProvider'
-
-export const metadata = {
-  title: 'PrintWizard',
-  description: 'Geração automática de folhas de impressão',
-}
+import { SessionProvider } from './providers/SessionProvider'
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR">
       <body className="bg-white text-gray-900">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </SessionProvider>
       </body>
     </html>
   )

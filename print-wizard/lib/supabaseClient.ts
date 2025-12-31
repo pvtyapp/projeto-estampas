@@ -8,14 +8,7 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      // ❌ remover pkce
-      // flowType: 'pkce',
+      flowType: 'pkce',
     },
   }
 )
-
-// Debug opcional
-if (typeof window !== 'undefined') {
-  // @ts-ignore
-  window.supabase = supabase
-}
