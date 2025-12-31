@@ -17,36 +17,44 @@ export default function DashboardPanel() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let mounted = true
+
     const load = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-        if (!session) {
+      if (session && mounted) {
+        try {
+          const data = await api('/me/usage')
+          setUsage(data)
+        } catch (err: any) {
+          console.error('Erro ao carregar uso:', err)
+          setError(err.message || 'Erro ao carregar plano')
+        } finally {
           setLoading(false)
-          return
         }
-
-        const data = await api('/me/usage')
-        setUsage(data)
-      } catch (err: any) {
-        console.error('Erro ao carregar uso:', err)
-        setError(err.message || 'Erro ao carregar plano')
-      } finally {
-        setLoading(false)
       }
     }
 
     load()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && mounted) {
+        load()
+      }
+    })
+
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   if (loading) {
-    return (
-      <div className="text-gray-500 text-sm">
-        Carregando informações do plano...
-      </div>
-    )
+    return <div className="text-gray-500 text-sm">Carregando informações do plano...</div>
   }
 
   if (error) {
@@ -66,9 +74,7 @@ export default function DashboardPanel() {
     <div className="border border-gray-200 rounded-lg p-4 mb-6 bg-white shadow-sm">
       <div className="flex justify-between items-center mb-2">
         <h2 className="font-semibold text-lg">Seu plano</h2>
-        <span className="text-sm bg-gray-100 px-2 py-1 rounded">
-          {usage.plan}
-        </span>
+        <span className="text-sm bg-gray-100 px-2 py-1 rounded">{usage.plan}</span>
       </div>
 
       <div className="text-sm text-gray-600 mb-2">
@@ -76,19 +82,13 @@ export default function DashboardPanel() {
       </div>
 
       <div className="w-full h-2 bg-gray-200 rounded overflow-hidden mb-2">
-        <div
-          className="h-full bg-black transition-all"
-          style={{ width: `${percent}%` }}
-        />
+        <div className="h-full bg-black transition-all" style={{ width: `${percent}%` }} />
       </div>
 
       <div className="flex justify-between text-xs text-gray-500">
         <span>{percent}% utilizado</span>
         {usage.renew_at && (
-          <span>
-            Renova em{' '}
-            {new Date(usage.renew_at).toLocaleDateString('pt-BR')}
-          </span>
+          <span>Renova em {new Date(usage.renew_at).toLocaleDateString('pt-BR')}</span>
         )}
       </div>
     </div>

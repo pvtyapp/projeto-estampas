@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient'
+import { supabase } from '@/lib/supabaseClient'
 
 export async function api(path: string, options: RequestInit = {}) {
   const {
@@ -8,20 +8,17 @@ export async function api(path: string, options: RequestInit = {}) {
   const token = session?.access_token
 
   if (!token) {
-    throw new Error('Usuário não autenticado')
+    throw new Error('Sem token de autenticação')
   }
 
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}${path}`,
-    {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  )
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  })
 
   if (!res.ok) {
     const text = await res.text()

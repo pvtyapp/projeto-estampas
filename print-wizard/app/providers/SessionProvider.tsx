@@ -7,7 +7,20 @@ export default function SessionProvider({ children }: { children: React.ReactNod
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(() => setReady(true))
+    const init = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (data.session) setReady(true)
+
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session) setReady(true)
+      })
+
+      return () => subscription.unsubscribe()
+    }
+
+    init()
   }, [])
 
   if (!ready) return null
