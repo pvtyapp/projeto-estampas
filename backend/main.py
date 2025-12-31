@@ -158,7 +158,6 @@ def cancel_job(job_id: str, user=Depends(current_user)):
 def me_usage(user=Depends(current_user)):
     uid = user["sub"]
     now = datetime.utcnow()
-    year, month = now.year, now.month
 
     plan_res = supabase.table("plans").select("*").eq("user_id", uid).execute()
     plan = plan_res.data[0] if plan_res.data else None
@@ -170,27 +169,23 @@ def me_usage(user=Depends(current_user)):
         plan_name = plan.get("plan", "free")
         limit = plan.get("monthly_limit", 2)
 
-    usage_res = (
-        supabase.table("usage_monthly")
-        .select("used")
-        .eq("user_id", uid)
-        .eq("year", year)
-        .eq("month", month)
+    usage_res = supabase.table("usage_monthly") \
+        .select("used") \
+        .eq("user_id", uid) \
+        .eq("year", now.year) \
+        .eq("month", now.month) \
         .execute()
-    )
+
     usage = usage_res.data[0] if usage_res.data else None
     used = usage.get("used", 0) if usage else 0
 
-    credit_rows = (
-        supabase.table("extra_packages")
-        .select("remaining")
-        .eq("user_id", uid)
-        .gt("remaining", 0)
+    credits_res = supabase.table("extra_packages") \
+        .select("remaining") \
+        .eq("user_id", uid) \
+        .gt("remaining", 0) \
         .execute()
-        .data
-    ) or []
 
-    credits = sum(c.get("remaining", 0) for c in credit_rows)
+    credits = sum(r.get("remaining", 0) for r in credits_res.data or [])
 
     return {
         "plan": plan_name,
@@ -198,6 +193,6 @@ def me_usage(user=Depends(current_user)):
         "limit": limit,
         "remaining": max(limit - used, 0),
         "credits": credits,
-        "status": "Bloqueado" if used >= limit and credits == 0 else "Ativo"
+        "status": "Bloqueado" if used >= limit and credits == 0 else "Ativo",
+        "billing_cycle_start": now.replace(day=1).isoformat()
     }
-
