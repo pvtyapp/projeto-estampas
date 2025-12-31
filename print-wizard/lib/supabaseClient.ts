@@ -7,7 +7,7 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: true, // ⬅️ ISSO É O PONTO CRÍTICO
       flowType: 'pkce',
     },
   }

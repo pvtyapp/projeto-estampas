@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabaseClient'
 import { api } from '@/lib/apiClient'
 
@@ -26,7 +27,7 @@ export default function DashboardPanel() {
         } = await supabase.auth.getSession()
 
         if (!session) {
-          setLoading(false)
+          if (!cancelled) setLoading(false)
           return
         }
 
@@ -44,11 +45,13 @@ export default function DashboardPanel() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        fetchUsage()
+    } = supabase.auth.onAuthStateChange(
+      (_event: string, session: Session | null) => {
+        if (session) {
+          fetchUsage()
+        }
       }
-    })
+    )
 
     return () => {
       cancelled = true
@@ -77,13 +80,17 @@ export default function DashboardPanel() {
   }
 
   const percent =
-    usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
+    usage.limit > 0
+      ? Math.min(100, Math.round((usage.used / usage.limit) * 100))
+      : 0
 
   return (
     <div className="border border-gray-200 rounded-lg p-4 mb-6 bg-white shadow-sm">
       <div className="flex justify-between items-center mb-2">
         <h2 className="font-semibold text-lg">Seu plano</h2>
-        <span className="text-sm bg-gray-100 px-2 py-1 rounded">{usage.plan}</span>
+        <span className="text-sm bg-gray-100 px-2 py-1 rounded">
+          {usage.plan}
+        </span>
       </div>
 
       <div className="text-sm text-gray-600 mb-2">
