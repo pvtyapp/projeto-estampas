@@ -241,32 +241,45 @@ def me_usage(user=Depends(current_user)):
     now = datetime.utcnow()
     year, month = now.year, now.month
 
-    plan = supabase.table("plans").select("*").eq("user_id", uid).single().execute().data
+    plan = (
+        supabase.table("plans")
+        .select("*")
+        .eq("user_id", uid)
+        .single()
+        .execute()
+        .data
+    )
+
     if not plan:
         plan_name = "free"
         limit = 2
     else:
-        plan_name = plan["plan"]
-        limit = plan["monthly_limit"]
+        plan_name = plan.get("plan", "free")
+        limit = plan.get("monthly_limit", 2)
 
-    usage = supabase.table("usage_monthly") \
-        .select("used") \
-        .eq("user_id", uid) \
-        .eq("year", year) \
-        .eq("month", month) \
-        .single() \
-        .execute().data
+    usage = (
+        supabase.table("usage_monthly")
+        .select("used")
+        .eq("user_id", uid)
+        .eq("year", year)
+        .eq("month", month)
+        .single()
+        .execute()
+        .data
+    )
 
-    used = usage["used"] if usage else 0
+    used = usage.get("used", 0) if usage else 0
 
-    credits = sum(
-        c["remaining"]
-        for c in supabase.table("extra_packages")
+    credit_rows = (
+        supabase.table("extra_packages")
         .select("remaining")
         .eq("user_id", uid)
         .gt("remaining", 0)
-        .execute().data
-    )
+        .execute()
+        .data
+    ) or []
+
+    credits = sum(c.get("remaining", 0) for c in credit_rows)
 
     return {
         "plan": plan_name,
