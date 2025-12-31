@@ -1,29 +1,41 @@
-import { supabase } from './supabaseClient'
+import { supabase } from '@/lib/supabaseClient'
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL!
 
-if (!BASE_URL) {
-  console.warn('NEXT_PUBLIC_API_URL não definido')
+function getAccessTokenFromStorage() {
+  if (typeof window === 'undefined') return null
+
+  const key = Object.keys(localStorage).find(k => k.endsWith('-auth-token'))
+  if (!key) return null
+
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    return data?.access_token || null
+  } catch {
+    return null
+  }
 }
 
 export async function api(path: string, options: RequestInit = {}) {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  let token: string | null = null
+
+  const { data } = await supabase.auth.getSession()
+  token = data.session?.access_token || getAccessTokenFromStorage()
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
+    ...(options.headers as Record<string, string> | undefined),
   }
 
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
   }
 
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers,
-    credentials: 'include',
   })
 
   if (!res.ok) {
