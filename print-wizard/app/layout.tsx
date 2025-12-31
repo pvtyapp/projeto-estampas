@@ -1,7 +1,6 @@
 import './globals.css'
 import { ReactNode } from 'react'
 import AuthProvider from './providers/AuthProvider'
-import { SessionProvider } from './providers/SessionProvider'
 
 export const metadata = {
   title: 'PrintWizard',
@@ -12,11 +11,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pt-BR">
       <body className="bg-white text-gray-900">
-        <SessionProvider>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
-        </SessionProvider>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   )

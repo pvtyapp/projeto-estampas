@@ -1,19 +1,47 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEffect } from 'react'
-import { useSession } from './SessionProvider'
+import { supabase } from '@/lib/supabaseClient'
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const session = useSession()
+  const [ready, setReady] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
-    if (!session && !pathname.startsWith('/auth')) {
-      router.replace('/auth')
+    const decide = (session: any) => {
+      if (!session) {
+        if (!pathname.startsWith('/auth')) {
+          router.replace('/auth')
+        }
+      } else {
+        setReady(true)
+      }
     }
-  }, [session, pathname, router])
+
+    supabase.auth.getSession().then(({ data }) => {
+      decide(data.session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      decide(session)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [router, pathname])
+
+  if (!ready && !pathname.startsWith('/auth')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-500">
+        Carregando sessão...
+      </div>
+    )
+  }
 
   return <>{children}</>
 }
