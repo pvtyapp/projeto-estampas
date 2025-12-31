@@ -9,18 +9,18 @@ export default function AuthCallback() {
   const params = useSearchParams()
 
   useEffect(() => {
+    console.log('AuthCallback montado')
+
     const code = params.get('code')
+    console.log('OAuth code recebido:', code)
 
     if (!code) return
 
     const run = async () => {
       const { error } = await supabase.auth.exchangeCodeForSession(code)
+      console.log('Resultado exchange:', error)
 
-      if (error) {
-        console.error('Erro ao autenticar:', error)
-      } else {
-        router.replace('/app/work')
-      }
+      if (!error) router.replace('/app/work')
     }
 
     run()
