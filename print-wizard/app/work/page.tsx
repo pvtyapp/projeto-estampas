@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import DashboardPanel from '../../dashboard/DashboardPanel'
+import DashboardPanel from '../dashboard/DashboardPanel'
 import UploadPanel from './UploadPanel'
-import LibraryPanel from '../../../components/LibraryPanel'
-import PreviewPanel from '../../../components/PreviewPanel'
+import LibraryPanel from '../../components/LibraryPanel'
+import PreviewPanel from '../../components/PreviewPanel'
 
 export default function WorkPage() {
   const [lastJobId, setLastJobId] = useState<string | null>(null)

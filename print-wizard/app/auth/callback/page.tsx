@@ -8,14 +8,18 @@ export default function AuthCallback() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        router.replace('/app/work')
-      } else {
-        router.replace('/?error=auth')
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        router.replace('/work')
       }
     })
-  }, [])
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [router])
 
   return (
     <div className="min-h-screen flex items-center justify-center text-gray-600">
