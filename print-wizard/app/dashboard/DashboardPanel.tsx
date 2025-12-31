@@ -24,7 +24,7 @@ export default function DashboardPanel() {
       if (!session?.access_token) return;
 
       try {
-        const data: Usage = await api("/me/usage", supabase);
+        const data: Usage = await api("/me/usage");
         if (mounted) setUsage(data);
       } catch (e) {
         console.warn("Erro ao carregar usage:", e);

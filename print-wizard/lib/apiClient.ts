@@ -1,23 +1,15 @@
-export async function api(
-  path: string,
-  supabase: any,
-  options: RequestInit = {}
-) {
+import { supabase } from "@/lib/supabaseClient";
+
+export async function api(path: string, options: RequestInit = {}) {
   if (typeof window === "undefined") {
     throw new Error("api() called on server");
   }
 
-  let session = null;
-
-  for (let i = 0; i < 10; i++) {
-    const res = await supabase.auth.getSession();
-    session = res.data.session;
-    if (session?.access_token) break;
-    await new Promise((r) => setTimeout(r, 150));
-  }
+  const { data } = await supabase.auth.getSession();
+  const session = data.session;
 
   if (!session?.access_token) {
-    throw new Error("No session available");
+    throw new Error("No access token available");
   }
 
   const headers = {
