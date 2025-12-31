@@ -50,17 +50,21 @@ def get_signing_key(token: str):
 
 # ---------------- DEPENDENCY ----------------
 
-async def get_current_user(authorization: Optional[str] = Header(None)):
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization")
+):
     if DEV_NO_AUTH:
         return {"sub": DEV_USER_ID, "email": "dev@local"}
 
-    if not authorization:
+    token_header = authorization or x_authorization
+    if not token_header:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Header Authorization ausente")
 
-    if not authorization.startswith("Bearer "):
+    if not token_header.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Formato de token inválido")
 
-    token = authorization.split(" ", 1)[1]
+    token = token_header.split(" ", 1)[1]
 
     try:
         key = get_signing_key(token)
