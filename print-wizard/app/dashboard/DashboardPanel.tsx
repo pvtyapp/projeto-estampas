@@ -3,19 +3,28 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { api } from "@/lib/apiClient";
+import type { Session } from "@supabase/supabase-js";
+
+type Usage = {
+  plan: string;
+  used: number;
+  limit: number;
+  credits: number;
+  status: string;
+};
 
 export default function DashboardPanel() {
-  const [usage, setUsage] = useState<any>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
 
-    const load = async (session: any) => {
+    const load = async (session: Session | null) => {
       if (!session?.access_token) return;
 
       try {
-        const data = await api("/me/usage");
+        const data: Usage = await api("/me/usage", supabase);
         if (mounted) setUsage(data);
       } catch (e) {
         console.warn("Erro ao carregar usage:", e);
@@ -24,17 +33,17 @@ export default function DashboardPanel() {
       }
     };
 
-    // 1️⃣ tentar carregar se sessão já existir
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
       if (data.session) load(data.session);
     });
 
-    // 2️⃣ escutar mudanças reais de login
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-        load(session);
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event: string, session: Session | null) => {
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          load(session);
+        }
       }
-    });
+    );
 
     return () => {
       mounted = false;

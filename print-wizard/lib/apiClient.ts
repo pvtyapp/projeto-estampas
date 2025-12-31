@@ -1,6 +1,8 @@
-import { supabase } from "@/lib/supabaseClient";
-
-export async function api(path: string, options: RequestInit = {}) {
+export async function api(
+  path: string,
+  supabase: any,
+  options: RequestInit = {}
+) {
   if (typeof window === "undefined") {
     throw new Error("api() called on server");
   }

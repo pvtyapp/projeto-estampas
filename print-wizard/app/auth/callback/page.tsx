@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
+import { useSupabase } from '@/app/providers/SupabaseProvider'
 
 export default function AuthCallback() {
   const router = useRouter()
+  const supabase = useSupabase()
 
   useEffect(() => {
     const run = async () => {
@@ -23,7 +24,11 @@ export default function AuthCallback() {
     }
 
     run()
-  }, [router])
+  }, [router, supabase])
 
-  return <div className="min-h-screen flex items-center justify-center text-gray-600">Confirmando login…</div>
+  return (
+    <div className="min-h-screen flex items-center justify-center text-gray-600">
+      Confirmando login…
+    </div>
+  )
 }
