@@ -24,6 +24,8 @@ export async function api(path: string, options: RequestInit = {}) {
   const { data } = await supabase.auth.getSession()
   token = data.session?.access_token || getAccessTokenFromStorage()
 
+  console.log('API token:', token)
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
