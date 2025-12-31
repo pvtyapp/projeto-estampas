@@ -241,14 +241,8 @@ def me_usage(user=Depends(current_user)):
     now = datetime.utcnow()
     year, month = now.year, now.month
 
-    plan = (
-        supabase.table("plans")
-        .select("*")
-        .eq("user_id", uid)
-        .single()
-        .execute()
-        .data
-    )
+    plan_res = supabase.table("plans").select("*").eq("user_id", uid).execute()
+    plan = plan_res.data[0] if plan_res.data else None
 
     if not plan:
         plan_name = "free"
@@ -257,17 +251,15 @@ def me_usage(user=Depends(current_user)):
         plan_name = plan.get("plan", "free")
         limit = plan.get("monthly_limit", 2)
 
-    usage = (
+    usage_res = (
         supabase.table("usage_monthly")
         .select("used")
         .eq("user_id", uid)
         .eq("year", year)
         .eq("month", month)
-        .single()
         .execute()
-        .data
     )
-
+    usage = usage_res.data[0] if usage_res.data else None
     used = usage.get("used", 0) if usage else 0
 
     credit_rows = (
