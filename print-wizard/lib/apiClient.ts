@@ -7,7 +7,7 @@ export async function api<T = any>(
   options: RequestInit = {}
 ): Promise<T> {
   const {
-    data: { session }
+    data: { session },
   } = await supabase.auth.getSession();
 
   const token = session?.access_token;
@@ -17,13 +17,13 @@ export async function api<T = any>(
     headers: {
       ...(options.headers || {}),
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    }
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err || "Erro na API");
+    const text = await res.text();
+    throw new Error(text || "Erro na API");
   }
 
   return res.json();
