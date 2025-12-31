@@ -8,12 +8,29 @@ export default function AuthCallback() {
   const router = useRouter()
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    let handled = false
+
+    const finish = (session: any) => {
+      if (handled) return
+      handled = true
+
       if (session) {
         router.replace('/work')
+      } else {
+        router.replace('/?error=auth')
       }
+    }
+
+    // 1️⃣ Verifica sessão imediatamente
+    supabase.auth.getSession().then(({ data }) => {
+      finish(data.session)
+    })
+
+    // 2️⃣ Escuta mudanças futuras
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      finish(session)
     })
 
     return () => {

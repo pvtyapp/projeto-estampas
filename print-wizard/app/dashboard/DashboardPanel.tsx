@@ -21,7 +21,7 @@ export default function DashboardPanel() {
   const [sessionReady, setSessionReady] = useState(false)
   const router = useRouter()
 
-  // Espera a sessão existir
+  // Aguarda a sessão existir
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase.auth.getSession()
@@ -39,17 +39,27 @@ export default function DashboardPanel() {
     }
   }, [])
 
-  // Só chama API quando sessão existir
+  // Só chama API quando sessão estiver pronta
   useEffect(() => {
     if (!sessionReady) return
 
+    let mounted = true
+
     api<Usage>('/me/usage')
-      .then(setUsage)
+      .then(data => {
+        if (mounted) setUsage(data)
+      })
       .catch(err => {
         console.error(err)
-        setError('Não foi possível carregar o plano.')
+        if (mounted) setError('Não foi possível carregar o plano.')
       })
+
+    return () => {
+      mounted = false
+    }
   }, [sessionReady])
+
+  if (!sessionReady) return null
 
   if (error) {
     return (
