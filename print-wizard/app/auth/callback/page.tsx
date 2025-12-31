@@ -12,25 +12,23 @@ export default function AuthCallback() {
 
     const finish = (session: any) => {
       if (handled) return
+      if (!session) return // 🔴 NÃO redireciona ainda
       handled = true
-
-      if (session) {
-        router.replace('/work')
-      } else {
-        router.replace('/?error=auth')
-      }
+      router.replace('/work')
     }
 
-    // 1️⃣ Verifica sessão imediatamente
-    supabase.auth.getSession().then(({ data }) => {
-      finish(data.session)
-    })
-
-    // 2️⃣ Escuta mudanças futuras
+    // Escuta primeiro — isso é o que garante a sessão
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      finish(session)
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        finish(session)
+      }
+    })
+
+    // Depois tenta ler caso já exista
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) finish(data.session)
     })
 
     return () => {
