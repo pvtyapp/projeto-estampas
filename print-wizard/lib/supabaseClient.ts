@@ -13,3 +13,9 @@ export const supabase = createClient(
     },
   }
 )
+
+if (typeof window !== 'undefined') {
+  // @ts-ignore
+  window.supabase = supabase
+  supabase.auth.getSession()
+}
