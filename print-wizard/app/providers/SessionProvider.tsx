@@ -1,38 +1,39 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
-import type { Session } from '@supabase/supabase-js'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
+import { Session } from '@supabase/supabase-js'
 
-export default function SessionProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false)
+export default function SessionProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
-
     const init = async () => {
       const { data } = await supabase.auth.getSession()
-      if (mounted) setReady(true) // marca ready mesmo sem sessão
+      setSession(data.session)
+      setLoading(false)
     }
 
     init()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event: string, _session: Session | null) => {
-        if (mounted) setReady(true)
-      }
-    )
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession)
+      if (!newSession) router.push('/auth')
+    })
 
     return () => {
-      mounted = false
-      subscription.unsubscribe()
+      listener.subscription.unsubscribe()
     }
-  }, [])
+  }, [router])
 
-  if (!ready) {
-    return <div className="text-gray-400 text-sm p-4">Inicializando sessão...</div>
+  if (loading) return null
+
+  if (!session) {
+    router.push('/auth')
+    return null
   }
 
   return <>{children}</>
