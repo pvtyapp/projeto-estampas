@@ -7,15 +7,11 @@ export async function api(path: string, options: RequestInit = {}) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  const token = session?.access_token
+  const headers = new Headers(options.headers || {})
+  headers.set('Content-Type', 'application/json')
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> | undefined),
-  }
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
+  if (session?.access_token) {
+    headers.set('Authorization', `Bearer ${session.access_token}`)
   }
 
   const res = await fetch(`${API_URL}${path}`, {
@@ -26,7 +22,7 @@ export async function api(path: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || 'Erro na requisição')
+    throw new Error(text || `Erro ${res.status}`)
   }
 
   return res.json()
