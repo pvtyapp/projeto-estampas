@@ -1,35 +1,26 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
-import DashboardPanel from '../dashboard/DashboardPanel'
-import Library from './Library'
-import PreviewPanel from '../../components/PreviewPanel'
-import SkuUploadWizard from './SkuUploadWizard'
-
 export default function WorkPage() {
-  const [lastJobId, setLastJobId] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data, error }) => {
-      console.log('SESSION:', data?.session)
-      console.log('TOKEN:', data?.session?.access_token)
-      if (error) console.error('SESSION ERROR:', error)
+      if (error) console.error(error)
+      setToken(data?.session?.access_token || null)
     })
   }, [])
 
   return (
-    <div className="space-y-10 max-w-6xl mx-auto p-6">
-      <DashboardPanel />
-
-      <SkuUploadWizard onComplete={() => {
-        setLastJobId(null)
-      }} />
-
-      <Library />
-
-      <PreviewPanel jobId={lastJobId} />
+    <div style={{ padding: 40 }}>
+      <h1>DEBUG TOKEN</h1>
+      {token ? (
+        <textarea style={{ width: '100%', height: 200 }}>{token}</textarea>
+      ) : (
+        <p>Token ainda não carregou ou usuário não logado.</p>
+      )}
     </div>
   )
 }
