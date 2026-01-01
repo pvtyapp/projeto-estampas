@@ -4,19 +4,19 @@ export async function api<T = any>(
 ): Promise<T> {
   const API_URL = process.env.NEXT_PUBLIC_API_URL!
 
-  const raw = localStorage.getItem(
-    Object.keys(localStorage).find(k => k.endsWith('-auth-token')) || ''
+  const rawKey = Object.keys(localStorage).find(k =>
+    k.endsWith('-auth-token')
   )
 
-  if (!raw) {
-    throw new Error('Token não encontrado no storage')
+  if (!rawKey) {
+    throw new Error('Token não encontrado no localStorage')
   }
+
+  const raw = localStorage.getItem(rawKey)
+  if (!raw) throw new Error('Token não encontrado')
 
   const { access_token } = JSON.parse(raw)
-
-  if (!access_token) {
-    throw new Error('access_token ausente')
-  }
+  if (!access_token) throw new Error('access_token ausente')
 
   const res = await fetch(`${API_URL}${path}`, {
     ...options,

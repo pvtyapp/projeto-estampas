@@ -1,19 +1,16 @@
 'use client'
 
-import { Session } from '@supabase/supabase-js'
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function SessionProvider({
-  initialSession,
+  children,
 }: {
-  initialSession: Session | null
+  children: React.ReactNode
 }) {
   useEffect(() => {
-    if (initialSession) {
-      supabase.auth.setSession(initialSession)
-    }
-  }, [initialSession])
+    supabase.auth.getSession()
+  }, [])
 
-  return null
+  return <>{children}</>
 }
