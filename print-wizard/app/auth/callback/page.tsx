@@ -1,36 +1,26 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function AuthCallback() {
   const router = useRouter()
-  const params = useSearchParams()
 
   useEffect(() => {
-    const run = async () => {
-      const code = params.get('code')
-
-      if (!code) return
-
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-      console.log('Exchange result:', data, error)
+    const finishLogin = async () => {
+      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
 
       if (error) {
-        console.error('Erro no exchange:', error)
+        console.error('Erro ao trocar código por sessão:', error)
         return
       }
-
-      const { data: sessionData } = await supabase.auth.getSession()
-      console.log('Session após exchange:', sessionData)
 
       router.replace('/app/work')
     }
 
-    run()
-  }, [params, router])
+    finishLogin()
+  }, [router])
 
-  return <div>Autenticando...</div>
+  return <div className="p-6">Finalizando login...</div>
 }
