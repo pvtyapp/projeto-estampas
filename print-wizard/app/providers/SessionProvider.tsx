@@ -1,40 +1,29 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
-import { Session } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/auth-helpers-nextjs'
+
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function SessionProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    const init = async () => {
-      const { data } = await supabase.auth.getSession()
-      setSession(data.session)
-      setLoading(false)
-    }
-
-    init()
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
-      if (!newSession) router.push('/auth')
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) setReady(true)
     })
 
-    return () => {
-      listener.subscription.unsubscribe()
-    }
-  }, [router])
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (session) setReady(true)
+    })
 
-  if (loading) return null
+    return () => sub.subscription.unsubscribe()
+  }, [])
 
-  if (!session) {
-    router.push('/auth')
-    return null
-  }
+  if (!ready) return null
 
   return <>{children}</>
 }
