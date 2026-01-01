@@ -1,26 +1,35 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import DashboardPanel from '@/app/dashboard/DashboardPanel'
+import Library from '@/app/work/Library'
+import PreviewPanel from '@/components/PreviewPanel'
+import SkuUploadWizard from '@/app/work/SkuUploadWizard'
 
 export default function WorkPage() {
-  const [token, setToken] = useState<string | null>(null)
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error(error)
-      setToken(data?.session?.access_token || null)
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        router.replace('/auth')
+      } else {
+        setLoading(false)
+      }
     })
   }, [])
 
+  if (loading) return <p className="p-6">Carregando...</p>
+
   return (
-    <div style={{ padding: 40 }}>
-      <h1>DEBUG TOKEN</h1>
-      {token ? (
-        <textarea style={{ width: '100%', height: 200 }}>{token}</textarea>
-      ) : (
-        <p>Token ainda não carregou ou usuário não logado.</p>
-      )}
+    <div className="space-y-10 max-w-6xl mx-auto p-6">
+      <DashboardPanel />
+      <SkuUploadWizard onComplete={() => {}} />
+      <Library />
+      <PreviewPanel jobId={null} />
     </div>
   )
 }

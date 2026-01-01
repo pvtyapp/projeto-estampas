@@ -1,59 +1,68 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function AuthPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [session, setSession] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  const login = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
     setError(null)
-    const { data, error } = await supabase.auth.signInWithPassword({
+
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
     if (error) {
       setError(error.message)
+      setLoading(false)
       return
     }
 
-    setSession(data.session)
+    router.replace('/app/work')
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>DEBUG AUTH</h1>
+    <div className="min-h-screen flex items-center justify-center">
+      <form onSubmit={handleSubmit} className="w-80 space-y-4">
+        <h1 className="text-xl font-semibold">Entrar</h1>
 
-      <input
-        placeholder="email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-      />
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          required
+          className="border w-full p-2 rounded"
+        />
 
-      <input
-        placeholder="senha"
-        type="password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-      />
+        <input
+          type="password"
+          placeholder="Senha"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          required
+          className="border w-full p-2 rounded"
+        />
 
-      <button onClick={login}>Login</button>
+        {error && <p className="text-red-500 text-sm">{error}</p>}
 
-      {error && <pre style={{ color: 'red' }}>{error}</pre>}
-
-      <h3>Session:</h3>
-      <pre>{JSON.stringify(session, null, 2)}</pre>
-
-      <h3>localStorage:</h3>
-      <pre>
-        {typeof window !== 'undefined'
-          ? JSON.stringify(localStorage, null, 2)
-          : 'no window'}
-      </pre>
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-black text-white w-full py-2 rounded"
+        >
+          {loading ? 'Entrando...' : 'Entrar'}
+        </button>
+      </form>
     </div>
   )
 }
