@@ -1,21 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function AuthPage() {
-  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [session, setSession] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const login = async () => {
     setError(null)
-
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -23,42 +18,42 @@ export default function AuthPage() {
 
     if (error) {
       setError(error.message)
-      setLoading(false)
       return
     }
 
-    router.replace('/app/work')
+    setSession(data.session)
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <form onSubmit={handleSubmit} style={{ width: 320 }}>
-        <h2>Login</h2>
+    <div style={{ padding: 40 }}>
+      <h1>DEBUG AUTH</h1>
 
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          required
-          style={{ width: '100%', marginBottom: 8 }}
-        />
+      <input
+        placeholder="email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+      />
 
-        <input
-          type="password"
-          placeholder="Senha"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          required
-          style={{ width: '100%', marginBottom: 8 }}
-        />
+      <input
+        placeholder="senha"
+        type="password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+      />
 
-        {error && <p style={{ color: 'red' }}>{error}</p>}
+      <button onClick={login}>Login</button>
 
-        <button type="submit" disabled={loading}>
-          {loading ? 'Entrando...' : 'Entrar'}
-        </button>
-      </form>
+      {error && <pre style={{ color: 'red' }}>{error}</pre>}
+
+      <h3>Session:</h3>
+      <pre>{JSON.stringify(session, null, 2)}</pre>
+
+      <h3>localStorage:</h3>
+      <pre>
+        {typeof window !== 'undefined'
+          ? JSON.stringify(localStorage, null, 2)
+          : 'no window'}
+      </pre>
     </div>
   )
 }
