@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
 import { api } from '@/lib/apiClient'
+import { useSession } from '@/app/providers/SessionProvider'
 
 type Usage = {
   plan: string
@@ -12,22 +12,20 @@ type Usage = {
 }
 
 export default function DashboardPanel() {
+  const { session, loading: sessionLoading } = useSession()
+
   const [usage, setUsage] = useState<Usage | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (sessionLoading) return
+    if (!session) return
+
     let cancelled = false
 
     const fetchUsage = async () => {
       try {
-        const { data } = await supabase.auth.getSession()
-
-        if (!data.session) {
-          console.log('Sessão ainda não pronta — aguardando...')
-          return
-        }
-
         const result = await api('/me/usage')
         if (!cancelled) setUsage(result)
       } catch (err: any) {
@@ -40,21 +38,12 @@ export default function DashboardPanel() {
 
     fetchUsage()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        fetchUsage()
-      }
-    })
-
     return () => {
       cancelled = true
-      subscription.unsubscribe()
     }
-  }, [])
+  }, [sessionLoading, session])
 
-  if (loading) {
+  if (sessionLoading || loading) {
     return (
       <div className="text-gray-500 text-sm">
         Carregando informações do plano...
