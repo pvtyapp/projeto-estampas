@@ -9,9 +9,9 @@ export async function api(path: string, options: RequestInit = {}) {
 
   const token = session?.access_token
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {}),
+    ...(options.headers as Record<string, string> || {}),
   }
 
   if (token) {
