@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabaseClient'
+import { useSession } from '@/app/providers/SessionProvider'
 import DashboardPanel from '@/app/dashboard/DashboardPanel'
 import Library from '@/app/work/Library'
 import PreviewPanel from '@/components/PreviewPanel'
@@ -10,19 +10,16 @@ import SkuUploadWizard from '@/app/work/SkuUploadWizard'
 
 export default function WorkPage() {
   const router = useRouter()
-  const [loading, setLoading] = useState(true)
+  const { session, loading } = useSession()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        router.replace('/auth')
-      } else {
-        setLoading(false)
-      }
-    })
-  }, [])
+    if (!loading && !session) {
+      router.replace('/auth')
+    }
+  }, [loading, session])
 
-  if (loading) return <p className="p-6">Carregando...</p>
+  if (loading) return <p className="p-6">Carregando sessão...</p>
+  if (!session) return null
 
   return (
     <div className="space-y-10 max-w-6xl mx-auto p-6">

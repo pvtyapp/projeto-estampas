@@ -3,12 +3,7 @@ import { supabase } from './supabaseClient'
 const API_URL = process.env.NEXT_PUBLIC_API_URL!
 
 export async function api(path: string, options: RequestInit = {}) {
-  const { data, error } = await supabase.auth.getSession()
-
-  if (error) {
-    console.error('Erro ao obter sessão:', error)
-  }
-
+  const { data } = await supabase.auth.getSession()
   const token = data?.session?.access_token
 
   const headers: Record<string, string> = {
@@ -16,10 +11,8 @@ export async function api(path: string, options: RequestInit = {}) {
     ...(options.headers as Record<string, string> || {}),
   }
 
-  if (typeof token === 'string' && token.includes('.')) {
+  if (token) {
     headers['Authorization'] = `Bearer ${token}`
-  } else {
-    console.warn('Token inválido ou ausente:', token)
   }
 
   const res = await fetch(`${API_URL}${path}`, {
@@ -28,8 +21,7 @@ export async function api(path: string, options: RequestInit = {}) {
   })
 
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || res.statusText)
+    throw new Error(await res.text())
   }
 
   return res.json()
