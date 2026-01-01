@@ -7,11 +7,15 @@ export async function api(path: string, options: RequestInit = {}) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  const headers = new Headers(options.headers || {})
-  headers.set('Content-Type', 'application/json')
+  const token = session?.access_token
 
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`)
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  }
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
   }
 
   const res = await fetch(`${API_URL}${path}`, {
@@ -22,7 +26,7 @@ export async function api(path: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(text || `Erro ${res.status}`)
+    throw new Error(text || res.statusText)
   }
 
   return res.json()
