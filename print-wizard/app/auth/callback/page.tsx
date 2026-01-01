@@ -1,32 +1,26 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
 export default function AuthCallback() {
   const router = useRouter()
-  const ran = useRef(false)
 
   useEffect(() => {
-    if (ran.current) return
-    ran.current = true
-
-    const run = async () => {
-      const { error } = await supabase.auth.exchangeCodeForSession(
-        window.location.href
-      )
-
-      if (error) {
-        console.error('Erro ao criar sessão:', error)
-        return
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.replace('/app/work')
+      } else {
+        supabase.auth.exchangeCodeForSession(window.location.href).then(({ error }) => {
+          if (error) {
+            console.error('Auth callback error:', error)
+          }
+          router.replace('/app/work')
+        })
       }
+    })
+  }, [])
 
-      router.replace('/app/work')
-    }
-
-    run()
-  }, [router])
-
-  return <div className="p-6">Finalizando login...</div>
+  return <p>Autenticando...</p>
 }
