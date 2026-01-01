@@ -2,30 +2,36 @@ import { supabase } from './supabaseClient'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL
 
-if (!API_BASE) {
-  console.warn('⚠️ NEXT_PUBLIC_API_URL não configurada')
-}
-
-type ApiOptions = RequestInit & {
-  skipAuth?: boolean
+function isValidJWT(token: string) {
+  return token.split('.').length === 3
 }
 
 async function getToken() {
   const { data, error } = await supabase.auth.getSession()
-  if (error) throw error
-  return data.session?.access_token || null
-}
-
-export async function api(path: string, options: ApiOptions = {}) {
-  const headers = new Headers(options.headers || {})
-
-  if (!options.skipAuth) {
-    const token = await getToken()
-    if (!token) throw new Error('Usuário não autenticado')
-
-    headers.set('Authorization', `Bearer ${token}`)
+  if (error) {
+    console.error('Erro ao obter sessão:', error)
+    return null
   }
 
+  const token = data.session?.access_token || null
+
+  console.log('🔐 Token obtido:', token)
+
+  if (token && !isValidJWT(token)) {
+    console.error('❌ Token não é JWT válido:', token)
+    return null
+  }
+
+  return token
+}
+
+export async function api(path: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers || {})
+
+  const token = await getToken()
+  if (!token) throw new Error('Token inválido ou ausente')
+
+  headers.set('Authorization', `Bearer ${token}`)
   headers.set('Content-Type', 'application/json')
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -35,13 +41,9 @@ export async function api(path: string, options: ApiOptions = {}) {
   })
 
   if (!res.ok) {
-    let detail = ''
-    try {
-      const json = await res.json()
-      detail = json.detail || JSON.stringify(json)
-    } catch {}
-
-    throw new Error(`API ${res.status}: ${detail || res.statusText}`)
+    const text = await res.text()
+    console.error('❌ API erro:', res.status, text)
+    throw new Error(`API ${res.status}: ${text}`)
   }
 
   return res.json()
