@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 
 class LimitExceeded(Exception):
@@ -42,7 +41,6 @@ def check_and_consume_limits(supabase, user_id: str, units: int):
     from_plan = min(available_plan, units)
     overflow = units - from_plan
 
-    # Buscar pacotes extras
     packages = supabase.table("extra_packages") \
         .select("*") \
         .eq("user_id", user_id) \
@@ -55,16 +53,15 @@ def check_and_consume_limits(supabase, user_id: str, units: int):
     if overflow > total_remaining:
         raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
 
-    # Consumo atômico manual
-    # (Supabase não suporta transações multi-step nativamente via REST)
+    # Consumo manual (Supabase REST não suporta transações reais)
 
-    # 1️⃣ Atualiza pacotes
     remaining = overflow
     for p in packages:
         if remaining <= 0:
             break
 
         take = min(int(p["remaining"]), remaining)
+
         supabase.table("extra_packages") \
             .update({"remaining": int(p["remaining"]) - take}) \
             .eq("id", p["id"]) \
@@ -72,7 +69,6 @@ def check_and_consume_limits(supabase, user_id: str, units: int):
 
         remaining -= take
 
-    # 2️⃣ Atualiza usage
     new_used_plan = used_plan + from_plan
     new_used_extra = used_extra + overflow
 

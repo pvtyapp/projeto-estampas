@@ -19,7 +19,10 @@ export default function SessionProvider({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let mounted = true
+
     supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
       setSession(data.session)
       setLoading(false)
     })
@@ -27,11 +30,15 @@ export default function SessionProvider({ children }: { children: React.ReactNod
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return
       setSession(session)
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   return (

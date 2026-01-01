@@ -9,7 +9,6 @@ SUPABASE_PROJECT_URL = os.getenv("SUPABASE_URL")
 if not SUPABASE_PROJECT_URL:
     raise RuntimeError("SUPABASE_URL não configurada")
 
-# Garante formato correto do issuer
 SUPABASE_PROJECT_URL = SUPABASE_PROJECT_URL.rstrip("/")
 SUPABASE_ISSUER = f"{SUPABASE_PROJECT_URL}/auth/v1"
 
@@ -20,7 +19,7 @@ DEV_USER_ID = os.getenv("DEV_USER_ID", "00000000-0000-0000-0000-000000000001")
 
 async def get_current_user(
     authorization: Optional[str] = Header(None),
-    x_authorization: Optional[str] = Header(None, alias="X-Authorization")
+    x_authorization: Optional[str] = Header(None, alias="X-Authorization"),
 ):
     if DEV_NO_AUTH:
         print("⚠️ DEV_NO_AUTH ativo — ignorando auth")
@@ -40,8 +39,11 @@ async def get_current_user(
     try:
         payload = jwt.decode(
             token,
-            key="",  # não validamos assinatura aqui
-            options={"verify_signature": False},
+            key="",
+            options={
+                "verify_signature": False,
+                "verify_aud": False,  # evita erro se aud existir
+            },
             issuer=SUPABASE_ISSUER,
         )
 
@@ -50,8 +52,8 @@ async def get_current_user(
 
     except ExpiredSignatureError:
         print("❌ Token expirado")
-        raise HTTPException(status_code=401, detail="Token expirado")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expirado")
 
     except JWTError as e:
         print("❌ Token inválido:", str(e))
-        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Token inválido: {str(e)}")

@@ -8,19 +8,31 @@ export default function AuthCallback() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    let mounted = true
+
+    async function handleAuth() {
+      const { data } = await supabase.auth.getSession()
+
       if (data.session) {
-        router.replace('/app/work')
-      } else {
-        supabase.auth.exchangeCodeForSession(window.location.href).then(({ error }) => {
-          if (error) {
-            console.error('Auth callback error:', error)
-          }
-          router.replace('/app/work')
-        })
+        if (mounted) router.replace('/app/work')
+        return
       }
-    })
-  }, [])
+
+      const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+
+      if (error) {
+        console.error('Auth callback error:', error)
+      }
+
+      if (mounted) router.replace('/app/work')
+    }
+
+    handleAuth()
+
+    return () => {
+      mounted = false
+    }
+  }, [router])
 
   return <p>Autenticando...</p>
 }

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 from uuid import UUID
 
 from backend.job_queue import queue
@@ -199,11 +199,7 @@ def get_usage(user=Depends(current_user)):
     used = used_plan + used_extra
     percent = round((used_plan / limit) * 100, 1) if limit else 0
 
-    if month == 12:
-        renew_at = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-    else:
-        renew_at = datetime(year, month + 1, 1, tzinfo=timezone.utc)
-
+    renew_at = datetime(year + 1, 1, 1, tzinfo=timezone.utc) if month == 12 else datetime(year, month + 1, 1, tzinfo=timezone.utc)
     remaining_days = max((renew_at - now).days, 0)
 
     if used_plan >= limit and credits <= 0:

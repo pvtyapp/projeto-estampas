@@ -16,21 +16,22 @@ export default function DashboardPanel() {
 
   const [usage, setUsage] = useState<Usage | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (sessionLoading) return
-    if (!session) return
+    if (sessionLoading || !session) return
 
     let cancelled = false
+    setLoading(true)
+    setError(null)
 
-    const fetchUsage = async () => {
+    async function fetchUsage() {
       try {
         const result = await api('/me/usage')
-        if (!cancelled) setUsage(result)
+        if (!cancelled && result) setUsage(result)
       } catch (err: any) {
         console.error('Erro ao carregar uso:', err)
-        if (!cancelled) setError(err.message || 'Erro ao carregar plano')
+        if (!cancelled) setError(err?.message || 'Erro ao carregar plano')
       } finally {
         if (!cancelled) setLoading(false)
       }

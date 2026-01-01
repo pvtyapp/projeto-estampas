@@ -1,17 +1,12 @@
-'use client'
+import './globals.css'
+import SessionProvider from '../providers/SessionProvider'
 
-import { useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-import { useRouter } from 'next/navigation'
-
-export default function LogoutPage() {
-  const router = useRouter()
-
-  useEffect(() => {
-    supabase.auth.signOut().then(() => {
-      router.replace('/auth')
-    })
-  }, [])
-
-  return null
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="pt-BR">
+      <body>
+        <SessionProvider>{children}</SessionProvider>
+      </body>
+    </html>
+  )
 }

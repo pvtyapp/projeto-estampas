@@ -13,16 +13,18 @@ export default function AuthPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
+
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    if (error) {
-      setError(error.message)
+    if (error || !data.session) {
+      setError(error?.message || 'Falha ao autenticar')
       setLoading(false)
       return
     }
@@ -58,7 +60,7 @@ export default function AuthPage() {
         <button
           type="submit"
           disabled={loading}
-          className="bg-black text-white w-full py-2 rounded"
+          className="bg-black text-white w-full py-2 rounded disabled:opacity-60"
         >
           {loading ? 'Entrando...' : 'Entrar'}
         </button>
