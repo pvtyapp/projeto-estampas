@@ -14,9 +14,14 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
   const [name, setName] = useState('')
   const [sku, setSku] = useState('')
-  const [width, setWidth] = useState('')
-  const [height, setHeight] = useState('')
+  const [frontW, setFrontW] = useState('')
+  const [frontH, setFrontH] = useState('')
+  const [backW, setBackW] = useState('')
+  const [backH, setBackH] = useState('')
+  const [extraW, setExtraW] = useState('')
+  const [extraH, setExtraH] = useState('')
   const [hasVariants, setHasVariants] = useState(false)
+  const [hasExtra, setHasExtra] = useState(false)
   const [loading, setLoading] = useState(false)
 
   function handleFront(file: File | null) {
@@ -29,7 +34,13 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
   async function submit() {
     if (!front) return alert('Envie a frente.')
-    if (!width || !height) return alert('Informe as medidas.')
+    if (!frontW || !frontH) return alert('Informe medidas da frente.')
+
+    if (hasVariants && !back) return alert('Envie a estampa das costas.')
+    if (hasVariants && (!backW || !backH)) return alert('Informe medidas das costas.')
+
+    if (hasExtra && !extra) return alert('Envie a estampa extra.')
+    if (hasExtra && (!extraW || !extraH)) return alert('Informe medidas da estampa extra.')
 
     setLoading(true)
 
@@ -39,31 +50,37 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         body: JSON.stringify({
           name,
           sku,
-          width_cm: Number(width.replace(',', '.')),
-          height_cm: Number(height.replace(',', '.')),
-          is_composite: hasVariants
+          width_cm: Number(frontW.replace(',', '.')),
+          height_cm: Number(frontH.replace(',', '.')),
+          is_composite: hasVariants || hasExtra
         })
       })
 
-      const upload = async (file: File, type: string) => {
+      const upload = async (
+        file: File,
+        type: 'front' | 'back' | 'extra',
+        w: string,
+        h: string,
+      ) => {
         const form = new FormData()
         form.append('file', file)
         form.append('type', type)
+        form.append('width_cm', w.replace(',', '.'))
+        form.append('height_cm', h.replace(',', '.'))
 
         await api(`/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,
-          headers: {} // deixa o browser setar o multipart boundary
+          headers: {}
         })
       }
 
-      await upload(front, 'front')
-      if (back) await upload(back, 'back')
-      if (extra) await upload(extra, 'extra')
+      await upload(front, 'front', frontW, frontH)
+      if (hasVariants && back) await upload(back, 'back', backW, backH)
+      if (hasExtra && extra) await upload(extra, 'extra', extraW, extraH)
 
       reset()
       onComplete()
-
     } catch (e: any) {
       alert(e.message || 'Erro ao enviar estampa')
     } finally {
@@ -77,9 +94,14 @@ export default function SkuUploadWizard({ onComplete }: Props) {
     setExtra(null)
     setName('')
     setSku('')
-    setWidth('')
-    setHeight('')
+    setFrontW('')
+    setFrontH('')
+    setBackW('')
+    setBackH('')
+    setExtraW('')
+    setExtraH('')
     setHasVariants(false)
+    setHasExtra(false)
   }
 
   return (
@@ -94,19 +116,41 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           <input className="w-full border rounded-lg px-4 py-2 bg-gray-50" value={sku} disabled />
 
           <div className="flex gap-4">
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura (cm)" value={width} onChange={e => setWidth(e.target.value)} />
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura (cm)" value={height} onChange={e => setHeight(e.target.value)} />
+            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura frente (cm)" value={frontW} onChange={e => setFrontW(e.target.value)} />
+            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura frente (cm)" value={frontH} onChange={e => setFrontH(e.target.value)} />
           </div>
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={hasVariants} onChange={e => setHasVariants(e.target.checked)} />
-            Possui outra estampa vinculada ao mesmo SKU?
+            Possui costas?
           </label>
         </>
       )}
 
-      {hasVariants && <Upload label="Costas" onFile={setBack} />}
-      {back && <Upload label="Adicional (opcional)" onFile={setExtra} />}
+      {hasVariants && (
+        <>
+          <Upload label="Costas" onFile={setBack} />
+          <div className="flex gap-4">
+            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura costas (cm)" value={backW} onChange={e => setBackW(e.target.value)} />
+            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura costas (cm)" value={backH} onChange={e => setBackH(e.target.value)} />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={hasExtra} onChange={e => setHasExtra(e.target.checked)} />
+            Adicionar estampa extra?
+          </label>
+        </>
+      )}
+
+      {hasExtra && (
+        <>
+          <Upload label="Extra" onFile={setExtra} />
+          <div className="flex gap-4">
+            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura extra (cm)" value={extraW} onChange={e => setExtraW(e.target.value)} />
+            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura extra (cm)" value={extraH} onChange={e => setExtraH(e.target.value)} />
+          </div>
+        </>
+      )}
 
       <button onClick={submit} disabled={loading} className="bg-black text-white px-6 py-2 rounded-lg">
         {loading ? 'Enviando...' : 'Adicionar à biblioteca'}
