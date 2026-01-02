@@ -2,13 +2,16 @@
 
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { Cpu, Layers, Users, BarChart3, Zap } from 'lucide-react'
 
 export default function Home() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showRegister, setShowRegister] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null)
+  const [cooldown, setCooldown] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -26,11 +29,17 @@ export default function Home() {
     setForm(f => ({ ...f, [field]: value }))
   }
 
+  useEffect(() => {
+    if (cooldown > 0) {
+      const i = setInterval(() => setCooldown(c => c - 1), 1000)
+      return () => clearInterval(i)
+    }
+  }, [cooldown])
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
-
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) setError(error.message)
@@ -46,130 +55,149 @@ export default function Home() {
     setLoading(true)
     setError(null)
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-    })
-
-    if (error || !data.user) {
-      setLoading(false)
-      setError(error?.message || 'Erro ao criar usuário')
-      return
-    }
-
-    await supabase.from('profiles').insert({
-      id: data.user.id,
-      name: form.name,
-      phone: form.phone,
-      cpf: form.cpf,
-      address: form.address,
+      options: { data: { name: form.name, phone: form.phone, cpf: form.cpf, address: form.address } },
     })
 
     setLoading(false)
-    setShowRegister(false)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      setRegisteredEmail(form.email)
+      setCooldown(120)
+    }
+  }
+
+  async function resend() {
+    if (!registeredEmail) return
+    await supabase.auth.resend({ type: 'signup', email: registeredEmail })
+    setCooldown(120)
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <motion.div
-        className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl grid md:grid-cols-2 overflow-hidden"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        {/* Lado esquerdo */}
-        <div className="hidden md:flex flex-col justify-center px-12 py-16">
-          <Image src="/logo.png" alt="PVTY" width={260} height={120} className="mb-8" />
-          <h1 className="text-3xl font-bold text-gray-900 mb-4 leading-tight">
-            O padrão moderno para quem leva produção a sério.
-          </h1>
-          <p className="text-gray-600 text-lg">
-            Automatize seus arquivos, reduza erros e ganhe escala.
-          </p>
-        </div>
+    <main className="min-h-screen bg-gray-50 relative overflow-hidden">
 
-        {/* Lado direito */}
-        <div className="flex flex-col justify-center px-10 py-16">
-          <h2 className="text-2xl font-semibold mb-6 text-gray-900">Acesse sua conta</h2>
+      <Image src="/logo.png" alt="" fill className="absolute opacity-[0.04] object-contain pointer-events-none" />
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              className="w-full px-4 py-3 rounded-lg bg-gray-100 focus:bg-white border focus:outline-none"
-              placeholder="Seu email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-            <input
-              type="password"
-              className="w-full px-4 py-3 rounded-lg bg-gray-100 focus:bg-white border focus:outline-none"
-              placeholder="Sua senha"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-            />
+      <section className="relative z-10 flex flex-col items-center text-center px-6 pt-32 pb-24">
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+          Crie seus arquivos de estampa em um clique, direto para a impressão.
+        </h1>
+        <p className="text-lg text-gray-600 max-w-2xl">
+          Elimine o processo manual, evite erros de tamanho e ganhe escala sem aumentar sua equipe.
+        </p>
 
-            {error && <p className="text-red-600 text-sm">{error}</p>}
+        <form onSubmit={handleLogin} className="mt-10 w-full max-w-md space-y-4 bg-white p-8 rounded-2xl shadow-xl">
+          <input className="input" placeholder="Seu email" value={email} onChange={e => setEmail(e.target.value)} />
+          <input type="password" className="input" placeholder="Sua senha" value={password} onChange={e => setPassword(e.target.value)} />
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-black to-gray-800 text-white py-3 rounded-lg font-medium shadow-lg"
-            >
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
-          </form>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
 
-          <button
-            onClick={() => setShowRegister(true)}
-            className="mt-4 text-sm underline text-center text-gray-700"
-          >
+          <button className="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-900 transition">
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
+
+          <button type="button" onClick={() => setShowRegister(true)} className="text-sm underline">
             Criar conta grátis
           </button>
-        </div>
-      </motion.div>
+        </form>
+      </section>
 
-      {/* Modal de cadastro */}
+      <section className="px-6 py-16">
+        <div className="max-w-6xl mx-auto bg-black text-white rounded-2xl p-10 grid md:grid-cols-2 gap-8">
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Pare de arrastar arquivo por arquivo no Photoshop.</h2>
+            <p className="text-gray-300 mb-6">Aqui você gera produção real com um clique.</p>
+            <ul className="space-y-2 text-gray-200">
+              <li className="flex gap-2"><Layers className="w-5 h-5" /> Gere centenas de folhas por clique</li>
+              <li className="flex gap-2"><Layers className="w-5 h-5" /> Monte metros lineares automaticamente</li>
+              <li className="flex gap-2"><Layers className="w-5 h-5" /> Pronto para qualquer escala</li>
+            </ul>
+          </div>
+          <div>
+            <h3 className="font-semibold mb-3">Infraestrutura</h3>
+            <ul className="space-y-2 text-gray-200">
+              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Processamento em nuvem paralelo</li>
+              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Alta performance por job</li>
+              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Independente do seu computador</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-6 py-20">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
+          {[{
+            icon: <Users className="w-8 h-8 mb-3" />,
+            title: 'Menos estresse operacional',
+            items: ['Menos retrabalho', 'Menos erros', 'Mais previsibilidade']
+          },{
+            icon: <BarChart3 className="w-8 h-8 mb-3" />,
+            title: 'Mais controle e margem',
+            items: ['Custo visível', 'Processo padronizado', 'Escala previsível']
+          },{
+            icon: <Zap className="w-8 h-8 mb-3" />,
+            title: 'Vantagem competitiva',
+            items: ['Entrega mais rápida', 'Menos custo', 'Mais lucro']
+          }].map((b,i)=>(
+            <div key={i} className="bg-white rounded-2xl shadow p-8">
+              {b.icon}
+              <h3 className="font-semibold mb-3">{b.title}</h3>
+              <ul className="text-gray-600 space-y-1">
+                {b.items.map((it,j)=><li key={j}>• {it}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <AnimatePresence>
         {showRegister && (
-          <motion.div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl"
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-            >
-              <h3 className="text-xl font-semibold mb-6">Criar conta</h3>
+          <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-xl"
+              initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}>
+              {!registeredEmail ? (
+                <>
+                  <h3 className="text-xl font-semibold mb-4">Criar conta</h3>
+                  <form onSubmit={handleRegister} className="space-y-3">
+                    <input className="input" placeholder="Nome" onChange={e=>update('name',e.target.value)} />
+                    <input className="input" placeholder="Email" onChange={e=>update('email',e.target.value)} />
+                    <input className="input" placeholder="Telefone" onChange={e=>update('phone',e.target.value)} />
+                    <input className="input" placeholder="CPF" onChange={e=>update('cpf',e.target.value)} />
+                    <input className="input" placeholder="Endereço" onChange={e=>update('address',e.target.value)} />
+                    <input type="password" className="input" placeholder="Senha" onChange={e=>update('password',e.target.value)} />
+                    <input type="password" className="input" placeholder="Confirmar senha" onChange={e=>update('confirm',e.target.value)} />
 
-              <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input placeholder="Nome" className="input" onChange={e => update('name', e.target.value)} required />
-                <input placeholder="Email" className="input" onChange={e => update('email', e.target.value)} required />
-                <input placeholder="Telefone" className="input" onChange={e => update('phone', e.target.value)} required />
-                <input placeholder="CPF" className="input" onChange={e => update('cpf', e.target.value)} required />
-                <input placeholder="Endereço" className="input md:col-span-2" onChange={e => update('address', e.target.value)} required />
-                <input type="password" placeholder="Senha" className="input" onChange={e => update('password', e.target.value)} required />
-                <input type="password" placeholder="Confirmar senha" className="input" onChange={e => update('confirm', e.target.value)} required />
+                    {error && <p className="text-red-600 text-sm">{error}</p>}
 
-                <button className="md:col-span-2 bg-black text-white py-3 rounded-lg">
-                  {loading ? 'Criando...' : 'Criar conta'}
-                </button>
+                    <button className="w-full bg-black text-white py-3 rounded-lg">
+                      {loading ? 'Criando...' : 'Criar conta'}
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <div className="text-center space-y-4">
+                  <h3 className="text-xl font-semibold">Verifique seu e-mail</h3>
+                  <p>Enviamos um link para <strong>{registeredEmail}</strong></p>
+                  <button disabled={cooldown>0} onClick={resend}
+                    className="w-full bg-black text-white py-3 rounded-lg disabled:opacity-50">
+                    {cooldown>0 ? `Reenviar em ${cooldown}s` : 'Reenviar e-mail'}
+                  </button>
+                </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => setShowRegister(false)}
-                  className="md:col-span-2 underline text-sm text-center"
-                >
-                  Cancelar
-                </button>
-              </form>
+              <button onClick={() => setShowRegister(false)} className="mt-4 text-sm underline w-full">
+                Fechar
+              </button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
     </main>
   )
 }
