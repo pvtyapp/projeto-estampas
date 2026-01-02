@@ -80,9 +80,16 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 relative overflow-hidden">
 
+      {/* LOGO BACKGROUND */}
       <Image src="/logo.png" alt="" fill className="absolute opacity-[0.04] object-contain pointer-events-none" />
 
-      <section className="relative z-10 flex flex-col items-center text-center px-6 pt-32 pb-24">
+      {/* HEADER LOGO */}
+      <header className="relative z-10 flex justify-center pt-10">
+        <Image src="/logo.png" alt="PVTY" width={160} height={80} className="opacity-90" />
+      </header>
+
+      {/* HERO */}
+      <section className="relative z-10 flex flex-col items-center text-center px-6 pt-20 pb-24">
         <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
           Crie seus arquivos de estampa em um clique, direto para a impressão.
         </h1>
@@ -106,6 +113,7 @@ export default function Home() {
         </form>
       </section>
 
+      {/* BLOCO TECNOLÓGICO */}
       <section className="px-6 py-16">
         <div className="max-w-6xl mx-auto bg-black text-white rounded-2xl p-10 grid md:grid-cols-2 gap-8">
           <div>
@@ -128,6 +136,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* 3 BLOCOS */}
       <section className="px-6 py-20">
         <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
           {[{
@@ -154,6 +163,7 @@ export default function Home() {
         </div>
       </section>
 
+      {/* MODAL */}
       <AnimatePresence>
         {showRegister && (
           <motion.div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
