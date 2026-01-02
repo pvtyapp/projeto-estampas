@@ -1,195 +1,137 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
-
-const RESEND_SECONDS = 120
+import Image from 'next/image'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { Users, BarChart3, Zap } from 'lucide-react'
 
 export default function Home() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [showSignup, setShowSignup] = useState(false)
-
-  async function login() {
-    setLoading(true)
-    setError(null)
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    setLoading(false)
-
-    if (error || !data.session) {
-      setError('Email ou senha inválidos.')
-    } else {
-      window.location.href = '/work'
-    }
-  }
-
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center px-6">
-      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-xl grid md:grid-cols-2 overflow-hidden">
+    <main className="min-h-screen bg-gray-50">
 
-        <div className="p-12 flex flex-col justify-center gap-6">
-          <h1 className="text-4xl font-bold">PrintWizard</h1>
-          <p className="text-gray-600 text-lg">
-            Transforme suas artes em folhas prontas para impressão em segundos.
-          </p>
-
-          <div className="flex flex-wrap gap-3 mt-4">
-            {['Menos desperdício', 'Mais produtividade', 'Padrão profissional', 'Sem complicação'].map((t) => (
-              <span key={t} className="px-4 py-2 bg-gray-100 rounded-full text-sm text-gray-700">
-                {t}
-              </span>
-            ))}
+      {/* HERO */}
+      <section className="flex items-center justify-center px-4 py-20">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="w-full max-w-5xl bg-white rounded-2xl shadow-xl grid md:grid-cols-2 overflow-hidden"
+        >
+          <div className="hidden md:flex flex-col justify-center px-10 py-12">
+            <Image src="/logo.png" alt="PVTY" width={220} height={100} className="mb-6" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              O padrão moderno para quem leva produção a sério.
+            </h1>
+            <p className="text-gray-600">
+              Automatize seus arquivos, reduza erros e ganhe escala.
+            </p>
           </div>
 
-          <p className="text-sm text-gray-500 mt-6">
-            Comece grátis. Sem cartão de crédito.
-          </p>
-        </div>
+          <div className="flex flex-col justify-center px-8 py-12">
+            <h2 className="text-2xl font-semibold mb-6 text-gray-900">
+              Acesse sua conta
+            </h2>
 
-        <div className="p-12 bg-gray-50 space-y-4">
-          <h2 className="text-2xl font-semibold">Acesse sua conta</h2>
+            <Link href="/login" className="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-900 transition text-center">
+              Entrar
+            </Link>
 
-          <input className="w-full border rounded-xl px-4 py-3" placeholder="Seu email" value={email} onChange={e => setEmail(e.target.value)} />
-          <input type="password" className="w-full border rounded-xl px-4 py-3" placeholder="Sua senha" value={password} onChange={e => setPassword(e.target.value)} />
+            <p className="text-sm text-gray-600 mt-4 text-center">
+              Ainda não tem conta?{' '}
+              <Link href="/register" className="text-black underline">
+                Criar conta grátis
+              </Link>
+            </p>
+          </div>
+        </motion.div>
+      </section>
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+      {/* BLOCOS */}
+      <section className="px-4 py-20">
+        <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
 
-          <button onClick={login} disabled={loading} className="w-full bg-black text-white py-3 rounded-xl hover:opacity-90 transition">
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-
-          <button onClick={() => setShowSignup(true)} className="text-sm underline text-gray-600">
-            Criar conta grátis
-          </button>
-        </div>
-      </div>
-
-      {showSignup && <SignupModal onClose={() => setShowSignup(false)} />}
-    </main>
-  )
-}
-
-/* ===================== MODAL DE CADASTRO ===================== */
-
-function SignupModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState<Record<string, string>>({})
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [seconds, setSeconds] = useState(RESEND_SECONDS)
-
-  function update(k: string, v: string) {
-    setForm(f => ({ ...f, [k]: v }))
-  }
-
-  async function submit() {
-    if (!form.email || !form.password) return setError('Preencha email e senha.')
-    if (form.password !== form.confirm) return setError('As senhas não conferem.')
-
-    const { error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: { data: form },
-    })
-
-    if (error) setError(error.message)
-    else setSuccess(true)
-  }
-
-  useEffect(() => {
-    if (!success || seconds <= 0) return
-    const t = setTimeout(() => setSeconds(s => s - 1), 1000)
-    return () => clearTimeout(t)
-  }, [seconds, success])
-
-  async function resend() {
-    await supabase.auth.resend({ type: 'signup', email: form.email })
-    setSeconds(RESEND_SECONDS)
-  }
-
-  return (
-    <Modal onClose={onClose}>
-      {!success ? (
-        <>
-          <h2 className="text-xl font-semibold mb-2">Crie sua conta</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Leva menos de 1 minuto para começar 🚀
-          </p>
-
-          <Input placeholder="Nome completo" onChange={v => update('name', v)} />
-          <Input placeholder="Telefone" onChange={v => update('phone', v)} />
-          <Input placeholder="CPF ou CNPJ" onChange={v => update('doc', v)} />
-          <Input placeholder="Endereço" onChange={v => update('address', v)} />
-          <Input placeholder="Email" onChange={v => update('email', v)} />
-          <Input placeholder="Senha" type="password" onChange={v => update('password', v)} />
-          <Input placeholder="Confirmar senha" type="password" onChange={v => update('confirm', v)} />
-
-          {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
-
-          <button onClick={submit} className="w-full bg-black text-white py-3 rounded-xl mt-4 hover:opacity-90 transition">
-            Criar conta grátis
-          </button>
-        </>
-      ) : (
-        <>
-          <h2 className="text-xl font-semibold mb-2">Conta criada 🎉</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Enviamos um email de confirmação. Verifique sua caixa de entrada.
-          </p>
-
-          <button
-            disabled={seconds > 0}
-            onClick={resend}
-            className="w-full border py-3 rounded-xl mb-2 disabled:opacity-50"
+          {/* Bloco 1 */}
+          <motion.div
+            whileHover={{ y: -6 }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="bg-white rounded-2xl shadow p-8"
           >
-            {seconds > 0
-              ? `Reenviar em ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
-              : 'Reenviar email de confirmação'}
-          </button>
+            <Users className="w-8 h-8 mb-4 text-gray-900" />
+            <h3 className="text-lg font-semibold mb-4">
+              Menos gente apagando incêndio. Mais gente fazendo o negócio crescer.
+            </h3>
+            <ul className="text-gray-700 space-y-2">
+              <li>Reduza a dependência de operadores montando arquivos manualmente.</li>
+              <li>Elimine erros que geram retrabalho, atrasos e desperdício.</li>
+              <li>Tenha uma operação mais leve, previsível e sob controle.</li>
+            </ul>
+          </motion.div>
 
-          <button onClick={onClose} className="w-full bg-black text-white py-3 rounded-xl">
-            Voltar para login
-          </button>
-        </>
-      )}
-    </Modal>
-  )
-}
+          {/* Bloco 2 */}
+          <motion.div
+            whileHover={{ y: -6 }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="bg-white rounded-2xl shadow p-8"
+          >
+            <BarChart3 className="w-8 h-8 mb-4 text-gray-900" />
+            <h3 className="text-lg font-semibold mb-4">
+              Um sistema construído para padronizar e reduzir custo operacional.
+            </h3>
+            <ul className="text-gray-700 space-y-2">
+              <li>Automatiza a parte mais lenta e propensa a erro da produção.</li>
+              <li>Substitui horas de trabalho manual por processamento automático.</li>
+              <li>Dashboard que mostra custos, consumo e eficiência em tempo real.</li>
+            </ul>
+          </motion.div>
 
-/* ===================== COMPONENTES ===================== */
+          {/* Bloco 3 */}
+          <motion.div
+            whileHover={{ y: -6 }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="bg-white rounded-2xl shadow p-8"
+          >
+            <Zap className="w-8 h-8 mb-4 text-gray-900" />
+            <h3 className="text-lg font-semibold mb-4">
+              Quem não automatiza, perde margem. Simples assim.
+            </h3>
+            <ul className="text-gray-700 space-y-2">
+              <li>Enquanto você automatiza, outros continuam limitados pela mão humana.</li>
+              <li>Quem produz mais rápido ganha prazo, preço e mercado.</li>
+              <li>A diferença não está no equipamento. Está no processo.</li>
+              <li>E processo hoje se chama automação.</li>
+            </ul>
+          </motion.div>
 
-function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-2xl w-full max-w-md relative animate-fadeIn">
-        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-black">✕</button>
-        {children}
-      </div>
-    </div>
-  )
-}
+        </div>
+      </section>
 
-function Input({
-  placeholder,
-  type = 'text',
-  onChange,
-}: {
-  placeholder: string
-  type?: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <input
-      type={type}
-      placeholder={placeholder}
-      className="w-full border rounded-xl px-4 py-2 mb-2 focus:outline-none focus:ring-2 focus:ring-black/10"
-      onChange={e => onChange(e.target.value)}
-    />
+      {/* CTA FINAL */}
+      <section className="px-4 py-16 bg-white border-t">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="max-w-3xl mx-auto text-center"
+        >
+          <h3 className="text-2xl font-semibold mb-4">
+            Comece gratuitamente e veja a diferença no seu próprio processo produtivo.
+          </h3>
+          <Link href="/register" className="inline-block bg-black text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-900 transition">
+            Criar conta grátis
+          </Link>
+        </motion.div>
+      </section>
+
+    </main>
   )
 }

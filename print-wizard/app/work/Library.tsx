@@ -3,12 +3,24 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/apiClient";
 
+type Print = {
+  id: string;
+  name: string;
+  sku: string;
+  slots?: {
+    front?: { url: string; width_cm: number; height_cm: number };
+    back?: { url: string; width_cm: number; height_cm: number };
+    extra?: { url: string; width_cm: number; height_cm: number };
+  };
+};
+
 type Props = {
   onJobCreated?: (jobId: string) => void;
 };
 
 export default function Library({ onJobCreated }: Props) {
-  const [prints, setPrints] = useState<any[]>([]);
+  const [prints, setPrints] = useState<Print[]>([]);
+  const [qty, setQty] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
@@ -29,9 +41,22 @@ export default function Library({ onJobCreated }: Props) {
     }
   }
 
+  function setPrintQty(id: string, value: number) {
+    setQty(q => ({ ...q, [id]: Math.max(0, value) }));
+  }
+
   async function createJob() {
-    if (prints.length === 0) {
-      alert("Adicione pelo menos uma estampa.");
+    const items = prints
+      .map(p => ({
+        print_id: p.id,
+        qty: qty[p.id] || 0,
+        width_cm: p.slots?.front?.width_cm || 10,
+        height_cm: p.slots?.front?.height_cm || 10,
+      }))
+      .filter(i => i.qty > 0);
+
+    if (items.length === 0) {
+      alert("Informe a quantidade de pelo menos uma estampa.");
       return;
     }
 
@@ -40,14 +65,7 @@ export default function Library({ onJobCreated }: Props) {
 
       const res = await api("/print-jobs", {
         method: "POST",
-        body: JSON.stringify({
-          items: prints.map(p => ({
-            print_id: p.id,
-            qty: 1,
-            width_cm: p.slots?.front?.width_cm || 10,
-            height_cm: p.slots?.front?.height_cm || 10
-          }))
-        })
+        body: JSON.stringify({ items }),
       });
 
       onJobCreated?.(res.job_id);
@@ -67,15 +85,30 @@ export default function Library({ onJobCreated }: Props) {
         disabled={loading || creating}
         className="mb-4 px-3 py-1 rounded bg-black text-white disabled:opacity-50"
       >
-        {creating ? "Gerando..." : "Gerar folha"}
+        {creating ? "Gerando..." : "Gerar folhas"}
       </button>
 
       {loading && <p>Carregando...</p>}
 
       {!loading &&
         prints.map(p => (
-          <div key={p.id} className="border p-2 rounded mb-2">
-            <b>{p.name}</b> — {p.sku}
+          <div key={p.id} className="border p-3 rounded mb-2 flex items-center justify-between">
+            <div>
+              <b>{p.name}</b>
+              <div className="text-xs text-gray-500">{p.sku}</div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                className="w-20 border rounded px-2 py-1 text-sm"
+                value={qty[p.id] || ""}
+                placeholder="Qtd"
+                onChange={e => setPrintQty(p.id, Number(e.target.value))}
+              />
+              <span className="text-xs text-gray-500">un</span>
+            </div>
           </div>
         ))}
     </div>

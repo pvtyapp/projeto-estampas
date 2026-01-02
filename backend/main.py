@@ -101,17 +101,20 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
     data.update({
         "id": str(uuid.uuid4()),
         "user_id": user["sub"],
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat()
     })
+
     res = supabase.table("prints").insert(data).execute()
     if not res.data:
         raise HTTPException(status_code=500, detail="Erro ao criar estampa")
+
     return res.data[0]
 
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     total_units = sum(max(item.qty, 0) for item in payload.items)
+
     if total_units <= 0:
         raise HTTPException(status_code=400, detail="Nenhuma unidade informada.")
     if total_units > 100:
@@ -123,19 +126,24 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         raise HTTPException(status_code=429, detail=str(e))
 
     job_id = str(uuid.uuid4())
-    payload_clean = {"items": [{
-        "print_id": str(i.print_id),
-        "qty": int(i.qty),
-        "width_cm": float(i.width_cm),
-        "height_cm": float(i.height_cm),
-    } for i in payload.items]}
+    payload_clean = {
+        "items": [
+            {
+                "print_id": str(i.print_id),
+                "qty": int(i.qty),
+                "width_cm": float(i.width_cm),
+                "height_cm": float(i.height_cm),
+            }
+            for i in payload.items
+        ]
+    }
 
     supabase.table("jobs").insert({
         "id": job_id,
         "user_id": user["sub"],
         "status": "queued",
         "payload": payload_clean,
-        "created_at": datetime.utcnow().isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat()
     }).execute()
 
     queue.enqueue(process_render, job_id, job_timeout=600)
@@ -145,22 +153,36 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
-    res = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).execute()
-    job = res.data[0] if res.data else None
+    job = supabase.table("jobs") \
+        .select("*") \
+        .eq("id", job_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
+
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
+
     return job
 
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, user=Depends(current_user)):
-    res = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).execute()
-    job = res.data[0] if res.data else None
+    job = supabase.table("jobs") \
+        .select("*") \
+        .eq("id", job_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
+
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
     if job["status"] in ("queued", "done"):
-        supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
+        supabase.table("jobs") \
+            .update({"status": "canceled"}) \
+            .eq("id", job_id) \
+            .execute()
         return {"status": "canceled"}
 
     raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
@@ -169,25 +191,24 @@ def cancel_job(job_id: str, user=Depends(current_user)):
 @app.get("/me/usage")
 def get_usage(user=Depends(current_user)):
     user_id = user["sub"]
-
     now = datetime.now(timezone.utc)
     year, month = now.year, now.month
 
-    usage_res = supabase.table("usage_monthly") \
+    usage = supabase.table("usage_monthly") \
         .select("*") \
         .eq("user_id", user_id) \
         .eq("year", year) \
         .eq("month", month) \
         .execute().data or []
 
-    usage = usage_res[0] if usage_res else None
+    usage = usage[0] if usage else None
 
-    plan_res = supabase.table("plans") \
+    plan = supabase.table("plans") \
         .select("*") \
         .eq("user_id", user_id) \
         .execute().data or []
 
-    plan = plan_res[0] if plan_res else None
+    plan = plan[0] if plan else {"plan": "free", "monthly_limit": 2}
 
     packages = supabase.table("extra_packages") \
         .select("remaining") \
@@ -196,9 +217,6 @@ def get_usage(user=Depends(current_user)):
         .execute().data or []
 
     credits = sum(int(p["remaining"]) for p in packages)
-
-    if not plan:
-        plan = {"plan": "free", "monthly_limit": 2}
 
     if not usage:
         used_plan = 0
@@ -212,7 +230,12 @@ def get_usage(user=Depends(current_user)):
     used = used_plan + used_extra
     percent = round((used_plan / limit) * 100, 1) if limit else 0
 
-    renew_at = datetime(year + 1, 1, 1, tzinfo=timezone.utc) if month == 12 else datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    renew_at = (
+        datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        if month == 12 else
+        datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    )
+
     remaining_days = max((renew_at - now).days, 0)
 
     if used_plan >= limit and credits <= 0:

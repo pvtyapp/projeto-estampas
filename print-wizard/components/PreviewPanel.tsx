@@ -1,44 +1,63 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { api } from "@/lib/apiClient"
 
 type Job = {
   id: string
   status: "queued" | "processing" | "done" | "error"
   result_urls?: string[]
+  zip_url?: string
   error?: string
 }
 
 export default function PreviewPanel({ jobId }: { jobId: string | null }) {
   const [job, setJob] = useState<Job | null>(null)
   const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!jobId) {
       setJob(null)
       setProgress(0)
+      setError(null)
       return
     }
 
-    const interval = setInterval(async () => {
-      const res = await fetch(`http://localhost:8000/jobs/${jobId}`)
-      const data = await res.json()
-      setJob(data)
+    let stopped = false
 
-      setProgress(prev => {
-        if (data.status === "done") return 100
-        if (data.status === "error") return prev
-        return Math.min(prev + 8, 95)
-      })
+    const interval = setInterval(async () => {
+      try {
+        const data = await api(`/jobs/${jobId}`)
+        if (stopped) return
+
+        setJob(data)
+
+        setProgress(prev => {
+          if (data.status === "done") return 100
+          if (data.status === "error") return prev
+          return Math.min(prev + 8, 95)
+        })
+
+        if (data.status === "done" || data.status === "error") {
+          clearInterval(interval)
+        }
+      } catch (e: any) {
+        setError(e.message || "Erro ao consultar status do job")
+        clearInterval(interval)
+      }
     }, 2000)
 
-    return () => clearInterval(interval)
+    return () => {
+      stopped = true
+      clearInterval(interval)
+    }
   }, [jobId])
 
   if (!jobId) {
     return (
       <div className="border rounded-lg p-6 bg-white text-sm text-gray-500">
-        Preencha as quantidades na biblioteca acima e clique em <b>Processar</b> para gerar a pré-visualização das folhas.
+        Preencha as quantidades na biblioteca acima e clique em <b>Gerar folhas</b> para gerar a pré-visualização.
       </div>
     )
   }
@@ -47,7 +66,9 @@ export default function PreviewPanel({ jobId }: { jobId: string | null }) {
     <div className="border rounded-lg p-6 bg-white space-y-4">
       <h2 className="font-bold text-lg">Pré-visualização das folhas</h2>
 
-      {!job && <p className="text-sm text-gray-500">Consultando status…</p>}
+      {error && <p className="text-red-600 text-sm">{error}</p>}
+
+      {!job && !error && <p className="text-sm text-gray-500">Consultando status…</p>}
 
       {job && job.status !== "done" && (
         <>
@@ -68,32 +89,40 @@ export default function PreviewPanel({ jobId }: { jobId: string | null }) {
         <p className="text-red-600 text-sm">Erro: {job.error}</p>
       )}
 
-      {job?.status === "done" && job.result_urls && (
+      {job?.status === "done" && (
         <>
-          <div className="grid grid-cols-2 gap-4">
-            {job.result_urls.map((url, i) => (
-              <img
-                key={i}
-                src={url}
-                className="border rounded shadow"
-                alt={`Folha ${i + 1}`}
-              />
-            ))}
-          </div>
+          {job.result_urls && (
+            <div className="grid grid-cols-2 gap-4">
+              {job.result_urls.map((url, i) => (
+                <img
+                  key={i}
+                  src={url}
+                  className="border rounded shadow"
+                  alt={`Folha ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
 
-          <div className="pt-4">
-            {job.result_urls.length === 1 ? (
+          <div className="pt-4 flex gap-3 flex-wrap">
+            {job.zip_url && (
               <a
-                href={job.result_urls[0]}
+                href={job.zip_url}
                 download
                 className="bg-black text-white px-4 py-2 rounded inline-block"
               >
-                Baixar folha
+                Baixar todas (ZIP)
               </a>
-            ) : (
-              <p className="text-sm text-gray-600">
-                Em breve você poderá baixar todas as folhas juntas em um ZIP.
-              </p>
+            )}
+
+            {job.result_urls?.length === 1 && (
+              <a
+                href={job.result_urls[0]}
+                download
+                className="border px-4 py-2 rounded inline-block"
+              >
+                Baixar folha única
+              </a>
             )}
           </div>
         </>
