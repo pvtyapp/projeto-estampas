@@ -30,10 +30,6 @@ export default function WorkPage() {
     return null
   }
 
-  function scrollToHelp() {
-    document.getElementById('como-usar')?.scrollIntoView({ behavior: 'smooth' })
-  }
-
   async function logout() {
     setIsLoggingOut(true)
     await supabase.auth.signOut()
@@ -52,48 +48,46 @@ export default function WorkPage() {
             PVTY
           </div>
 
-          <div className="flex gap-4 items-center">
-            <button onClick={scrollToHelp} className="text-sm underline">
-              Como usar
-            </button>
-            <button onClick={logout} className="text-sm text-red-600 hover:underline">
-              Sair
-            </button>
-          </div>
+          <button onClick={logout} className="text-sm text-red-600 hover:underline">
+            Sair
+          </button>
         </div>
       </header>
 
       {/* CONTEÚDO */}
-      <main className="max-w-6xl mx-auto px-6 py-10 space-y-12">
+      <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
 
-        <section className="bg-white rounded-2xl shadow p-6">
+        {/* DASHBOARD */}
+        <section>
           <DashboardPanel />
         </section>
 
-        <section className="bg-white rounded-2xl shadow p-6">
+        {/* FLUXO PRINCIPAL */}
+        <section className="bg-white rounded-2xl shadow p-6 space-y-8">
           <SkuUploadWizard onComplete={() => {}} />
-        </section>
 
-        <section className="bg-white rounded-2xl shadow p-6">
           <Library onJobCreated={setSelectedJob} />
+
+          {selectedJob && (
+            <div className="pt-4 border-t">
+              <PreviewPanel jobId={selectedJob} />
+            </div>
+          )}
         </section>
 
+        {/* HISTÓRICO */}
         <section className="bg-white rounded-2xl shadow p-6">
           <JobHistory onSelect={setSelectedJob} />
-        </section>
-
-        <section className="bg-white rounded-2xl shadow p-6">
-          <PreviewPanel jobId={selectedJob} />
         </section>
 
         {/* COMO USAR */}
         <section id="como-usar" className="bg-white rounded-2xl shadow p-10">
           <h2 className="text-2xl font-semibold mb-4">Como usar</h2>
           <ol className="list-decimal list-inside space-y-2 text-gray-700">
-            <li>Adicione suas estampas na biblioteca.</li>
-            <li>Defina as quantidades desejadas.</li>
-            <li>Clique em gerar folhas para montar os arquivos.</li>
-            <li>Baixe e envie direto para impressão.</li>
+            <li>Adicione suas estampas.</li>
+            <li>Defina as quantidades.</li>
+            <li>Gere as folhas.</li>
+            <li>Baixe e imprima.</li>
           </ol>
         </section>
 
