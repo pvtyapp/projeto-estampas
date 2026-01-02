@@ -3,10 +3,13 @@
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Cpu, Layers, Users, BarChart3, Zap } from 'lucide-react'
 
 export default function Home() {
+  const router = useRouter()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showRegister, setShowRegister] = useState(false)
@@ -40,9 +43,15 @@ export default function Home() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
-    if (error) setError(error.message)
+
+    if (error) {
+      setError(error.message)
+    } else {
+      router.push('/work')
+    }
   }
 
   async function handleRegister(e: React.FormEvent) {
@@ -91,10 +100,10 @@ export default function Home() {
       {/* HERO */}
       <section className="relative z-10 flex flex-col items-center text-center px-6 pt-20 pb-24">
         <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
-          Crie seus arquivos de estampa em um clique, direto para a impressão.
+          Economize até 80% do tempo, Automatize a montagem direto para impressão...
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl">
-          Elimine o processo manual, evite erros de tamanho e ganhe escala sem aumentar sua equipe.
+          Elimine o processo manual, evite erros de tamanho e ganhe escala SEM AUMENTAR A EQUIPE.
         </p>
 
         <form onSubmit={handleLogin} className="mt-10 w-full max-w-md space-y-4 bg-white p-8 rounded-2xl shadow-xl">
@@ -150,7 +159,7 @@ export default function Home() {
           },{
             icon: <Zap className="w-8 h-8 mb-3" />,
             title: 'Vantagem competitiva',
-            items: ['Entrega mais rápida', 'Menos custo', 'Mais lucro']
+            items: ['Entrega mais rápida', 'Menos responsabilidade', 'Mais lucro']
           }].map((b,i)=>(
             <div key={i} className="bg-white rounded-2xl shadow p-8">
               {b.icon}
