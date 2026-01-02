@@ -8,13 +8,13 @@ export default function AuthCallback() {
   const router = useRouter()
 
   useEffect(() => {
-    let mounted = true
+    let active = true
 
     async function handleAuth() {
       const { data } = await supabase.auth.getSession()
 
       if (data.session) {
-        if (mounted) router.replace('/app/work')
+        if (active) router.replace('/work')
         return
       }
 
@@ -24,13 +24,13 @@ export default function AuthCallback() {
         console.error('Auth callback error:', error)
       }
 
-      if (mounted) router.replace('/app/work')
+      if (active) router.replace('/work')
     }
 
     handleAuth()
 
     return () => {
-      mounted = false
+      active = false
     }
   }, [router])
 

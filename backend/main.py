@@ -1,7 +1,7 @@
 import uuid
 import os
-from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Form
+from datetime import datetime, timezone
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
@@ -25,6 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# =========================
+# MODELOS
+# =========================
 
 class PrintCreate(BaseModel):
     name: str
@@ -45,6 +48,10 @@ class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
 
 
+# =========================
+# AUTH
+# =========================
+
 def dev_user():
     return {"sub": "00000000-0000-0000-0000-000000000001"}
 
@@ -56,6 +63,10 @@ def current_user(user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
 
+
+# =========================
+# ROTAS
+# =========================
 
 @app.get("/")
 def root():
@@ -162,19 +173,21 @@ def get_usage(user=Depends(current_user)):
     now = datetime.now(timezone.utc)
     year, month = now.year, now.month
 
-    usage = supabase.table("usage_monthly") \
+    usage_res = supabase.table("usage_monthly") \
         .select("*") \
         .eq("user_id", user_id) \
         .eq("year", year) \
         .eq("month", month) \
-        .single() \
-        .execute().data
+        .execute().data or []
 
-    plan = supabase.table("plans") \
+    usage = usage_res[0] if usage_res else None
+
+    plan_res = supabase.table("plans") \
         .select("*") \
         .eq("user_id", user_id) \
-        .single() \
-        .execute().data
+        .execute().data or []
+
+    plan = plan_res[0] if plan_res else None
 
     packages = supabase.table("extra_packages") \
         .select("remaining") \

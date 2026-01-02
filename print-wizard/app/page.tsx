@@ -15,10 +15,19 @@ export default function Home() {
   async function login() {
     setLoading(true)
     setError(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
     setLoading(false)
-    if (error) setError('Email ou senha inválidos.')
-    else location.href = '/app/work'
+
+    if (error || !data.session) {
+      setError('Email ou senha inválidos.')
+    } else {
+      window.location.href = '/work'
+    }
   }
 
   return (

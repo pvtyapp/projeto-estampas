@@ -29,7 +29,7 @@ export default function AuthPage() {
       return
     }
 
-    router.replace('/app/work')
+    router.replace('/work')
   }
 
   return (
