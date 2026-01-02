@@ -8,6 +8,7 @@ import Library from '@/app/work/Library'
 import PreviewPanel from '@/components/PreviewPanel'
 import SkuUploadWizard from '@/app/work/SkuUploadWizard'
 import JobHistory from '@/app/work/JobHistory'
+import { supabase } from '@/lib/supabaseClient'
 
 export default function WorkPage() {
   const router = useRouter()
@@ -28,13 +29,73 @@ export default function WorkPage() {
     return null
   }
 
+  function scrollToHelp() {
+    document.getElementById('como-usar')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  async function logout() {
+    await supabase.auth.signOut()
+    router.replace('/')
+  }
+
   return (
-    <div className="space-y-10 max-w-6xl mx-auto p-6">
-      <DashboardPanel />
-      <SkuUploadWizard onComplete={() => {}} />
-      <Library onJobCreated={setSelectedJob} />
-      <JobHistory onSelect={setSelectedJob} />
-      <PreviewPanel jobId={selectedJob} />
+    <div className="min-h-screen bg-gray-50">
+
+      {/* HEADER */}
+      <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <span className="text-sm text-gray-600">Olá, {session.user.email}</span>
+
+          <div className="text-xl font-semibold tracking-widest text-gray-900">
+            PVTY
+          </div>
+
+          <div className="flex gap-4 items-center">
+            <button onClick={scrollToHelp} className="text-sm underline">
+              Como usar
+            </button>
+            <button onClick={logout} className="text-sm text-red-600 hover:underline">
+              Sair
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* CONTEÚDO */}
+      <main className="max-w-6xl mx-auto px-6 py-10 space-y-12">
+
+        <section className="bg-white rounded-2xl shadow p-6">
+          <DashboardPanel />
+        </section>
+
+        <section className="bg-white rounded-2xl shadow p-6">
+          <SkuUploadWizard onComplete={() => {}} />
+        </section>
+
+        <section className="bg-white rounded-2xl shadow p-6">
+          <Library onJobCreated={setSelectedJob} />
+        </section>
+
+        <section className="bg-white rounded-2xl shadow p-6">
+          <JobHistory onSelect={setSelectedJob} />
+        </section>
+
+        <section className="bg-white rounded-2xl shadow p-6">
+          <PreviewPanel jobId={selectedJob} />
+        </section>
+
+        {/* COMO USAR */}
+        <section id="como-usar" className="bg-white rounded-2xl shadow p-10">
+          <h2 className="text-2xl font-semibold mb-4">Como usar</h2>
+          <ol className="list-decimal list-inside space-y-2 text-gray-700">
+            <li>Adicione suas estampas na biblioteca.</li>
+            <li>Defina as quantidades desejadas.</li>
+            <li>Clique em gerar folhas para montar os arquivos.</li>
+            <li>Baixe e envie direto para impressão.</li>
+          </ol>
+        </section>
+
+      </main>
     </div>
   )
 }
