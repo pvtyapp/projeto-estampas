@@ -43,7 +43,6 @@ async def get_current_user(
                 "verify_aud": False,
             },
             issuer=SUPABASE_ISSUER,
-            leeway=10,  # tolerância de relógio
         )
 
         return payload
