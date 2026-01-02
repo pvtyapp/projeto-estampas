@@ -14,18 +14,19 @@ export default function WorkPage() {
   const router = useRouter()
   const { session, loading } = useSession()
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
-    if (!loading && !session) {
+    if (!loading && !session && !isLoggingOut) {
       router.replace('/auth')
     }
-  }, [loading, session, router])
+  }, [loading, session, isLoggingOut, router])
 
   if (loading) {
     return <p className="p-6 text-gray-500">Carregando sessão...</p>
   }
 
-  if (!session) {
+  if (!session && !isLoggingOut) {
     return null
   }
 
@@ -34,6 +35,7 @@ export default function WorkPage() {
   }
 
   async function logout() {
+    setIsLoggingOut(true)
     await supabase.auth.signOut()
     router.replace('/')
   }
@@ -44,7 +46,7 @@ export default function WorkPage() {
       {/* HEADER */}
       <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">Olá, {session.user.email}</span>
+          <span className="text-sm text-gray-600">Olá, {session?.user.email}</span>
 
           <div className="text-xl font-semibold tracking-widest text-gray-900">
             PVTY
