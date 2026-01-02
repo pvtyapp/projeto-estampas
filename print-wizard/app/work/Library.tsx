@@ -1,48 +1,53 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { api } from "@/lib/apiClient";
+import { useEffect, useMemo, useState } from 'react'
+import { api } from '@/lib/apiClient'
 
 type Print = {
-  id: string;
-  name: string;
-  sku: string;
+  id: string
+  name: string
+  sku: string
   slots?: {
-    front?: { url: string; width_cm: number; height_cm: number };
-    back?: { url: string; width_cm: number; height_cm: number };
-    extra?: { url: string; width_cm: number; height_cm: number };
-  };
-};
+    front?: { url: string; width_cm: number; height_cm: number }
+  }
+}
 
 type Props = {
-  onJobCreated?: (jobId: string) => void;
-};
+  onJobCreated?: (jobId: string) => void
+}
 
 export default function Library({ onJobCreated }: Props) {
-  const [prints, setPrints] = useState<Print[]>([]);
-  const [qty, setQty] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [prints, setPrints] = useState<Print[]>([])
+  const [qty, setQty] = useState<Record<string, number>>({})
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    load();
-  }, []);
+    load()
+  }, [])
 
   async function load() {
     try {
-      setLoading(true);
-      const data = await api("/prints");
-      setPrints(data);
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao carregar biblioteca");
+      setLoading(true)
+      const data = await api('/prints')
+      setPrints(data)
+    } catch {
+      alert('Erro ao carregar biblioteca')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return prints.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+  }, [prints, search])
+
   function setPrintQty(id: string, value: number) {
-    setQty(q => ({ ...q, [id]: Math.max(0, value) }));
+    setQty(q => ({ ...q, [id]: Math.max(0, value) }))
   }
 
   async function createJob() {
@@ -53,64 +58,98 @@ export default function Library({ onJobCreated }: Props) {
         width_cm: p.slots?.front?.width_cm || 10,
         height_cm: p.slots?.front?.height_cm || 10,
       }))
-      .filter(i => i.qty > 0);
+      .filter(i => i.qty > 0)
 
     if (items.length === 0) {
-      alert("Informe a quantidade de pelo menos uma estampa.");
-      return;
+      alert('Informe a quantidade de pelo menos uma estampa.')
+      return
     }
 
     try {
-      setCreating(true);
-
-      const res = await api("/print-jobs", {
-        method: "POST",
+      setCreating(true)
+      const res = await api('/print-jobs', {
+        method: 'POST',
         body: JSON.stringify({ items }),
-      });
-
-      onJobCreated?.(res.job_id);
+      })
+      onJobCreated?.(res.job_id)
     } catch (e: any) {
-      alert(e.message || "Erro ao criar job");
+      alert(e.message || 'Erro ao criar job')
     } finally {
-      setCreating(false);
+      setCreating(false)
     }
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-bold mb-4">Biblioteca</h2>
+    <div className="space-y-3">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-bold">Biblioteca</h2>
+        <button
+          onClick={createJob}
+          disabled={loading || creating}
+          className="px-3 py-1 rounded bg-black text-white disabled:opacity-50"
+        >
+          {creating ? 'Gerando...' : 'Gerar folhas'}
+        </button>
+      </div>
 
-      <button
-        onClick={createJob}
-        disabled={loading || creating}
-        className="mb-4 px-3 py-1 rounded bg-black text-white disabled:opacity-50"
-      >
-        {creating ? "Gerando..." : "Gerar folhas"}
-      </button>
+      <input
+        type="text"
+        placeholder="Buscar por nome ou SKU..."
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="w-full border rounded px-3 py-1 text-sm"
+      />
 
-      {loading && <p>Carregando...</p>}
+      {loading && <p className="text-sm text-gray-500">Carregando...</p>}
 
-      {!loading &&
-        prints.map(p => (
-          <div key={p.id} className="border p-3 rounded mb-2 flex items-center justify-between">
-            <div>
-              <b>{p.name}</b>
-              <div className="text-xs text-gray-500">{p.sku}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2">
+        {!loading &&
+          filtered.map(p => (
+            <div key={p.id} className="border p-3 rounded relative flex justify-between">
+              <div>
+                <div className="text-sm font-medium">{p.name}</div>
+                <div className="text-xs text-gray-500">{p.sku}</div>
+
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                  <span>Qtd:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-20 border rounded px-2 py-0.5"
+                    value={qty[p.id] || ''}
+                    onChange={e => setPrintQty(p.id, Number(e.target.value))}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col items-end gap-2 text-xs">
+                <button
+                  onClick={() => setOpenNoteId(openNoteId === p.id ? null : p.id)}
+                  className="text-gray-500 hover:text-black"
+                >
+                  📝 Anotações
+                </button>
+              </div>
+
+              {openNoteId === p.id && (
+                <div className="absolute inset-0 bg-white border rounded p-2 z-10">
+                  <textarea
+                    placeholder="Anotações..."
+                    value={notes[p.id] || ''}
+                    onChange={e => setNotes(n => ({ ...n, [p.id]: e.target.value }))}
+                    className="w-full h-full border rounded p-2 text-sm"
+                  />
+                  <button
+                    onClick={() => setOpenNoteId(null)}
+                    className="absolute top-1 right-2 text-xs text-gray-500"
+                  >
+                    fechar
+                  </button>
+                </div>
+              )}
             </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                className="w-20 border rounded px-2 py-1 text-sm"
-                value={qty[p.id] || ""}
-                placeholder="Qtd"
-                onChange={e => setPrintQty(p.id, Number(e.target.value))}
-              />
-              <span className="text-xs text-gray-500">un</span>
-            </div>
-          </div>
-        ))}
+          ))}
+      </div>
     </div>
-  );
+  )
 }

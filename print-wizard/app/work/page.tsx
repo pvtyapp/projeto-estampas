@@ -34,33 +34,47 @@ export default function WorkPage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
+      {/* Header */}
       <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
           <span className="text-sm text-gray-600">Olá, {session?.user.email}</span>
           <div className="text-xl font-semibold tracking-widest">PVTY</div>
-          <button onClick={logout} className="text-sm text-red-600">Sair</button>
+          <button onClick={logout} className="text-sm text-red-600 hover:underline">
+            Sair
+          </button>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
 
-        <DashboardPanel />
+        {/* 1 — Status / Plano */}
+        <section>
+          <DashboardPanel />
+        </section>
 
+        {/* 2 — Produção */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
+          {/* Upload + Biblioteca */}
           <div className="space-y-6 bg-white rounded-2xl shadow p-6">
             <SkuUploadWizard onComplete={() => {}} />
             <Library onJobCreated={setSelectedJob} />
           </div>
 
+          {/* Preview */}
           <div className="bg-white rounded-2xl shadow p-6 min-h-[300px]">
-            {selectedJob
-              ? <PreviewPanel jobId={selectedJob} />
-              : <div className="text-gray-400 text-sm">Selecione um job para visualizar</div>}
+            {selectedJob ? (
+              <PreviewPanel jobId={selectedJob} />
+            ) : (
+              <div className="text-gray-400 text-sm">
+                Selecione um job para visualizar
+              </div>
+            )}
           </div>
 
         </section>
 
+        {/* 3 — Histórico */}
         <section className="bg-white rounded-2xl shadow p-6">
           <JobHistory onSelect={setSelectedJob} />
         </section>

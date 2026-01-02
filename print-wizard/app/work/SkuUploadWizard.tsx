@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 
 type Props = {
@@ -24,6 +24,14 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   const [hasExtra, setHasExtra] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    if (!hasVariants) {
+      setHasExtra(false)
+      setBack(null)
+      setExtra(null)
+    }
+  }, [hasVariants])
+
   function handleFront(file: File | null) {
     if (!file) return
     setFront(file)
@@ -33,6 +41,8 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   }
 
   async function submit() {
+    if (loading) return
+
     if (!front) return alert('Envie a frente.')
     if (!frontW || !frontH) return alert('Informe medidas da frente.')
 
@@ -52,8 +62,8 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           sku,
           width_cm: Number(frontW.replace(',', '.')),
           height_cm: Number(frontH.replace(',', '.')),
-          is_composite: hasVariants || hasExtra
-        })
+          is_composite: hasVariants || hasExtra,
+        }),
       })
 
       const upload = async (
@@ -71,7 +81,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         await api(`/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,
-          headers: {}
+          headers: {},
         })
       }
 
@@ -153,7 +163,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           </div>
 
           <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={hasExtra} onChange={e => setHasExtra(e.target.checked)} />
+            <input type="checkbox" checked={hasExtra} disabled={!hasVariants} onChange={e => setHasExtra(e.target.checked)} />
             Adicionar estampa extra ao kit
           </label>
         </div>
@@ -183,7 +193,7 @@ function Upload({ label, onFile }: { label: string; onFile: (f: File | null) => 
   return (
     <div>
       <label className="text-sm font-medium">{label}</label>
-      <input type="file" onChange={e => onFile(e.target.files?.[0] || null)} />
+      <input type="file" accept=".png,.jpg,.jpeg,.svg" onChange={e => onFile(e.target.files?.[0] || null)} />
     </div>
   )
 }
