@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Users, BarChart3, Zap } from 'lucide-react'
+import { Users, BarChart3, Zap, Cpu, Layers } from 'lucide-react'
 
 export default function Home() {
   return (
@@ -32,6 +32,7 @@ export default function Home() {
               Acesse sua conta
             </h2>
 
+            {/* Aqui você mantém seu login embutido/modal como já estava */}
             <Link href="/login" className="w-full bg-black text-white py-3 rounded-lg font-medium hover:bg-gray-900 transition text-center">
               Entrar
             </Link>
@@ -46,19 +47,46 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* BLOCOS */}
+      {/* NOVO BLOCO TECNOLÓGICO */}
+      <section className="px-4 py-16">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="max-w-5xl mx-auto bg-black text-white rounded-2xl shadow-xl p-10 grid md:grid-cols-2 gap-8"
+        >
+          <div>
+            <h2 className="text-2xl font-bold mb-4">
+              Pare de arrastar arquivo por arquivo no Photoshop.
+            </h2>
+            <p className="text-gray-300 mb-6">
+              Aqui você gera produção de verdade com um clique.
+            </p>
+            <ul className="space-y-3 text-gray-200">
+              <li className="flex gap-2 items-start"><Layers className="w-5 h-5 mt-1" /> Gere dezenas ou centenas de folhas em um único clique</li>
+              <li className="flex gap-2 items-start"><Layers className="w-5 h-5 mt-1" /> Monte automaticamente metros lineares de produção em segundos</li>
+              <li className="flex gap-2 items-start"><Layers className="w-5 h-5 mt-1" /> Pronto para pequenas e grandes operações</li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Infraestrutura de processamento</h3>
+            <ul className="space-y-3 text-gray-200">
+              <li className="flex gap-2 items-start"><Cpu className="w-5 h-5 mt-1" /> Workers paralelos em nuvem</li>
+              <li className="flex gap-2 items-start"><Cpu className="w-5 h-5 mt-1" /> Até 32 vCPUs disponíveis por job</li>
+              <li className="flex gap-2 items-start"><Cpu className="w-5 h-5 mt-1" /> Fila inteligente com distribuição automática de carga</li>
+              <li className="flex gap-2 items-start"><Cpu className="w-5 h-5 mt-1" /> Processamento independe do seu computador</li>
+            </ul>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* BLOCOS INFERIORES */}
       <section className="px-4 py-20">
         <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
 
-          {/* Bloco 1 */}
-          <motion.div
-            whileHover={{ y: -6 }}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="bg-white rounded-2xl shadow p-8"
-          >
+          <motion.div whileHover={{ y: -6 }} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }} className="bg-white rounded-2xl shadow p-8">
             <Users className="w-8 h-8 mb-4 text-gray-900" />
             <h3 className="text-lg font-semibold mb-4">
               Menos gente apagando incêndio. Mais gente fazendo o negócio crescer.
@@ -70,15 +98,7 @@ export default function Home() {
             </ul>
           </motion.div>
 
-          {/* Bloco 2 */}
-          <motion.div
-            whileHover={{ y: -6 }}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="bg-white rounded-2xl shadow p-8"
-          >
+          <motion.div whileHover={{ y: -6 }} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }} className="bg-white rounded-2xl shadow p-8">
             <BarChart3 className="w-8 h-8 mb-4 text-gray-900" />
             <h3 className="text-lg font-semibold mb-4">
               Um sistema construído para padronizar e reduzir custo operacional.
@@ -90,15 +110,7 @@ export default function Home() {
             </ul>
           </motion.div>
 
-          {/* Bloco 3 */}
-          <motion.div
-            whileHover={{ y: -6 }}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-white rounded-2xl shadow p-8"
-          >
+          <motion.div whileHover={{ y: -6 }} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.2 }} className="bg-white rounded-2xl shadow p-8">
             <Zap className="w-8 h-8 mb-4 text-gray-900" />
             <h3 className="text-lg font-semibold mb-4">
               Quem não automatiza, perde margem. Simples assim.
@@ -112,24 +124,6 @@ export default function Home() {
           </motion.div>
 
         </div>
-      </section>
-
-      {/* CTA FINAL */}
-      <section className="px-4 py-16 bg-white border-t">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="max-w-3xl mx-auto text-center"
-        >
-          <h3 className="text-2xl font-semibold mb-4">
-            Comece gratuitamente e veja a diferença no seu próprio processo produtivo.
-          </h3>
-          <Link href="/register" className="inline-block bg-black text-white px-8 py-3 rounded-lg font-medium hover:bg-gray-900 transition">
-            Criar conta grátis
-          </Link>
-        </motion.div>
       </section>
 
     </main>
