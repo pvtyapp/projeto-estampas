@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '@/lib/apiClient'
 
 type Props = {
@@ -20,17 +20,10 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   const [backH, setBackH] = useState('')
   const [extraW, setExtraW] = useState('')
   const [extraH, setExtraH] = useState('')
+
   const [hasVariants, setHasVariants] = useState(false)
   const [hasExtra, setHasExtra] = useState(false)
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (!hasVariants) {
-      setHasExtra(false)
-      setBack(null)
-      setExtra(null)
-    }
-  }, [hasVariants])
 
   function handleFront(file: File | null) {
     if (!file) return
@@ -41,16 +34,18 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   }
 
   async function submit() {
-    if (loading) return
-
     if (!front) return alert('Envie a frente.')
     if (!frontW || !frontH) return alert('Informe medidas da frente.')
 
-    if (hasVariants && !back) return alert('Envie a estampa das costas.')
-    if (hasVariants && (!backW || !backH)) return alert('Informe medidas das costas.')
+    if (hasVariants) {
+      if (!back) return alert('Envie a estampa das costas.')
+      if (!backW || !backH) return alert('Informe medidas das costas.')
+    }
 
-    if (hasExtra && !extra) return alert('Envie a estampa extra.')
-    if (hasExtra && (!extraW || !extraH)) return alert('Informe medidas da estampa extra.')
+    if (hasExtra) {
+      if (!extra) return alert('Envie a estampa extra.')
+      if (!extraW || !extraH) return alert('Informe medidas da estampa extra.')
+    }
 
     setLoading(true)
 
@@ -122,10 +117,6 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
       {front && (
         <>
-          <div className="text-xs text-gray-500">
-            Este SKU será usado para todas as partes deste kit.
-          </div>
-
           <input
             className="w-full border rounded-lg px-4 py-2"
             value={name}
@@ -140,60 +131,102 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           />
 
           <div className="flex gap-4">
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura frente (cm)" value={frontW} onChange={e => setFrontW(e.target.value)} />
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura frente (cm)" value={frontH} onChange={e => setFrontH(e.target.value)} />
+            <input
+              className="w-full border rounded-lg px-4 py-2"
+              placeholder="Largura frente (cm)"
+              value={frontW}
+              onChange={e => setFrontW(e.target.value)}
+            />
+            <input
+              className="w-full border rounded-lg px-4 py-2"
+              placeholder="Altura frente (cm)"
+              value={frontH}
+              onChange={e => setFrontH(e.target.value)}
+            />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={hasVariants} onChange={e => setHasVariants(e.target.checked)} />
-            Esta estampa possui costas
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={hasVariants}
+              onChange={e => setHasVariants(e.target.checked)}
+            />
+            Possui costas?
           </label>
         </>
       )}
 
       {hasVariants && (
-        <div className="border-l-4 border-gray-200 pl-4 space-y-2">
-          <div className="text-sm font-medium text-gray-700">Costas (parte do kit)</div>
-
-          <Upload label="Arquivo das costas" onFile={setBack} />
-
+        <>
+          <Upload label="Costas" onFile={setBack} />
           <div className="flex gap-4">
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura costas (cm)" value={backW} onChange={e => setBackW(e.target.value)} />
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura costas (cm)" value={backH} onChange={e => setBackH(e.target.value)} />
+            <input
+              className="w-full border rounded-lg px-4 py-2"
+              placeholder="Largura costas (cm)"
+              value={backW}
+              onChange={e => setBackW(e.target.value)}
+            />
+            <input
+              className="w-full border rounded-lg px-4 py-2"
+              placeholder="Altura costas (cm)"
+              value={backH}
+              onChange={e => setBackH(e.target.value)}
+            />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={hasExtra} disabled={!hasVariants} onChange={e => setHasExtra(e.target.checked)} />
-            Adicionar estampa extra ao kit
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={hasExtra}
+              onChange={e => setHasExtra(e.target.checked)}
+            />
+            Adicionar estampa extra?
           </label>
-        </div>
+        </>
       )}
 
       {hasExtra && (
-        <div className="border-l-4 border-gray-200 pl-4 space-y-2">
-          <div className="text-sm font-medium text-gray-700">Extra (parte do kit)</div>
-
-          <Upload label="Arquivo extra" onFile={setExtra} />
-
+        <>
+          <Upload label="Extra" onFile={setExtra} />
           <div className="flex gap-4">
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura extra (cm)" value={extraW} onChange={e => setExtraW(e.target.value)} />
-            <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura extra (cm)" value={extraH} onChange={e => setExtraH(e.target.value)} />
+            <input
+              className="w-full border rounded-lg px-4 py-2"
+              placeholder="Largura extra (cm)"
+              value={extraW}
+              onChange={e => setExtraW(e.target.value)}
+            />
+            <input
+              className="w-full border rounded-lg px-4 py-2"
+              placeholder="Altura extra (cm)"
+              value={extraH}
+              onChange={e => setExtraH(e.target.value)}
+            />
           </div>
-        </div>
+        </>
       )}
 
-      <button onClick={submit} disabled={loading} className="bg-black text-white px-6 py-2 rounded-lg">
+      <button
+        onClick={submit}
+        disabled={loading}
+        className="bg-black text-white px-6 py-2 rounded-lg"
+      >
         {loading ? 'Enviando...' : 'Adicionar à biblioteca'}
       </button>
     </div>
   )
 }
 
-function Upload({ label, onFile }: { label: string; onFile: (f: File | null) => void }) {
+function Upload({
+  label,
+  onFile,
+}: {
+  label: string
+  onFile: (f: File | null) => void
+}) {
   return (
     <div>
       <label className="text-sm font-medium">{label}</label>
-      <input type="file" accept=".png,.jpg,.jpeg,.svg" onChange={e => onFile(e.target.files?.[0] || null)} />
+      <input type="file" onChange={e => onFile(e.target.files?.[0] || null)} />
     </div>
   )
 }
