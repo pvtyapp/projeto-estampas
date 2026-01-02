@@ -5,7 +5,6 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-from uuid import UUID
 
 from backend.job_queue import queue
 from backend.jobs import process_render
@@ -29,7 +28,6 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-# Responder sempre OPTIONS (preflight)
 @app.options("/{path:path}")
 async def preflight_handler(path: str, request: Request):
     return {}
@@ -47,7 +45,7 @@ class PrintCreate(BaseModel):
 
 
 class PrintJobItem(BaseModel):
-    print_id: UUID
+    print_id: str
     qty: int
     width_cm: float
     height_cm: float
@@ -158,6 +156,24 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     queue.enqueue(process_render, job_id, job_timeout=600)
 
     return {"job_id": job_id, "total_units": total_units}
+
+
+# =========================
+# JOBS
+# =========================
+
+@app.get("/jobs/history")
+def jobs_history(user=Depends(current_user)):
+    try:
+        return supabase.table("jobs") \
+            .select("*") \
+            .eq("user_id", user["sub"]) \
+            .order("created_at", desc=True) \
+            .limit(50) \
+            .execute().data or []
+    except Exception as e:
+        print("ERROR /jobs/history:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/jobs/{job_id}")
