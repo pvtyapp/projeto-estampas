@@ -93,20 +93,20 @@ export default function Home() {
       <Image src="/logo.png" alt="" fill className="absolute opacity-[0.04] object-contain pointer-events-none" />
 
       {/* HEADER LOGO */}
-      <header className="relative z-10 flex justify-center pt-10">
-        <Image src="/logo.png" alt="PVTY" width={160} height={80} className="opacity-90" />
+      <header className="relative z-10 flex justify-center pt-12 pb-6">
+        <Image src="/logo.png" alt="PVTY" width={200} height={100} className="opacity-90" />
       </header>
 
       {/* HERO */}
-      <section className="relative z-10 flex flex-col items-center text-center px-6 pt-20 pb-24">
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+      <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 min-h-[70vh] pb-24">
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight max-w-4xl">
           Economize até 80% do tempo, Automatize a montagem direto para impressão...
         </h1>
-        <p className="text-lg text-gray-600 max-w-2xl">
+        <p className="text-lg text-gray-600 max-w-2xl mb-10">
           Elimine o processo manual, evite erros de tamanho e ganhe escala SEM AUMENTAR A EQUIPE.
         </p>
 
-        <form onSubmit={handleLogin} className="mt-10 w-full max-w-md space-y-4 bg-white p-8 rounded-2xl shadow-xl">
+        <form onSubmit={handleLogin} className="w-full max-w-md space-y-4 bg-white p-8 rounded-2xl shadow-xl">
           <input className="input" placeholder="Seu email" value={email} onChange={e => setEmail(e.target.value)} />
           <input type="password" className="input" placeholder="Sua senha" value={password} onChange={e => setPassword(e.target.value)} />
 
