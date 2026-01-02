@@ -1,10 +1,11 @@
 from .print_config import PX_PER_CM
 from PIL import Image
 import io
+import requests
 
 
 def cm_to_px(cm: float) -> int:
-    return int(cm * PX_PER_CM)
+    return round(cm * PX_PER_CM)
 
 
 def can_place(x, y, w, h, occupied):
@@ -21,6 +22,8 @@ def trim_transparent(img: Image.Image) -> Image.Image:
     return img
 
 
-def load_print_image(content: bytes) -> Image.Image:
-    img = Image.open(io.BytesIO(content)).convert("RGBA")
+def load_print_image(url: str) -> Image.Image:
+    res = requests.get(url)
+    res.raise_for_status()
+    img = Image.open(io.BytesIO(res.content)).convert("RGBA")
     return trim_transparent(img)

@@ -13,7 +13,7 @@ if not REDIS_URL:
     raise RuntimeError("REDIS_URL não configurada")
 
 if __name__ == "__main__":
-    redis_conn = Redis.from_url(REDIS_URL)
+    redis_conn = Redis.from_url(REDIS_URL, decode_responses=False)
 
     with Connection(redis_conn):
         worker = Worker(
@@ -24,4 +24,4 @@ if __name__ == "__main__":
         )
 
         logger.info("🚀 Worker iniciado e aguardando jobs...")
-        worker.work(logging_level=logging.INFO)
+        worker.work(burst=False, logging_level=logging.INFO)

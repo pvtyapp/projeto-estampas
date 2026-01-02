@@ -17,22 +17,19 @@ def check_and_consume_limits(supabase, user_id: str, units: int):
 
     year, month = _current_period()
 
-    plan = supabase.table("plans").select("*").eq("user_id", user_id).single().execute().data
-    if not plan:
-        plan = {"plan": "free", "monthly_limit": 2}
+    plan_res = supabase.table("plans").select("*").eq("user_id", user_id).execute().data or []
+    plan = plan_res[0] if plan_res else {"plan": "free", "monthly_limit": 2}
 
     monthly_limit = int(plan.get("monthly_limit") or 0)
 
-    usage = supabase.table("usage_monthly") \
+    usage_res = supabase.table("usage_monthly") \
         .select("*") \
         .eq("user_id", user_id) \
         .eq("year", year) \
         .eq("month", month) \
-        .single() \
-        .execute().data or {
-            "used_plan": 0,
-            "used_extra": 0,
-        }
+        .execute().data or []
+
+    usage = usage_res[0] if usage_res else {"used_plan": 0, "used_extra": 0}
 
     used_plan = int(usage.get("used_plan", 0))
     used_extra = int(usage.get("used_extra", 0))
@@ -52,8 +49,6 @@ def check_and_consume_limits(supabase, user_id: str, units: int):
 
     if overflow > total_remaining:
         raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
-
-    # Consumo manual (Supabase REST não suporta transações reais)
 
     remaining = overflow
     for p in packages:
