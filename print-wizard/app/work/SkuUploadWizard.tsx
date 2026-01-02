@@ -105,51 +105,71 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-8 space-y-4">
+    <div className="rounded-2xl border bg-white p-8 space-y-5">
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       <Upload label="Frente (principal)" onFile={handleFront} />
 
       {front && (
         <>
-          <input className="w-full border rounded-lg px-4 py-2" value={name} onChange={e => setName(e.target.value)} placeholder="Nome" />
-          <input className="w-full border rounded-lg px-4 py-2 bg-gray-50" value={sku} disabled />
+          <div className="text-xs text-gray-500">
+            Este SKU será usado para todas as partes deste kit.
+          </div>
+
+          <input
+            className="w-full border rounded-lg px-4 py-2"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Nome da estampa"
+          />
+
+          <input
+            className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-600"
+            value={sku}
+            disabled
+          />
 
           <div className="flex gap-4">
             <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura frente (cm)" value={frontW} onChange={e => setFrontW(e.target.value)} />
             <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura frente (cm)" value={frontH} onChange={e => setFrontH(e.target.value)} />
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={hasVariants} onChange={e => setHasVariants(e.target.checked)} />
-            Possui costas?
+            Esta estampa possui costas
           </label>
         </>
       )}
 
       {hasVariants && (
-        <>
-          <Upload label="Costas" onFile={setBack} />
+        <div className="border-l-4 border-gray-200 pl-4 space-y-2">
+          <div className="text-sm font-medium text-gray-700">Costas (parte do kit)</div>
+
+          <Upload label="Arquivo das costas" onFile={setBack} />
+
           <div className="flex gap-4">
             <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura costas (cm)" value={backW} onChange={e => setBackW(e.target.value)} />
             <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura costas (cm)" value={backH} onChange={e => setBackH(e.target.value)} />
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={hasExtra} onChange={e => setHasExtra(e.target.checked)} />
-            Adicionar estampa extra?
+            Adicionar estampa extra ao kit
           </label>
-        </>
+        </div>
       )}
 
       {hasExtra && (
-        <>
-          <Upload label="Extra" onFile={setExtra} />
+        <div className="border-l-4 border-gray-200 pl-4 space-y-2">
+          <div className="text-sm font-medium text-gray-700">Extra (parte do kit)</div>
+
+          <Upload label="Arquivo extra" onFile={setExtra} />
+
           <div className="flex gap-4">
             <input className="w-full border rounded-lg px-4 py-2" placeholder="Largura extra (cm)" value={extraW} onChange={e => setExtraW(e.target.value)} />
             <input className="w-full border rounded-lg px-4 py-2" placeholder="Altura extra (cm)" value={extraH} onChange={e => setExtraH(e.target.value)} />
           </div>
-        </>
+        </div>
       )}
 
       <button onClick={submit} disabled={loading} className="bg-black text-white px-6 py-2 rounded-lg">
