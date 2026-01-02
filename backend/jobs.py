@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.supabase_client import supabase
 from backend.render_engine import process_print_job
 from backend.zip_utils import create_zip_from_urls
@@ -14,23 +14,26 @@ def process_render(job_id: str):
     if not job or job["status"] != "queued":
         return
 
-    # lock otimista
     updated = supabase.table("jobs").update({
         "status": "processing",
-        "started_at": datetime.utcnow().isoformat()
+        "started_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", job_id).eq("status", "queued").execute()
 
     if not updated.data:
         return
 
     try:
-        urls = process_print_job(job["payload"])
+        payload = job.get("payload")
+        if not payload:
+            raise ValueError("Payload vazio no job")
 
-        # ============================
-        # Gera ZIP das folhas
-        # ============================
+        urls = process_print_job(payload)
+
         zip_bytes = create_zip_from_urls(urls)
-        zip_name = f"jobs/{job_id}.zip"
+        if hasattr(zip_bytes, "getvalue"):
+            zip_bytes = zip_bytes.getvalue()
+
+        zip_name = f"{job_id}.zip"
 
         supabase.storage.from_("jobs-output").upload(
             zip_name,
@@ -40,14 +43,12 @@ def process_render(job_id: str):
 
         zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
 
-        # ============================
-        # Atualiza job como concluído
-        # ============================
         supabase.table("jobs").update({
             "status": "done",
             "result_urls": urls,
             "zip_url": zip_url,
-            "finished_at": datetime.utcnow().isoformat()
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "error": None
         }).eq("id", job_id).execute()
 
     except Exception as e:
@@ -56,5 +57,5 @@ def process_render(job_id: str):
         supabase.table("jobs").update({
             "status": "error",
             "error": str(e),
-            "finished_at": datetime.utcnow().isoformat()
+            "finished_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
