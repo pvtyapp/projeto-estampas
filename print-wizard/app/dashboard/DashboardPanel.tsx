@@ -5,9 +5,10 @@ import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
 
 type Usage = {
-  plan: string
+  plan: 'free' | 'pro' | 'business'
   used: number
   limit: number
+  credits: number
   remaining_days: number
   status: 'ok' | 'warning' | 'blocked' | 'using_credits'
 }
@@ -15,32 +16,31 @@ type Usage = {
 export default function DashboardPanel() {
   const { session, loading: sessionLoading } = useSession()
   const [usage, setUsage] = useState<Usage | null>(null)
-  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (sessionLoading || !session) return
     let cancelled = false
 
-    async function load() {
-      try {
-        setLoading(true)
-        const res = await api('/me/usage')
-        if (!cancelled) setUsage(res)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
+    api('/me/usage').then(res => {
+      if (!cancelled) setUsage(res)
+    })
 
-    load()
     return () => {
       cancelled = true
     }
   }, [sessionLoading, session])
 
-  if (sessionLoading || loading || !usage) return null
+  if (!usage) return null
 
-  const percent =
-    usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
+  const isFree = usage.plan === 'free'
+  const percent = usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
+
+  const statusLabel = {
+    ok: 'Tudo certo',
+    warning: 'Atenção',
+    blocked: 'Bloqueado',
+    using_credits: 'Usando créditos',
+  }[usage.status]
 
   const statusColor = {
     ok: 'bg-green-100 text-green-700',
@@ -50,29 +50,52 @@ export default function DashboardPanel() {
   }[usage.status]
 
   return (
-    <div className="bg-white rounded-xl shadow border p-5 flex justify-between items-center">
+    <div className="bg-white border rounded-xl shadow p-6 flex flex-col gap-4">
+
+      <div className="flex justify-between items-start">
+        <div>
+          <div className="text-sm text-gray-500 mb-1">
+            Seu plano ativo é:
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-semibold uppercase">{usage.plan}</span>
+            <span className={`text-xs px-2 py-1 rounded ${statusColor}`}>
+              {statusLabel}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-right">
+          <div className="text-sm text-gray-500">Renovação</div>
+          <div className="font-medium">
+            {isFree ? 'Diária' : `Em ${usage.remaining_days} dias`}
+          </div>
+        </div>
+      </div>
+
       <div>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-semibold text-lg">{usage.plan}</span>
-          <span className={`text-xs px-2 py-0.5 rounded ${statusColor}`}>
-            {usage.status}
+        <div className="flex justify-between text-sm text-gray-600 mb-1">
+          <span>
+            {usage.used} / {usage.limit} folhas {isFree ? 'hoje' : 'este mês'}
           </span>
+          <span>{percent}%</span>
         </div>
 
-        <div className="text-sm text-gray-600">
-          {usage.used} / {usage.limit} folhas usadas ({percent}%)
-        </div>
-
-        <div className="w-48 h-2 bg-gray-200 rounded overflow-hidden mt-1">
-          <div className="h-full bg-black" style={{ width: `${percent}%` }} />
+        <div className="w-full h-2 bg-gray-200 rounded overflow-hidden">
+          <div
+            className="h-full bg-black transition-all"
+            style={{ width: `${percent}%` }}
+          />
         </div>
       </div>
 
-      <div className="text-right">
-        <div className="text-sm text-gray-600">Renova em</div>
-        <div className="font-medium">{usage.remaining_days} dias</div>
-        <button className="mt-2 text-sm underline">Renovar</button>
+      <div className="flex justify-between items-center text-sm text-gray-600">
+        <span>Créditos extras: {usage.credits}</span>
+        <button className="underline">
+          {isFree ? 'Fazer upgrade' : 'Gerenciar plano'}
+        </button>
       </div>
+
     </div>
   )
 }
