@@ -3,9 +3,7 @@
 import { useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
 
-type Props = {
-  onComplete: () => void
-}
+type Props = { onComplete: () => void }
 
 export default function SkuUploadWizard({ onComplete }: Props) {
   const [front, setFront] = useState<File | null>(null)
@@ -99,56 +97,36 @@ export default function SkuUploadWizard({ onComplete }: Props) {
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       {/* SLOT 1 */}
-      <Slot title="Frente (principal)" active file={front} onPick={() => frontInput.current?.click()}>
+      <Slot title="Frente (principal)" active onPick={() => frontInput.current?.click()}>
         <input ref={frontInput} type="file" className="hidden" onChange={e => handleFront(e.target.files?.[0] || null)} />
 
         <Field label="Nome" value={name} onChange={setName} />
         <Field label="SKU" value={sku} onChange={setSku} />
-
-        <TwoFields
-          a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }}
-          b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }}
-        />
+        <TwoFields a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }} b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }} />
       </Slot>
 
       {/* SLOT 2 */}
-      <Slot title="Costas" active>
+      <Slot title="Costas" active onPick={() => hasBack && backInput.current?.click()}>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={hasBack} onChange={e => setHasBack(e.target.checked)} />
           Possui costas?
         </label>
 
-        <div className={`transition ${hasBack ? 'opacity-100' : 'opacity-30'}`}>
-          <button disabled={!hasBack} onClick={() => backInput.current?.click()} className="btn">
-            Abrir PNG
-          </button>
-          <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
+        <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
 
-          <TwoFields
-            a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }}
-            b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }}
-          />
-        </div>
+        <TwoFields a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }} b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }} />
       </Slot>
 
       {/* SLOT 3 */}
-      <Slot title="Extra" active={hasBack}>
+      <Slot title="Extra" active={hasBack} onPick={() => hasExtra && extraInput.current?.click()}>
         <label className={`flex items-center gap-2 text-sm ${hasBack ? '' : 'opacity-30'}`}>
           <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
           Adicionar estampa extra?
         </label>
 
-        <div className={`transition ${hasExtra ? 'opacity-100' : 'opacity-30'}`}>
-          <button disabled={!hasExtra} onClick={() => extraInput.current?.click()} className="btn">
-            Abrir PNG
-          </button>
-          <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
+        <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
 
-          <TwoFields
-            a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }}
-            b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }}
-          />
-        </div>
+        <TwoFields a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }} b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }} />
       </Slot>
 
       <button onClick={submit} disabled={loading} className="bg-black text-white px-5 py-2 rounded-lg">
@@ -160,12 +138,16 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
 /* ---------- helpers ---------- */
 
-function Slot({ title, active, children }: any) {
+function Slot({ title, active = true, onPick, children }: any) {
   return (
     <div className={`border rounded-xl p-4 space-y-3 transition ${active ? 'opacity-100' : 'opacity-30'}`}>
       <div className="flex justify-between items-center font-medium">
         {title}
-        <button className="btn" onClick={(e:any)=>e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={onPick}
+          className="px-3 py-1 border rounded text-sm hover:bg-gray-50"
+        >
           Abrir PNG
         </button>
       </div>
