@@ -6,14 +6,20 @@ import { PreviewItem } from '@/app/types/preview'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
 
+type Slot = {
+  url: string
+  width_cm: number
+  height_cm: number
+}
+
 type Print = {
   id: string
   name: string
   sku: string
   slots?: {
-    front?: { url: string; width_cm: number; height_cm: number }
-    back?: { url: string; width_cm: number; height_cm: number }
-    extra?: { url: string; width_cm: number; height_cm: number }
+    front?: Slot
+    back?: Slot
+    extra?: Slot
   }
 }
 
