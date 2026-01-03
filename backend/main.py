@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.0")
+app = FastAPI(title="Projeto Estampas API", version="3.9")
 
 # =========================
 # CORS
@@ -22,7 +22,10 @@ app = FastAPI(title="Projeto Estampas API", version="4.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://pvty.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://pvty.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
@@ -144,27 +147,14 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
         if width is None or height is None:
             continue
 
-        existing = supabase.table("print_files") \
-            .select("id") \
-            .eq("print_id", print_id) \
-            .eq("type", slot_type) \
-            .execute().data
-
-        if existing:
-            supabase.table("print_files") \
-                .update({"width_cm": float(width), "height_cm": float(height)}) \
-                .eq("print_id", print_id) \
-                .eq("type", slot_type) \
-                .execute()
-        else:
-            supabase.table("print_files").insert({
-                "id": str(uuid.uuid4()),
-                "print_id": print_id,
-                "type": slot_type,
-                "public_url": slot.get("url") or "",
+        supabase.table("print_files") \
+            .update({
                 "width_cm": float(width),
                 "height_cm": float(height),
-            }).execute()
+            }) \
+            .eq("print_id", print_id) \
+            .eq("type", slot_type) \
+            .execute()
 
     return get_print(print_id, user)
 
@@ -233,10 +223,6 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 
     return {"job_id": job_id, "total_units": total_units}
 
-# =========================
-# JOBS — CONSULTA
-# =========================
-
 @app.get("/jobs/history")
 def jobs_history(user=Depends(current_user)):
     return supabase.table("jobs") \
@@ -262,8 +248,21 @@ def get_job(job_id: str, user=Depends(current_user)):
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, user=Depends(current_user)):
-    supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
-    return {"status": "canceled"}
+    job = supabase.table("jobs") \
+        .select("*") \
+        .eq("id", job_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+
+    if job["status"] in ("queued", "done"):
+        supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
+        return {"status": "canceled"}
+
+    raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
 
 # =========================
 # USAGE
