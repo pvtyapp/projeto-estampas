@@ -99,57 +99,55 @@ export default function SkuUploadWizard({ onComplete }: Props) {
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       {/* SLOT 1 */}
-      <Slot
-        title="Frente (principal)"
-        active
-        file={front}
-        inputRef={frontInput}
-        onPick={() => frontInput.current?.click()}
-        onFile={handleFront}
-      >
-        <input className="input" placeholder="Nome" value={name} onChange={e => setName(e.target.value)} />
-        <input className="input bg-gray-100 text-gray-500" disabled value={sku} />
-        <div className="flex gap-3">
-          <input className="input" placeholder="Largura frente (cm)" value={frontW} onChange={e => setFrontW(e.target.value)} />
-          <input className="input" placeholder="Altura frente (cm)" value={frontH} onChange={e => setFrontH(e.target.value)} />
-        </div>
+      <Slot title="Frente (principal)" active file={front} onPick={() => frontInput.current?.click()}>
+        <input ref={frontInput} type="file" className="hidden" onChange={e => handleFront(e.target.files?.[0] || null)} />
+
+        <Field label="Nome" value={name} onChange={setName} />
+        <Field label="SKU" value={sku} onChange={setSku} />
+
+        <TwoFields
+          a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }}
+          b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }}
+        />
       </Slot>
 
       {/* SLOT 2 */}
-      <Slot
-        title="Costas"
-        active={hasBack}
-        file={back}
-        inputRef={backInput}
-        onPick={() => backInput.current?.click()}
-        onFile={setBack}
-      >
+      <Slot title="Costas" active>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={hasBack} onChange={e => setHasBack(e.target.checked)} />
           Possui costas?
         </label>
-        <div className="flex gap-3">
-          <input disabled={!hasBack} className="input" placeholder="Largura costas (cm)" value={backW} onChange={e => setBackW(e.target.value)} />
-          <input disabled={!hasBack} className="input" placeholder="Altura costas (cm)" value={backH} onChange={e => setBackH(e.target.value)} />
+
+        <div className={`transition ${hasBack ? 'opacity-100' : 'opacity-30'}`}>
+          <button disabled={!hasBack} onClick={() => backInput.current?.click()} className="btn">
+            Abrir PNG
+          </button>
+          <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
+
+          <TwoFields
+            a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }}
+            b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }}
+          />
         </div>
       </Slot>
 
       {/* SLOT 3 */}
-      <Slot
-        title="Extra"
-        active={hasExtra}
-        file={extra}
-        inputRef={extraInput}
-        onPick={() => extraInput.current?.click()}
-        onFile={setExtra}
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={hasExtra} onChange={e => setHasExtra(e.target.checked)} />
+      <Slot title="Extra" active={hasBack}>
+        <label className={`flex items-center gap-2 text-sm ${hasBack ? '' : 'opacity-30'}`}>
+          <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
           Adicionar estampa extra?
         </label>
-        <div className="flex gap-3">
-          <input disabled={!hasExtra} className="input" placeholder="Largura extra (cm)" value={extraW} onChange={e => setExtraW(e.target.value)} />
-          <input disabled={!hasExtra} className="input" placeholder="Altura extra (cm)" value={extraH} onChange={e => setExtraH(e.target.value)} />
+
+        <div className={`transition ${hasExtra ? 'opacity-100' : 'opacity-30'}`}>
+          <button disabled={!hasExtra} onClick={() => extraInput.current?.click()} className="btn">
+            Abrir PNG
+          </button>
+          <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
+
+          <TwoFields
+            a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }}
+            b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }}
+          />
         </div>
       </Slot>
 
@@ -160,36 +158,36 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   )
 }
 
-/* ---------- Slot visual ---------- */
+/* ---------- helpers ---------- */
 
-function Slot({
-  title,
-  active,
-  file,
-  onPick,
-  onFile,
-  inputRef,
-  children,
-}: any) {
+function Slot({ title, active, children }: any) {
   return (
-    <div className={`border rounded-xl p-4 space-y-3 transition ${active ? 'opacity-100' : 'opacity-40'}`}>
-      <div className="flex justify-between items-center">
-        <span className="font-medium">{title}</span>
-        <button
-          type="button"
-          disabled={!active}
-          onClick={onPick}
-          className="text-sm px-3 py-1 border rounded disabled:opacity-40"
-        >
+    <div className={`border rounded-xl p-4 space-y-3 transition ${active ? 'opacity-100' : 'opacity-30'}`}>
+      <div className="flex justify-between items-center font-medium">
+        {title}
+        <button className="btn" onClick={(e:any)=>e.stopPropagation()}>
           Abrir PNG
         </button>
       </div>
-
-      {file && <div className="text-xs text-gray-500">Arquivo: {file.name}</div>}
-
-      <input type="file" ref={inputRef} className="hidden" onChange={e => onFile(e.target.files?.[0] || null)} />
-
       {children}
+    </div>
+  )
+}
+
+function Field({ label, value, onChange }: any) {
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-1">{label}</div>
+      <input className="input" value={value} onChange={e => onChange(e.target.value)} />
+    </div>
+  )
+}
+
+function TwoFields({ a, b }: any) {
+  return (
+    <div className="flex gap-3">
+      <input disabled={a.d} className="input" placeholder={a.p} value={a.v} onChange={e => a.s(e.target.value)} />
+      <input disabled={b.d} className="input" placeholder={b.p} value={b.v} onChange={e => b.s(e.target.value)} />
     </div>
   )
 }
