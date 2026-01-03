@@ -14,9 +14,9 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="3.8")
+app = FastAPI(title="Projeto Estampas API", version="3.9")
 
-# CORS — precisa ser o primeiro middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -102,6 +102,49 @@ def list_prints(user=Depends(current_user)):
     return res
 
 
+@app.get("/prints/{print_id}")
+def get_print(print_id: str, user=Depends(current_user)):
+    res = supabase.table("prints").select("""
+        id, name, sku, is_composite, created_at,
+        print_files:print_files(id, type, public_url, width_cm, height_cm)
+    """).eq("id", print_id).eq("user_id", user["sub"]).single().execute().data
+
+    if not res:
+        raise HTTPException(status_code=404, detail="Print não encontrado")
+
+    res["slots"] = {
+        f["type"]: {
+            "id": f["id"],
+            "url": f["public_url"],
+            "width_cm": f.get("width_cm"),
+            "height_cm": f.get("height_cm"),
+        }
+        for f in res.get("print_files", [])
+    }
+    res.pop("print_files", None)
+
+    return res
+
+
+@app.delete("/prints/{print_id}")
+def delete_print(print_id: str, user=Depends(current_user)):
+    files = supabase.table("print_files") \
+        .select("id") \
+        .eq("print_id", print_id) \
+        .execute().data or []
+
+    for f in files:
+        supabase.table("print_files").delete().eq("id", f["id"]).execute()
+
+    supabase.table("prints") \
+        .delete() \
+        .eq("id", print_id) \
+        .eq("user_id", user["sub"]) \
+        .execute()
+
+    return {"status": "deleted"}
+
+
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
     data = payload.dict()
@@ -164,16 +207,12 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 
 @app.get("/jobs/history")
 def jobs_history(user=Depends(current_user)):
-    try:
-        return supabase.table("jobs") \
-            .select("*") \
-            .eq("user_id", user["sub"]) \
-            .order("created_at", desc=True) \
-            .limit(50) \
-            .execute().data or []
-    except Exception as e:
-        print("ERROR /jobs/history:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+    return supabase.table("jobs") \
+        .select("*") \
+        .eq("user_id", user["sub"]) \
+        .order("created_at", desc=True) \
+        .limit(50) \
+        .execute().data or []
 
 
 @app.get("/jobs/{job_id}")
