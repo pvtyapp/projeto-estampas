@@ -18,9 +18,9 @@ function normalizePrint(p: any): Print {
   return {
     ...p,
     slots: {
-      front: p.slots?.front ?? EMPTY_SLOT,
-      back: p.slots?.back ?? EMPTY_SLOT,
-      extra: p.slots?.extra ?? EMPTY_SLOT,
+      front: p.slots?.front ? { ...p.slots.front } : { ...EMPTY_SLOT },
+      back: p.slots?.back ? { ...p.slots.back } : { ...EMPTY_SLOT },
+      extra: p.slots?.extra ? { ...p.slots.extra } : { ...EMPTY_SLOT },
     },
   }
 }
@@ -68,12 +68,14 @@ export default function Library({ onPreview, version }: Props) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return prints.filter(
-      p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q),
+      p =>
+        String(p.name).toLowerCase().includes(q) ||
+        String(p.sku).toLowerCase().includes(q),
     )
   }, [prints, search])
 
   function setPrintQty(id: string, value: number) {
-    setQty(q => ({ ...q, [id]: Math.max(0, value) }))
+    setQty(q => ({ ...q, [id]: Math.max(0, value || 0) }))
   }
 
   function buildPreview() {
@@ -147,7 +149,6 @@ export default function Library({ onPreview, version }: Props) {
               </div>
 
               <div className="flex gap-2">
-                {/* Nota */}
                 <div className="relative">
                   <button
                     onClick={() =>
@@ -183,7 +184,6 @@ export default function Library({ onPreview, version }: Props) {
                   )}
                 </div>
 
-                {/* Editar */}
                 <button
                   onClick={async () => {
                     try {
@@ -218,12 +218,12 @@ export default function Library({ onPreview, version }: Props) {
         <EditPrintModal
           print={editing}
           onClose={() => setEditing(null)}
-          onUpdated={updated => {
-            setPrints(prev => prev.map(x => (x.id === updated.id ? updated : x)))
+          onUpdated={async () => {
+            await load()
             setEditing(null)
           }}
-          onDeleted={() => {
-            setPrints(prev => prev.filter(x => x.id !== editing.id))
+          onDeleted={async () => {
+            await load()
             setEditing(null)
           }}
         />

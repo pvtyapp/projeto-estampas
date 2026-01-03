@@ -70,6 +70,24 @@ def current_user(user=Depends(get_current_user)):
     return user
 
 # =========================
+# HELPERS
+# =========================
+
+def normalize_slots(files: List[dict]) -> Dict[str, dict]:
+    slots = {"front": None, "back": None, "extra": None}
+    for f in files:
+        t = f.get("type")
+        if t not in slots:
+            continue
+        slots[t] = {
+            "id": f["id"],
+            "url": f["public_url"],
+            "width_cm": f.get("width_cm") or 0,
+            "height_cm": f.get("height_cm") or 0,
+        }
+    return slots
+
+# =========================
 # ROTAS
 # =========================
 
@@ -80,17 +98,6 @@ def root():
 # =========================
 # PRINTS
 # =========================
-
-def normalize_slots(files: List[dict]) -> Dict[str, dict]:
-    slots = {"front": None, "back": None, "extra": None}
-    for f in files:
-        slots[f["type"]] = {
-            "id": f["id"],
-            "url": f["public_url"],
-            "width_cm": f.get("width_cm") or 0,
-            "height_cm": f.get("height_cm") or 0,
-        }
-    return slots
 
 @app.get("/prints")
 def list_prints(user=Depends(current_user)):
