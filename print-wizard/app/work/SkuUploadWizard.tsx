@@ -2,11 +2,13 @@
 
 import { useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
-import { supabase } from '@/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
 type Props = { onComplete: () => void }
 
 export default function SkuUploadWizard({ onComplete }: Props) {
+  const router = useRouter()
+
   const [front, setFront] = useState<File | null>(null)
   const [back, setBack] = useState<File | null>(null)
   const [extra, setExtra] = useState<File | null>(null)
@@ -23,7 +25,6 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   const [hasBack, setHasBack] = useState(false)
   const [hasExtra, setHasExtra] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
 
   const frontInput = useRef<HTMLInputElement>(null)
   const backInput = useRef<HTMLInputElement>(null)
@@ -44,7 +45,6 @@ export default function SkuUploadWizard({ onComplete }: Props) {
     if (hasExtra && (!extra || !extraW || !extraH)) return alert('Complete a extra.')
 
     setLoading(true)
-
     try {
       const print = await api('/prints', {
         method: 'POST',
@@ -64,17 +64,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         form.append('width_cm', w.replace(',', '.'))
         form.append('height_cm', h.replace(',', '.'))
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/prints/${print.id}/upload`, {
-          method: 'POST',
-          body: form,
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-        })
+        await api(`/prints/${print.id}/upload`, { method: 'POST', body: form, headers: {} })
       }
 
       await upload(front, 'front', frontW, frontH)
@@ -83,13 +73,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
       reset()
       onComplete()
-      setToast('Estampa adicionada com sucesso!')
-
-      setTimeout(() => {
-        window.location.reload()
-      }, 1200)
-    } catch (e: any) {
-      alert(e.message || 'Erro ao enviar estampa')
+      router.refresh()
     } finally {
       setLoading(false)
     }
@@ -112,13 +96,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   }
 
   return (
-    <div className="relative rounded-2xl border bg-white p-6 space-y-6">
-      {toast && (
-        <div className="absolute top-3 right-3 bg-green-600 text-white text-sm px-4 py-2 rounded shadow">
-          {toast}
-        </div>
-      )}
-
+    <div className="rounded-2xl border bg-white p-6 space-y-6">
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       <Slot title="Frente (principal)" active onPick={() => frontInput.current?.click()}>
@@ -133,9 +111,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           <input type="checkbox" checked={hasBack} onChange={e => setHasBack(e.target.checked)} />
           Possui costas?
         </label>
-
         <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
-
         <TwoFields a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }} b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }} />
       </Slot>
 
@@ -144,9 +120,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
           Adicionar estampa extra?
         </label>
-
         <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
-
         <TwoFields a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }} b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }} />
       </Slot>
 
