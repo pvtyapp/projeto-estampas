@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Any
 
 from backend.job_queue import queue
 from backend.jobs import process_render
@@ -134,31 +134,47 @@ def get_print(print_id: str, user=Depends(current_user)):
 
 
 @app.patch("/prints/{print_id}")
-def update_print(print_id: str, payload: dict, user=Depends(current_user)):
+def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
     slots = payload.get("slots")
     if not slots:
         raise HTTPException(status_code=400, detail="Slots não informados")
 
-    supabase.table("print_files") \
-        .delete() \
+    existing = supabase.table("print_files") \
+        .select("id, type") \
         .eq("print_id", print_id) \
-        .execute()
+        .execute().data or []
+
+    existing_map = {f["type"]: f["id"] for f in existing}
 
     for slot_type, slot in slots.items():
         if not slot:
             continue
 
-        if not slot.get("width_cm") or not slot.get("height_cm"):
+        width = slot.get("width_cm")
+        height = slot.get("height_cm")
+
+        if not width or not height:
             continue
 
-        supabase.table("print_files").insert({
-            "id": str(uuid.uuid4()),
-            "print_id": print_id,
-            "type": slot_type,
-            "public_url": slot.get("url") or "",
-            "width_cm": float(slot["width_cm"]),
-            "height_cm": float(slot["height_cm"]),
-        }).execute()
+        data = {
+            "width_cm": float(width),
+            "height_cm": float(height),
+        }
+
+        if slot_type in existing_map:
+            supabase.table("print_files") \
+                .update(data) \
+                .eq("id", existing_map[slot_type]) \
+                .execute()
+        else:
+            supabase.table("print_files").insert({
+                "id": str(uuid.uuid4()),
+                "print_id": print_id,
+                "type": slot_type,
+                "public_url": slot.get("url") or "",
+                "width_cm": float(width),
+                "height_cm": float(height),
+            }).execute()
 
     return get_print(print_id, user)
 
