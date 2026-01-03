@@ -24,7 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://pvty.vercel.app"
+        "https://pvty.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -46,13 +46,11 @@ class PrintCreate(BaseModel):
     height_cm: float
     is_composite: bool = False
 
-
 class PrintJobItem(BaseModel):
     print_id: str
     qty: int
     width_cm: float
     height_cm: float
-
 
 class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
@@ -63,7 +61,6 @@ class PrintJobRequest(BaseModel):
 
 def dev_user():
     return {"sub": "00000000-0000-0000-0000-000000000001"}
-
 
 def current_user(user=Depends(get_current_user)):
     if DEV_NO_AUTH:
@@ -80,6 +77,9 @@ def current_user(user=Depends(get_current_user)):
 def root():
     return {"status": "ok"}
 
+# =========================
+# PRINTS
+# =========================
 
 @app.get("/prints")
 def list_prints(user=Depends(current_user)):
@@ -101,7 +101,6 @@ def list_prints(user=Depends(current_user)):
         p.pop("print_files", None)
 
     return res
-
 
 @app.get("/prints/{print_id}")
 def get_print(print_id: str, user=Depends(current_user)):
@@ -132,20 +131,13 @@ def get_print(print_id: str, user=Depends(current_user)):
 
     return p
 
-
 @app.patch("/prints/{print_id}")
 def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
     slots = payload.get("slots")
-    if not slots:
-        raise HTTPException(status_code=400, detail="Slots não informados")
+    if not isinstance(slots, dict):
+        raise HTTPException(status_code=400, detail="Slots inválidos")
 
-    existing = supabase.table("print_files") \
-        .select("id, type") \
-        .eq("print_id", print_id) \
-        .execute().data or []
-
-    existing_map = {f["type"]: f["id"] for f in existing}
-
+    # atualiza apenas os tamanhos, mantém o arquivo e tipo
     for slot_type, slot in slots.items():
         if not slot:
             continue
@@ -153,31 +145,19 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
         width = slot.get("width_cm")
         height = slot.get("height_cm")
 
-        if not width or not height:
+        if width is None or height is None:
             continue
 
-        data = {
-            "width_cm": float(width),
-            "height_cm": float(height),
-        }
-
-        if slot_type in existing_map:
-            supabase.table("print_files") \
-                .update(data) \
-                .eq("id", existing_map[slot_type]) \
-                .execute()
-        else:
-            supabase.table("print_files").insert({
-                "id": str(uuid.uuid4()),
-                "print_id": print_id,
-                "type": slot_type,
-                "public_url": slot.get("url") or "",
+        supabase.table("print_files") \
+            .update({
                 "width_cm": float(width),
                 "height_cm": float(height),
-            }).execute()
+            }) \
+            .eq("print_id", print_id) \
+            .eq("type", slot_type) \
+            .execute()
 
     return get_print(print_id, user)
-
 
 @app.delete("/prints/{print_id}")
 def delete_print(print_id: str, user=Depends(current_user)):
@@ -185,14 +165,13 @@ def delete_print(print_id: str, user=Depends(current_user)):
     supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
     return {"status": "deleted"}
 
-
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
     data = payload.dict()
     data.update({
         "id": str(uuid.uuid4()),
         "user_id": user["sub"],
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
     res = supabase.table("prints").insert(data).execute()
@@ -201,6 +180,9 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
 
     return res.data[0]
 
+# =========================
+# JOBS
+# =========================
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
@@ -235,16 +217,12 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         "user_id": user["sub"],
         "status": "queued",
         "payload": payload_clean,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
     queue.enqueue(process_render, job_id, job_timeout=600)
 
     return {"job_id": job_id, "total_units": total_units}
-
-# =========================
-# JOBS
-# =========================
 
 @app.get("/jobs/history")
 def jobs_history(user=Depends(current_user)):
@@ -254,7 +232,6 @@ def jobs_history(user=Depends(current_user)):
         .order("created_at", desc=True) \
         .limit(50) \
         .execute().data or []
-
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
@@ -269,7 +246,6 @@ def get_job(job_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
     return job
-
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, user=Depends(current_user)):
@@ -289,6 +265,9 @@ def cancel_job(job_id: str, user=Depends(current_user)):
 
     raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
 
+# =========================
+# USAGE
+# =========================
 
 @app.get("/me/usage")
 def get_usage(user=Depends(current_user)):
@@ -305,11 +284,7 @@ def get_usage(user=Depends(current_user)):
 
     usage = usage[0] if usage else None
 
-    plan = supabase.table("plans") \
-        .select("*") \
-        .eq("user_id", user_id) \
-        .execute().data or []
-
+    plan = supabase.table("plans").select("*").eq("user_id", user_id).execute().data or []
     plan = plan[0] if plan else {"plan": "free", "monthly_limit": 2}
 
     packages = supabase.table("extra_packages") \
@@ -351,5 +326,5 @@ def get_usage(user=Depends(current_user)):
         "credits": credits,
         "percent": percent,
         "remaining_days": remaining_days,
-        "status": status
+        "status": status,
     }
