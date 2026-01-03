@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.0")
+app = FastAPI(title="Projeto Estampas API", version="4.2")
 
 # =========================
 # CORS
@@ -42,8 +42,6 @@ async def preflight_handler(path: str, request: Request):
 class PrintCreate(BaseModel):
     name: str
     sku: str
-    width_cm: float
-    height_cm: float
     is_composite: bool = False
 
 class PrintJobItem(BaseModel):
@@ -73,28 +71,24 @@ def current_user(user=Depends(get_current_user)):
 # HELPERS
 # =========================
 
-EMPTY_SLOT = {"url": "", "width_cm": 0, "height_cm": 0}
-
-def normalize_slots(files: List[dict]) -> Dict[str, dict]:
-    slots = {
-        "front": dict(EMPTY_SLOT),
-        "back": dict(EMPTY_SLOT),
-        "extra": dict(EMPTY_SLOT),
+def build_slots_from_print(p: dict) -> Dict[str, dict]:
+    return {
+        "front": {
+            "url": p.get("front_url") or "",
+            "width_cm": p.get("front_width_cm") or 0,
+            "height_cm": p.get("front_height_cm") or 0,
+        },
+        "back": {
+            "url": p.get("back_url") or "",
+            "width_cm": p.get("back_width_cm") or 0,
+            "height_cm": p.get("back_height_cm") or 0,
+        },
+        "extra": {
+            "url": p.get("extra_url") or "",
+            "width_cm": p.get("extra_width_cm") or 0,
+            "height_cm": p.get("extra_height_cm") or 0,
+        },
     }
-
-    for f in files:
-        t = f.get("type")
-        if t not in slots:
-            continue
-
-        slots[t] = {
-            "id": f.get("id"),
-            "url": f.get("public_url") or "",
-            "width_cm": f.get("width_cm") or 0,
-            "height_cm": f.get("height_cm") or 0,
-        }
-
-    return slots
 
 # =========================
 # ROTAS
@@ -110,21 +104,29 @@ def root():
 
 @app.get("/prints")
 def list_prints(user=Depends(current_user)):
-    res = supabase.table("prints").select("""
-        id, name, sku, is_composite, created_at,
-        print_files:print_files(id, type, public_url, width_cm, height_cm)
-    """).eq("user_id", user["sub"]).order("created_at", desc=True).execute().data or []
+    rows = supabase.table("prints") \
+        .select("*") \
+        .eq("user_id", user["sub"]) \
+        .order("created_at", desc=True) \
+        .execute().data or []
 
-    for p in res:
-        p["slots"] = normalize_slots(p.get("print_files", []))
-        p.pop("print_files", None)
+    result = []
+    for p in rows:
+        p["slots"] = build_slots_from_print(p)
+        for k in (
+            "front_url","front_width_cm","front_height_cm",
+            "back_url","back_width_cm","back_height_cm",
+            "extra_url","extra_width_cm","extra_height_cm"
+        ):
+            p.pop(k, None)
+        result.append(p)
 
-    return res
+    return result
 
 @app.get("/prints/{print_id}")
 def get_print(print_id: str, user=Depends(current_user)):
     p = supabase.table("prints") \
-        .select("id, name, sku, is_composite, created_at") \
+        .select("*") \
         .eq("id", print_id) \
         .eq("user_id", user["sub"]) \
         .single() \
@@ -133,12 +135,14 @@ def get_print(print_id: str, user=Depends(current_user)):
     if not p:
         raise HTTPException(status_code=404, detail="Print não encontrado")
 
-    files = supabase.table("print_files") \
-        .select("id, type, public_url, width_cm, height_cm") \
-        .eq("print_id", print_id) \
-        .execute().data or []
+    p["slots"] = build_slots_from_print(p)
+    for k in (
+        "front_url","front_width_cm","front_height_cm",
+        "back_url","back_width_cm","back_height_cm",
+        "extra_url","extra_width_cm","extra_height_cm"
+    ):
+        p.pop(k, None)
 
-    p["slots"] = normalize_slots(files)
     return p
 
 @app.patch("/prints/{print_id}")
@@ -157,31 +161,23 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not isinstance(slots, dict):
         raise HTTPException(status_code=400, detail="Slots inválidos")
 
-    for slot_type in ("front", "back", "extra"):
-        slot = slots.get(slot_type)
+    update = {}
+    for key in ("front","back","extra"):
+        slot = slots.get(key)
         if not isinstance(slot, dict):
             continue
+        if "width_cm" in slot:
+            update[f"{key}_width_cm"] = float(slot.get("width_cm") or 0)
+        if "height_cm" in slot:
+            update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
 
-        width = slot.get("width_cm")
-        height = slot.get("height_cm")
-
-        if width is None or height is None:
-            continue
-
-        supabase.table("print_files") \
-            .update({
-                "width_cm": float(width),
-                "height_cm": float(height),
-            }) \
-            .eq("print_id", print_id) \
-            .eq("type", slot_type) \
-            .execute()
+    if update:
+        supabase.table("prints").update(update).eq("id", print_id).execute()
 
     return get_print(print_id, user)
 
 @app.delete("/prints/{print_id}")
 def delete_print(print_id: str, user=Depends(current_user)):
-    supabase.table("print_files").delete().eq("print_id", print_id).execute()
     supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
     return {"status": "deleted"}
 
@@ -221,16 +217,17 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     job_id = str(uuid.uuid4())
 
     payload_clean = {
-        "items": [
-            {
-                "print_id": str(i.print_id),
-                "qty": int(i.qty),
-                "width_cm": float(i.width_cm),
-                "height_cm": float(i.height_cm),
-            }
-            for i in payload.items
-        ]
-    }
+    "items": [
+        {
+            "print_id": str(i.print_id),
+            "qty": int(i.qty),
+            "width_cm": float(i.width_cm),
+            "height_cm": float(i.height_cm),
+        }
+        for i in payload.items
+    ]
+}
+
 
     supabase.table("jobs").insert({
         "id": job_id,
