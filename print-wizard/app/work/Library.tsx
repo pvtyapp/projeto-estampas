@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
+import { Pencil, StickyNote, X } from 'lucide-react'
 
 type Print = {
   id: string
@@ -25,6 +26,10 @@ export default function Library({ onPreview, version }: Props) {
   const [qty, setQty] = useState<Record<string, number>>({})
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [editing, setEditing] = useState<Print | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
     load()
@@ -72,10 +77,25 @@ export default function Library({ onPreview, version }: Props) {
     }
 
     onPreview(items)
+    setToast('Preview gerado 👇')
+    setTimeout(() => setToast(null), 2000)
+
+    setTimeout(() => {
+      document.getElementById('preview-anchor')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }, 200)
   }
 
   return (
     <div className="space-y-4">
+      {toast && (
+        <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
+          {toast}
+        </div>
+      )}
+
       <h2 className="font-semibold text-lg">Biblioteca</h2>
 
       <input
@@ -93,7 +113,7 @@ export default function Library({ onPreview, version }: Props) {
           filtered.map(p => (
             <div
               key={p.id}
-              className="border rounded p-3 flex justify-between items-start"
+              className="border rounded p-3 flex justify-between items-start relative"
             >
               <div>
                 <div className="text-sm font-medium">
@@ -111,6 +131,35 @@ export default function Library({ onPreview, version }: Props) {
                   />
                 </div>
               </div>
+
+              {/* Ações */}
+              <div className="flex gap-2">
+                {/* Nota */}
+                <div className="group relative">
+                  <button className="text-gray-400 hover:text-black">
+                    <StickyNote size={16} />
+                  </button>
+                  <div className="absolute right-0 top-6 hidden group-hover:block bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10">
+                    <textarea
+                      maxLength={500}
+                      placeholder="Anotação..."
+                      value={notes[p.id] || ''}
+                      onChange={e =>
+                        setNotes(n => ({ ...n, [p.id]: e.target.value }))
+                      }
+                      className="w-full h-24 bg-transparent outline-none resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Editar */}
+                <button
+                  onClick={() => setEditing(p)}
+                  className="text-gray-400 hover:text-black"
+                >
+                  <Pencil size={16} />
+                </button>
+              </div>
             </div>
           ))}
       </div>
@@ -121,6 +170,71 @@ export default function Library({ onPreview, version }: Props) {
           className="bg-black text-white px-5 py-2 rounded"
         >
           Gerar folhas
+        </button>
+      </div>
+
+      {editing && (
+        <EditModal
+          print={editing}
+          onClose={() => setEditing(null)}
+          onDeleted={() => {
+            setPrints(p => p.filter(x => x.id !== editing.id))
+            setEditing(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ---------- Modal ---------- */
+
+function EditModal({
+  print,
+  onClose,
+  onDeleted,
+}: {
+  print: Print
+  onClose: () => void
+  onDeleted: () => void
+}) {
+  async function remove() {
+    if (!confirm('Excluir estampa?')) return
+    await api(`/prints/${print.id}`, { method: 'DELETE' })
+    onDeleted()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 w-[400px] space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="font-semibold">Editar {print.name}</h3>
+          <button onClick={onClose}>
+            <X />
+          </button>
+        </div>
+
+        {(['front', 'back', 'extra'] as const).map(
+          k =>
+            print.slots?.[k] && (
+              <div key={k} className="flex items-center gap-3">
+                <img
+                  src={print.slots[k]!.url}
+                  className="w-16 h-16 object-contain border rounded"
+                />
+                <div className="text-sm">
+                  {k} — {print.slots[k]!.width_cm} × {print.slots[k]!.height_cm}{' '}
+                  cm
+                </div>
+              </div>
+            ),
+        )}
+
+        <button
+          onClick={remove}
+          className="bg-red-600 text-white px-4 py-2 rounded"
+        >
+          Excluir
         </button>
       </div>
     </div>
