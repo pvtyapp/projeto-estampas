@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
+import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 
 type Props = { onComplete: () => void }
@@ -64,7 +65,21 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         form.append('width_cm', w.replace(',', '.'))
         form.append('height_cm', h.replace(',', '.'))
 
-        await api(`/prints/${print.id}/upload`, { method: 'POST', body: form, headers: {} })
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL
+
+        if (!API_URL) throw new Error('API_URL não configurada')
+
+        await fetch(`${API_URL}/prints/${print.id}/upload`, {
+          method: 'POST',
+          body: form,
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+        })
       }
 
       await upload(front, 'front', frontW, frontH)
@@ -74,6 +89,8 @@ export default function SkuUploadWizard({ onComplete }: Props) {
       reset()
       onComplete()
       router.refresh()
+    } catch (e: any) {
+      alert(e.message || 'Erro ao enviar estampa')
     } finally {
       setLoading(false)
     }
