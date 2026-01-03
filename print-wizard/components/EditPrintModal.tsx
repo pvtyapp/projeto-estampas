@@ -47,9 +47,9 @@ export default function EditPrintModal({
     setLocal({
       ...print,
       slots: {
-        front: print.slots?.front || EMPTY_SLOT,
-        back: print.slots?.back || EMPTY_SLOT,
-        extra: print.slots?.extra || EMPTY_SLOT,
+        front: print.slots?.front ?? EMPTY_SLOT,
+        back: print.slots?.back ?? EMPTY_SLOT,
+        extra: print.slots?.extra ?? EMPTY_SLOT,
       },
     })
   }, [print])
@@ -67,7 +67,7 @@ export default function EditPrintModal({
       slots: {
         ...p.slots,
         [key]: {
-          ...(p.slots?.[key] || EMPTY_SLOT),
+          ...(p.slots?.[key] ?? EMPTY_SLOT),
           [field]: num,
         },
       },
@@ -115,14 +115,14 @@ export default function EditPrintModal({
 
         <div className="space-y-4">
           {(['front', 'back', 'extra'] as const).map(k => {
-            const slot = local.slots?.[k]
+            const slot = local.slots?.[k] ?? EMPTY_SLOT
 
             return (
               <div
                 key={k}
                 className="flex gap-4 items-center border rounded-xl p-3"
               >
-                {slot?.url ? (
+                {slot.url ? (
                   <img
                     src={slot.url}
                     className="w-20 h-20 object-contain border rounded"
@@ -140,7 +140,7 @@ export default function EditPrintModal({
                     <input
                       className="input"
                       placeholder="Largura (cm)"
-                      value={slot?.width_cm}
+                      value={slot.width_cm}
                       onChange={e =>
                         updateSlot(k, 'width_cm', e.target.value)
                       }
@@ -148,7 +148,7 @@ export default function EditPrintModal({
                     <input
                       className="input"
                       placeholder="Altura (cm)"
-                      value={slot?.height_cm}
+                      value={slot.height_cm}
                       onChange={e =>
                         updateSlot(k, 'height_cm', e.target.value)
                       }

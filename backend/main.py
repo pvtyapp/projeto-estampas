@@ -16,7 +16,10 @@ DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
 app = FastAPI(title="Projeto Estampas API", version="3.9")
 
+# =========================
 # CORS
+# =========================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -54,7 +57,6 @@ class PrintJobItem(BaseModel):
 class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
 
-
 # =========================
 # AUTH
 # =========================
@@ -69,7 +71,6 @@ def current_user(user=Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
-
 
 # =========================
 # ROTAS
@@ -199,7 +200,6 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     queue.enqueue(process_render, job_id, job_timeout=600)
 
     return {"job_id": job_id, "total_units": total_units}
-
 
 # =========================
 # JOBS
