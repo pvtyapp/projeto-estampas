@@ -2,10 +2,13 @@
 
 import { useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
+import { useRouter } from 'next/navigation'
 
 type Props = { onComplete: () => void }
 
 export default function SkuUploadWizard({ onComplete }: Props) {
+  const router = useRouter()
+
   const [front, setFront] = useState<File | null>(null)
   const [back, setBack] = useState<File | null>(null)
   const [extra, setExtra] = useState<File | null>(null)
@@ -70,6 +73,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
       reset()
       onComplete()
+      router.refresh()
     } finally {
       setLoading(false)
     }
@@ -93,39 +97,30 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
   return (
     <div className="rounded-2xl border bg-white p-6 space-y-6">
-
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
-      {/* SLOT 1 */}
       <Slot title="Frente (principal)" active onPick={() => frontInput.current?.click()}>
         <input ref={frontInput} type="file" className="hidden" onChange={e => handleFront(e.target.files?.[0] || null)} />
-
         <Field label="Nome" value={name} onChange={setName} />
         <Field label="SKU" value={sku} onChange={setSku} />
         <TwoFields a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }} b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }} />
       </Slot>
 
-      {/* SLOT 2 */}
       <Slot title="Costas" active onPick={() => hasBack && backInput.current?.click()}>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={hasBack} onChange={e => setHasBack(e.target.checked)} />
           Possui costas?
         </label>
-
         <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
-
         <TwoFields a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }} b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }} />
       </Slot>
 
-      {/* SLOT 3 */}
       <Slot title="Extra" active={hasBack} onPick={() => hasExtra && extraInput.current?.click()}>
         <label className={`flex items-center gap-2 text-sm ${hasBack ? '' : 'opacity-30'}`}>
           <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
           Adicionar estampa extra?
         </label>
-
         <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
-
         <TwoFields a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }} b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }} />
       </Slot>
 
@@ -143,11 +138,7 @@ function Slot({ title, active = true, onPick, children }: any) {
     <div className={`border rounded-xl p-4 space-y-3 transition ${active ? 'opacity-100' : 'opacity-30'}`}>
       <div className="flex justify-between items-center font-medium">
         {title}
-        <button
-          type="button"
-          onClick={onPick}
-          className="px-3 py-1 border rounded text-sm hover:bg-gray-50"
-        >
+        <button type="button" onClick={onPick} className="px-3 py-1 border rounded text-sm hover:bg-gray-50">
           Abrir PNG
         </button>
       </div>
