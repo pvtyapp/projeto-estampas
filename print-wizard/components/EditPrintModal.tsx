@@ -29,7 +29,7 @@ type Props = {
 }
 
 export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }: Props) {
-  const [local, setLocal] = useState(print)
+  const [local, setLocal] = useState<Print>(print)
   const [loading, setLoading] = useState(false)
 
   function updateSlot(
@@ -43,22 +43,20 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
         ...p.slots,
         [key]: {
           ...(p.slots?.[key] as Slot),
-          [field]: Number(value.replace(',', '.'))
-        }
-      }
+          [field]: Number(value.replace(',', '.')),
+        },
+      },
     }))
   }
 
   async function save() {
     setLoading(true)
     try {
-      await api(`/prints/${print.id}`, {
+      const updated = await api(`/prints/${print.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          slots: local.slots
-        })
+        body: JSON.stringify({ slots: local.slots }),
       })
-      onUpdated(local)
+      onUpdated(updated)
       onClose()
     } finally {
       setLoading(false)
