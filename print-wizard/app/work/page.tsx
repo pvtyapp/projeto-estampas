@@ -17,6 +17,7 @@ export default function WorkPage() {
 
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
   const [previewItems, setPreviewItems] = useState<PreviewItem[] | null>(null)
+  const [libraryVersion, setLibraryVersion] = useState(0)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   useEffect(() => {
@@ -52,8 +53,9 @@ export default function WorkPage() {
 
         {/* WIZARD + BIBLIOTECA */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <SkuUploadWizard onComplete={() => {}} />
+          <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
           <Library
+            version={libraryVersion}
             onPreview={items => {
               setPreviewItems(items)
               setSelectedJob(null)

@@ -17,9 +17,10 @@ type Print = {
 
 type Props = {
   onPreview: (items: PreviewItem[]) => void
+  version: number
 }
 
-export default function Library({ onPreview }: Props) {
+export default function Library({ onPreview, version }: Props) {
   const [prints, setPrints] = useState<Print[]>([])
   const [qty, setQty] = useState<Record<string, number>>({})
   const [search, setSearch] = useState('')
@@ -27,7 +28,7 @@ export default function Library({ onPreview }: Props) {
 
   useEffect(() => {
     load()
-  }, [])
+  }, [version])
 
   async function load() {
     try {
