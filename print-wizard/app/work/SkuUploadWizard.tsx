@@ -39,6 +39,11 @@ export default function SkuUploadWizard({ onComplete }: Props) {
     setSku(base.toLowerCase().replace(/\s+/g, '-'))
   }
 
+  function preview(file: File | null) {
+    if (!file) return null
+    return URL.createObjectURL(file)
+  }
+
   async function submit() {
     if (!front) return alert('Envie a frente.')
     if (!frontW || !frontH) return alert('Informe medidas da frente.')
@@ -70,7 +75,6 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         } = await supabase.auth.getSession()
 
         const API_URL = process.env.NEXT_PUBLIC_API_URL
-
         if (!API_URL) throw new Error('API_URL não configurada')
 
         await fetch(`${API_URL}/prints/${print.id}/upload`, {
@@ -116,14 +120,14 @@ export default function SkuUploadWizard({ onComplete }: Props) {
     <div className="rounded-2xl border bg-white p-6 space-y-6">
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
-      <Slot title="Frente (principal)" active onPick={() => frontInput.current?.click()}>
+      <Slot title="Frente (principal)" onPick={() => frontInput.current?.click()} preview={preview(front)}>
         <input ref={frontInput} type="file" className="hidden" onChange={e => handleFront(e.target.files?.[0] || null)} />
         <Field label="Nome" value={name} onChange={setName} />
         <Field label="SKU" value={sku} onChange={setSku} />
         <TwoFields a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }} b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }} />
       </Slot>
 
-      <Slot title="Costas" active onPick={() => hasBack && backInput.current?.click()}>
+      <Slot title="Costas" onPick={() => hasBack && backInput.current?.click()} preview={preview(back)} disabled={!hasBack}>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={hasBack} onChange={e => setHasBack(e.target.checked)} />
           Possui costas?
@@ -132,7 +136,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         <TwoFields a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }} b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }} />
       </Slot>
 
-      <Slot title="Extra" active={hasBack} onPick={() => hasExtra && extraInput.current?.click()}>
+      <Slot title="Extra" onPick={() => hasExtra && extraInput.current?.click()} preview={preview(extra)} disabled={!hasExtra}>
         <label className={`flex items-center gap-2 text-sm ${hasBack ? '' : 'opacity-30'}`}>
           <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
           Adicionar estampa extra?
@@ -150,15 +154,22 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
 /* ---------- helpers ---------- */
 
-function Slot({ title, active = true, onPick, children }: any) {
+function Slot({ title, onPick, children, preview, disabled = false }: any) {
   return (
-    <div className={`border rounded-xl p-4 space-y-3 transition ${active ? 'opacity-100' : 'opacity-30'}`}>
+    <div className={`border rounded-xl p-4 space-y-3 transition ${disabled ? 'opacity-40' : ''}`}>
       <div className="flex justify-between items-center font-medium">
         {title}
-        <button type="button" onClick={onPick} className="px-3 py-1 border rounded text-sm hover:bg-gray-50">
+        <button type="button" onClick={onPick} disabled={disabled} className="px-3 py-1 border rounded text-sm hover:bg-gray-50">
           Abrir PNG
         </button>
       </div>
+
+      {preview && (
+        <div className="flex justify-center">
+          <img src={preview} className="max-h-28 object-contain border rounded" />
+        </div>
+      )}
+
       {children}
     </div>
   )
