@@ -175,7 +175,10 @@ export default function Library({ onPreview, version }: Props) {
 
                 {/* Editar */}
                 <button
-                  onClick={() => setEditing(p)}
+                  onClick={async () => {
+                    const full = await api(`/prints/${p.id}`)
+                    setEditing(full)
+                  }}
                   className="text-gray-400 hover:text-black"
                 >
                   <Pencil size={16} />
@@ -202,6 +205,7 @@ export default function Library({ onPreview, version }: Props) {
             setPrints(p =>
               p.map(x => (x.id === updated.id ? updated : x))
             )
+            setEditing(null)
           }}
           onDeleted={() => {
             setPrints(p => p.filter(x => x.id !== editing.id))

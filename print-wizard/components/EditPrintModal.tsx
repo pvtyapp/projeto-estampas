@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 
 type Slot = {
@@ -28,14 +28,24 @@ type Props = {
   onDeleted: () => void
 }
 
-export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }: Props) {
+export default function EditPrintModal({
+  print,
+  onClose,
+  onUpdated,
+  onDeleted,
+}: Props) {
   const [local, setLocal] = useState<Print>(print)
   const [loading, setLoading] = useState(false)
+
+  // 🔹 Garante que quando abrir outro print, o estado local seja atualizado
+  useEffect(() => {
+    setLocal(print)
+  }, [print])
 
   function updateSlot(
     key: 'front' | 'back' | 'extra',
     field: 'width_cm' | 'height_cm',
-    value: string
+    value: string,
   ) {
     setLocal(p => ({
       ...p,
@@ -56,7 +66,9 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
         method: 'PATCH',
         body: JSON.stringify({ slots: local.slots }),
       })
-      onUpdated(updated)
+
+      // 🔹 Usa o retorno da API se existir, senão usa o local
+      onUpdated(updated ?? local)
       onClose()
     } finally {
       setLoading(false)
@@ -84,7 +96,10 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
           {(['front', 'back', 'extra'] as const).map(
             k =>
               local.slots?.[k] && (
-                <div key={k} className="flex gap-4 items-center border rounded-xl p-3">
+                <div
+                  key={k}
+                  className="flex gap-4 items-center border rounded-xl p-3"
+                >
                   <img
                     src={local.slots[k]!.url}
                     className="w-20 h-20 object-contain border rounded"
@@ -96,18 +111,22 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
                         className="input"
                         placeholder="Largura (cm)"
                         value={local.slots[k]!.width_cm}
-                        onChange={e => updateSlot(k, 'width_cm', e.target.value)}
+                        onChange={e =>
+                          updateSlot(k, 'width_cm', e.target.value)
+                        }
                       />
                       <input
                         className="input"
                         placeholder="Altura (cm)"
                         value={local.slots[k]!.height_cm}
-                        onChange={e => updateSlot(k, 'height_cm', e.target.value)}
+                        onChange={e =>
+                          updateSlot(k, 'height_cm', e.target.value)
+                        }
                       />
                     </div>
                   </div>
                 </div>
-              )
+              ),
           )}
         </div>
 
