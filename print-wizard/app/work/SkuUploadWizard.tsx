@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
+import { supabase } from '@/lib/supabaseClient'
 
 type Props = { onComplete: () => void }
 
@@ -63,10 +64,16 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         form.append('width_cm', w.replace(',', '.'))
         form.append('height_cm', h.replace(',', '.'))
 
-        await api(`/prints/${print.id}/upload`, {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,
-          headers: {},
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
         })
       }
 
@@ -76,7 +83,6 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
       reset()
       onComplete()
-
       setToast('Estampa adicionada com sucesso!')
 
       setTimeout(() => {
@@ -116,18 +122,10 @@ export default function SkuUploadWizard({ onComplete }: Props) {
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       <Slot title="Frente (principal)" active onPick={() => frontInput.current?.click()}>
-        <input
-          ref={frontInput}
-          type="file"
-          className="hidden"
-          onChange={e => handleFront(e.target.files?.[0] || null)}
-        />
+        <input ref={frontInput} type="file" className="hidden" onChange={e => handleFront(e.target.files?.[0] || null)} />
         <Field label="Nome" value={name} onChange={setName} />
         <Field label="SKU" value={sku} onChange={setSku} />
-        <TwoFields
-          a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }}
-          b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }}
-        />
+        <TwoFields a={{ v: frontW, p: 'Largura frente (cm)', s: setFrontW }} b={{ v: frontH, p: 'Altura frente (cm)', s: setFrontH }} />
       </Slot>
 
       <Slot title="Costas" active onPick={() => hasBack && backInput.current?.click()}>
@@ -136,48 +134,23 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           Possui costas?
         </label>
 
-        <input
-          ref={backInput}
-          type="file"
-          className="hidden"
-          onChange={e => setBack(e.target.files?.[0] || null)}
-        />
+        <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
 
-        <TwoFields
-          a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }}
-          b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }}
-        />
+        <TwoFields a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }} b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }} />
       </Slot>
 
       <Slot title="Extra" active={hasBack} onPick={() => hasExtra && extraInput.current?.click()}>
         <label className={`flex items-center gap-2 text-sm ${hasBack ? '' : 'opacity-30'}`}>
-          <input
-            type="checkbox"
-            checked={hasExtra}
-            disabled={!hasBack}
-            onChange={e => setHasExtra(e.target.checked)}
-          />
+          <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
           Adicionar estampa extra?
         </label>
 
-        <input
-          ref={extraInput}
-          type="file"
-          className="hidden"
-          onChange={e => setExtra(e.target.files?.[0] || null)}
-        />
+        <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
 
-        <TwoFields
-          a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }}
-          b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }}
-        />
+        <TwoFields a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }} b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }} />
       </Slot>
 
-      <button
-        onClick={submit}
-        disabled={loading}
-        className="bg-black text-white px-5 py-2 rounded-lg"
-      >
+      <button onClick={submit} disabled={loading} className="bg-black text-white px-5 py-2 rounded-lg">
         {loading ? 'Enviando...' : 'Adicionar à biblioteca'}
       </button>
     </div>
@@ -188,18 +161,10 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
 function Slot({ title, active = true, onPick, children }: any) {
   return (
-    <div
-      className={`border rounded-xl p-4 space-y-3 transition ${
-        active ? 'opacity-100' : 'opacity-30'
-      }`}
-    >
+    <div className={`border rounded-xl p-4 space-y-3 transition ${active ? 'opacity-100' : 'opacity-30'}`}>
       <div className="flex justify-between items-center font-medium">
         {title}
-        <button
-          type="button"
-          onClick={onPick}
-          className="px-3 py-1 border rounded text-sm hover:bg-gray-50"
-        >
+        <button type="button" onClick={onPick} className="px-3 py-1 border rounded text-sm hover:bg-gray-50">
           Abrir PNG
         </button>
       </div>
@@ -220,20 +185,8 @@ function Field({ label, value, onChange }: any) {
 function TwoFields({ a, b }: any) {
   return (
     <div className="flex gap-3">
-      <input
-        disabled={a.d}
-        className="input"
-        placeholder={a.p}
-        value={a.v}
-        onChange={e => a.s(e.target.value)}
-      />
-      <input
-        disabled={b.d}
-        className="input"
-        placeholder={b.p}
-        value={b.v}
-        onChange={e => b.s(e.target.value)}
-      />
+      <input disabled={a.d} className="input" placeholder={a.p} value={a.v} onChange={e => a.s(e.target.value)} />
+      <input disabled={b.d} className="input" placeholder={b.p} value={b.v} onChange={e => b.s(e.target.value)} />
     </div>
   )
 }
