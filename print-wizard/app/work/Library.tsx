@@ -5,17 +5,7 @@ import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
-
-type Print = {
-  id: string
-  name: string
-  sku: string
-  slots?: {
-    front?: { url: string; width_cm: number; height_cm: number }
-    back?: { url: string; width_cm: number; height_cm: number }
-    extra?: { url: string; width_cm: number; height_cm: number }
-  }
-}
+import { Print } from '@/app/types/print'
 
 type Props = {
   onPreview: (items: PreviewItem[]) => void
@@ -185,7 +175,6 @@ export default function Library({ onPreview, version }: Props) {
                   onClick={async () => {
                     try {
                       const full = await api(`/prints/${p.id}`)
-                      console.log('abrindo edição', full)
                       setEditing(full)
                     } catch (err) {
                       console.error('Erro ao abrir estampa', err)
