@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
 import { Pencil, StickyNote, X } from 'lucide-react'
@@ -28,21 +28,31 @@ export default function Library({ onPreview, version }: Props) {
   const [loading, setLoading] = useState(true)
 
   const [notes, setNotes] = useState<Record<string, string>>({})
+  const [openNote, setOpenNote] = useState<string | null>(null)
   const [editing, setEditing] = useState<Print | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  const noteRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     load()
   }, [version])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (noteRef.current && !noteRef.current.contains(e.target as Node)) {
+        setOpenNote(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function load() {
     try {
       setLoading(true)
       const data = await api('/prints')
       setPrints(data)
-    } catch (e) {
-      console.error(e)
-      alert('Erro ao carregar biblioteca')
     } finally {
       setLoading(false)
     }
@@ -71,10 +81,7 @@ export default function Library({ onPreview, version }: Props) {
       }))
       .filter(i => i.qty > 0)
 
-    if (items.length === 0) {
-      alert('Informe a quantidade de pelo menos uma estampa.')
-      return
-    }
+    if (!items.length) return alert('Informe a quantidade.')
 
     onPreview(items)
     setToast('Preview gerado 👇')
@@ -135,21 +142,40 @@ export default function Library({ onPreview, version }: Props) {
               {/* Ações */}
               <div className="flex gap-2">
                 {/* Nota */}
-                <div className="group relative">
-                  <button className="text-gray-400 hover:text-black">
+                <div className="relative">
+                  <button
+                    onClick={() =>
+                      setOpenNote(openNote === p.id ? null : p.id)
+                    }
+                    className="text-gray-400 hover:text-black"
+                  >
                     <StickyNote size={16} />
                   </button>
-                  <div className="absolute right-0 top-6 hidden group-hover:block bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10">
-                    <textarea
-                      maxLength={500}
-                      placeholder="Anotação..."
-                      value={notes[p.id] || ''}
-                      onChange={e =>
-                        setNotes(n => ({ ...n, [p.id]: e.target.value }))
-                      }
-                      className="w-full h-24 bg-transparent outline-none resize-none"
-                    />
-                  </div>
+
+                  {/* Tooltip hover */}
+                  {notes[p.id] && openNote !== p.id && (
+                    <div className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10 opacity-0 group-hover:opacity-100 pointer-events-none">
+                      {notes[p.id]}
+                    </div>
+                  )}
+
+                  {/* Editor */}
+                  {openNote === p.id && (
+                    <div
+                      ref={noteRef}
+                      className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-20"
+                    >
+                      <textarea
+                        maxLength={500}
+                        placeholder="Anotação..."
+                        value={notes[p.id] || ''}
+                        onChange={e =>
+                          setNotes(n => ({ ...n, [p.id]: e.target.value }))
+                        }
+                        className="w-full h-24 bg-transparent outline-none resize-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Editar */}
@@ -223,8 +249,7 @@ function EditModal({
                   className="w-16 h-16 object-contain border rounded"
                 />
                 <div className="text-sm">
-                  {k} — {print.slots[k]!.width_cm} × {print.slots[k]!.height_cm}{' '}
-                  cm
+                  {k} — {print.slots[k]!.width_cm} × {print.slots[k]!.height_cm} cm
                 </div>
               </div>
             ),
