@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="3.9")
+app = FastAPI(title="Projeto Estampas API", version="4.0")
 
 # =========================
 # CORS
@@ -22,10 +22,7 @@ app = FastAPI(title="Projeto Estampas API", version="3.9")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://pvty.vercel.app",
-    ],
+    allow_origins=["http://localhost:3000", "https://pvty.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type"],
@@ -93,8 +90,8 @@ def list_prints(user=Depends(current_user)):
             f["type"]: {
                 "id": f["id"],
                 "url": f["public_url"],
-                "width_cm": f.get("width_cm"),
-                "height_cm": f.get("height_cm"),
+                "width_cm": f.get("width_cm") or 0,
+                "height_cm": f.get("height_cm") or 0,
             }
             for f in p.get("print_files", [])
         }
@@ -123,8 +120,8 @@ def get_print(print_id: str, user=Depends(current_user)):
         f["type"]: {
             "id": f["id"],
             "url": f["public_url"],
-            "width_cm": f.get("width_cm"),
-            "height_cm": f.get("height_cm"),
+            "width_cm": f.get("width_cm") or 0,
+            "height_cm": f.get("height_cm") or 0,
         }
         for f in files
     }
@@ -137,7 +134,6 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not isinstance(slots, dict):
         raise HTTPException(status_code=400, detail="Slots inválidos")
 
-    # atualiza apenas os tamanhos, mantém o arquivo e tipo
     for slot_type, slot in slots.items():
         if not slot:
             continue
@@ -148,14 +144,27 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
         if width is None or height is None:
             continue
 
-        supabase.table("print_files") \
-            .update({
-                "width_cm": float(width),
-                "height_cm": float(height),
-            }) \
+        existing = supabase.table("print_files") \
+            .select("id") \
             .eq("print_id", print_id) \
             .eq("type", slot_type) \
-            .execute()
+            .execute().data
+
+        if existing:
+            supabase.table("print_files") \
+                .update({"width_cm": float(width), "height_cm": float(height)}) \
+                .eq("print_id", print_id) \
+                .eq("type", slot_type) \
+                .execute()
+        else:
+            supabase.table("print_files").insert({
+                "id": str(uuid.uuid4()),
+                "print_id": print_id,
+                "type": slot_type,
+                "public_url": slot.get("url") or "",
+                "width_cm": float(width),
+                "height_cm": float(height),
+            }).execute()
 
     return get_print(print_id, user)
 
@@ -224,6 +233,10 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 
     return {"job_id": job_id, "total_units": total_units}
 
+# =========================
+# JOBS — CONSULTA
+# =========================
+
 @app.get("/jobs/history")
 def jobs_history(user=Depends(current_user)):
     return supabase.table("jobs") \
@@ -249,21 +262,8 @@ def get_job(job_id: str, user=Depends(current_user)):
 
 @app.post("/jobs/{job_id}/cancel")
 def cancel_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs") \
-        .select("*") \
-        .eq("id", job_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    if job["status"] in ("queued", "done"):
-        supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
-        return {"status": "canceled"}
-
-    raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
+    supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
+    return {"status": "canceled"}
 
 # =========================
 # USAGE
