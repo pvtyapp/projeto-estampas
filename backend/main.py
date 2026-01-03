@@ -105,26 +105,32 @@ def list_prints(user=Depends(current_user)):
 
 @app.get("/prints/{print_id}")
 def get_print(print_id: str, user=Depends(current_user)):
-    res = supabase.table("prints").select("""
-        id, name, sku, is_composite, created_at,
-        print_files:print_files(id, type, public_url, width_cm, height_cm)
-    """).eq("id", print_id).eq("user_id", user["sub"]).single().execute().data
+    p = supabase.table("prints") \
+        .select("id, name, sku, is_composite, created_at") \
+        .eq("id", print_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
 
-    if not res:
+    if not p:
         raise HTTPException(status_code=404, detail="Print não encontrado")
 
-    res["slots"] = {
+    files = supabase.table("print_files") \
+        .select("id, type, public_url, width_cm, height_cm") \
+        .eq("print_id", print_id) \
+        .execute().data or []
+
+    p["slots"] = {
         f["type"]: {
             "id": f["id"],
             "url": f["public_url"],
             "width_cm": f.get("width_cm"),
             "height_cm": f.get("height_cm"),
         }
-        for f in res.get("print_files", [])
+        for f in files
     }
-    res.pop("print_files", None)
 
-    return res
+    return p
 
 
 @app.delete("/prints/{print_id}")

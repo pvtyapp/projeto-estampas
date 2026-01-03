@@ -28,10 +28,14 @@ type Props = {
   onDeleted: () => void
 }
 
-const EMPTY_SLOT: Slot = {
-  url: '',
-  width_cm: 0,
-  height_cm: 0,
+function createEmptySlot(): Slot {
+  return { url: '', width_cm: 0, height_cm: 0 }
+}
+
+const SLOT_LABEL: Record<'front' | 'back' | 'extra', string> = {
+  front: 'Frente (principal)',
+  back: 'Costas (secundária)',
+  extra: 'Extra (opcional)',
 }
 
 export default function EditPrintModal({
@@ -47,9 +51,9 @@ export default function EditPrintModal({
     setLocal({
       ...print,
       slots: {
-        front: print.slots?.front ?? EMPTY_SLOT,
-        back: print.slots?.back ?? EMPTY_SLOT,
-        extra: print.slots?.extra ?? EMPTY_SLOT,
+        front: print.slots?.front ?? createEmptySlot(),
+        back: print.slots?.back ?? createEmptySlot(),
+        extra: print.slots?.extra ?? createEmptySlot(),
       },
     })
   }, [print])
@@ -67,7 +71,7 @@ export default function EditPrintModal({
       slots: {
         ...p.slots,
         [key]: {
-          ...(p.slots?.[key] ?? EMPTY_SLOT),
+          ...(p.slots?.[key] ?? createEmptySlot()),
           [field]: num,
         },
       },
@@ -115,7 +119,7 @@ export default function EditPrintModal({
 
         <div className="space-y-4">
           {(['front', 'back', 'extra'] as const).map(k => {
-            const slot = local.slots?.[k] ?? EMPTY_SLOT
+            const slot = local.slots?.[k] ?? createEmptySlot()
 
             return (
               <div
@@ -135,11 +139,11 @@ export default function EditPrintModal({
                 )}
 
                 <div className="flex-1 space-y-2">
-                  <div className="font-medium capitalize">{k}</div>
+                  <div className="font-medium">{SLOT_LABEL[k]}</div>
                   <div className="flex gap-2">
                     <input
                       className="input"
-                      placeholder="Largura (cm)"
+                      placeholder="Largura (horizontal em cm)"
                       value={slot.width_cm}
                       onChange={e =>
                         updateSlot(k, 'width_cm', e.target.value)
@@ -147,7 +151,7 @@ export default function EditPrintModal({
                     />
                     <input
                       className="input"
-                      placeholder="Altura (cm)"
+                      placeholder="Altura (vertical em cm)"
                       value={slot.height_cm}
                       onChange={e =>
                         updateSlot(k, 'height_cm', e.target.value)
