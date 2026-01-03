@@ -133,22 +133,40 @@ def get_print(print_id: str, user=Depends(current_user)):
     return p
 
 
-@app.delete("/prints/{print_id}")
-def delete_print(print_id: str, user=Depends(current_user)):
-    files = supabase.table("print_files") \
-        .select("id") \
-        .eq("print_id", print_id) \
-        .execute().data or []
+@app.patch("/prints/{print_id}")
+def update_print(print_id: str, payload: dict, user=Depends(current_user)):
+    slots = payload.get("slots")
+    if not slots:
+        raise HTTPException(status_code=400, detail="Slots não informados")
 
-    for f in files:
-        supabase.table("print_files").delete().eq("id", f["id"]).execute()
-
-    supabase.table("prints") \
+    supabase.table("print_files") \
         .delete() \
-        .eq("id", print_id) \
-        .eq("user_id", user["sub"]) \
+        .eq("print_id", print_id) \
         .execute()
 
+    for slot_type, slot in slots.items():
+        if not slot:
+            continue
+
+        if not slot.get("width_cm") or not slot.get("height_cm"):
+            continue
+
+        supabase.table("print_files").insert({
+            "id": str(uuid.uuid4()),
+            "print_id": print_id,
+            "type": slot_type,
+            "public_url": slot.get("url") or "",
+            "width_cm": float(slot["width_cm"]),
+            "height_cm": float(slot["height_cm"]),
+        }).execute()
+
+    return get_print(print_id, user)
+
+
+@app.delete("/prints/{print_id}")
+def delete_print(print_id: str, user=Depends(current_user)):
+    supabase.table("print_files").delete().eq("print_id", print_id).execute()
+    supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
     return {"status": "deleted"}
 
 
@@ -183,6 +201,7 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         raise HTTPException(status_code=429, detail=str(e))
 
     job_id = str(uuid.uuid4())
+
     payload_clean = {
         "items": [
             {
@@ -249,10 +268,7 @@ def cancel_job(job_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
     if job["status"] in ("queued", "done"):
-        supabase.table("jobs") \
-            .update({"status": "canceled"}) \
-            .eq("id", job_id) \
-            .execute()
+        supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
         return {"status": "canceled"}
 
     raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
@@ -300,12 +316,7 @@ def get_usage(user=Depends(current_user)):
     used = used_plan + used_extra
     percent = round((used_plan / limit) * 100, 1) if limit else 0
 
-    renew_at = (
-        datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-        if month == 12 else
-        datetime(year, month + 1, 1, tzinfo=timezone.utc)
-    )
-
+    renew_at = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=timezone.utc)
     remaining_days = max((renew_at - now).days, 0)
 
     if used_plan >= limit and credits <= 0:
