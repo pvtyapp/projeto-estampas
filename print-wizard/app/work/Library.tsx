@@ -50,10 +50,16 @@ export default function Library({ onPreview, version }: Props) {
   }, [])
 
   async function load() {
-    setLoading(true)
-    const data = await api('/prints')
-    setPrints(data)
-    setLoading(false)
+    try {
+      setLoading(true)
+      const data = await api('/prints')
+      setPrints(data)
+    } catch (err) {
+      console.error('Erro ao carregar biblioteca', err)
+      alert('Erro ao carregar biblioteca. Veja o console.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filtered = useMemo(() => {
@@ -145,6 +151,7 @@ export default function Library({ onPreview, version }: Props) {
                       setOpenNote(openNote === p.id ? null : p.id)
                     }
                     className="text-gray-400 hover:text-black"
+                    type="button"
                   >
                     <StickyNote size={16} />
                   </button>
@@ -176,10 +183,17 @@ export default function Library({ onPreview, version }: Props) {
                 {/* Editar */}
                 <button
                   onClick={async () => {
-                    const full = await api(`/prints/${p.id}`)
-                    setEditing(full)
+                    try {
+                      const full = await api(`/prints/${p.id}`)
+                      console.log('abrindo edição', full)
+                      setEditing(full)
+                    } catch (err) {
+                      console.error('Erro ao abrir estampa', err)
+                      alert('Erro ao abrir estampa. Veja o console.')
+                    }
                   }}
                   className="text-gray-400 hover:text-black"
+                  type="button"
                 >
                   <Pencil size={16} />
                 </button>
@@ -192,6 +206,7 @@ export default function Library({ onPreview, version }: Props) {
         <button
           onClick={buildPreview}
           className="bg-black text-white px-5 py-2 rounded"
+          type="button"
         >
           Gerar folhas
         </button>
@@ -203,7 +218,7 @@ export default function Library({ onPreview, version }: Props) {
           onClose={() => setEditing(null)}
           onUpdated={updated => {
             setPrints(p =>
-              p.map(x => (x.id === updated.id ? updated : x))
+              p.map(x => (x.id === updated.id ? updated : x)),
             )
             setEditing(null)
           }}

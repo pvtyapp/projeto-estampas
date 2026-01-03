@@ -37,7 +37,6 @@ export default function EditPrintModal({
   const [local, setLocal] = useState<Print>(print)
   const [loading, setLoading] = useState(false)
 
-  // 🔹 Garante que quando abrir outro print, o estado local seja atualizado
   useEffect(() => {
     setLocal(print)
   }, [print])
@@ -47,13 +46,16 @@ export default function EditPrintModal({
     field: 'width_cm' | 'height_cm',
     value: string,
   ) {
+    const num = Number(value.replace(',', '.'))
+    if (Number.isNaN(num)) return
+
     setLocal(p => ({
       ...p,
       slots: {
         ...p.slots,
         [key]: {
           ...(p.slots?.[key] as Slot),
-          [field]: Number(value.replace(',', '.')),
+          [field]: num,
         },
       },
     }))
@@ -66,10 +68,11 @@ export default function EditPrintModal({
         method: 'PATCH',
         body: JSON.stringify({ slots: local.slots }),
       })
-
-      // 🔹 Usa o retorno da API se existir, senão usa o local
       onUpdated(updated ?? local)
       onClose()
+    } catch (err) {
+      console.error('Erro ao salvar estampa', err)
+      alert('Erro ao salvar. Veja o console.')
     } finally {
       setLoading(false)
     }
@@ -77,17 +80,22 @@ export default function EditPrintModal({
 
   async function remove() {
     if (!confirm('Excluir esta estampa?')) return
-    await api(`/prints/${print.id}`, { method: 'DELETE' })
-    onDeleted()
-    onClose()
+    try {
+      await api(`/prints/${print.id}`, { method: 'DELETE' })
+      onDeleted()
+      onClose()
+    } catch (err) {
+      console.error('Erro ao excluir estampa', err)
+      alert('Erro ao excluir. Veja o console.')
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
       <div className="bg-white rounded-2xl p-8 w-full max-w-lg space-y-6">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-bold">Editar {print.name}</h2>
-          <button onClick={onClose}>
+          <button onClick={onClose} type="button">
             <X />
           </button>
         </div>
@@ -103,6 +111,7 @@ export default function EditPrintModal({
                   <img
                     src={local.slots[k]!.url}
                     className="w-20 h-20 object-contain border rounded"
+                    alt={k}
                   />
                   <div className="flex-1 space-y-2">
                     <div className="font-medium capitalize">{k}</div>
@@ -134,6 +143,7 @@ export default function EditPrintModal({
           <button
             onClick={remove}
             className="text-red-600 hover:underline text-sm"
+            type="button"
           >
             Excluir estampa
           </button>
@@ -142,13 +152,15 @@ export default function EditPrintModal({
             <button
               onClick={onClose}
               className="border rounded-xl px-4 py-2 hover:bg-gray-100"
+              type="button"
             >
               Cancelar
             </button>
             <button
               onClick={save}
               disabled={loading}
-              className="bg-black text-white px-4 py-2 rounded-xl"
+              className="bg-black text-white px-4 py-2 rounded-xl disabled:opacity-50"
+              type="button"
             >
               {loading ? 'Salvando…' : 'Salvar'}
             </button>
