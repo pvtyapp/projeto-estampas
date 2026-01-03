@@ -110,7 +110,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-8 space-y-5">
+    <div className="rounded-2xl border bg-white p-8 space-y-5 relative z-10">
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       <Upload label="Frente (principal)" onFile={handleFront} />
@@ -224,9 +224,13 @@ function Upload({
   onFile: (f: File | null) => void
 }) {
   return (
-    <div>
+    <div className="relative z-10">
       <label className="text-sm font-medium">{label}</label>
-      <input type="file" onChange={e => onFile(e.target.files?.[0] || null)} />
+      <input
+        type="file"
+        className="block mt-1"
+        onChange={e => onFile(e.target.files?.[0] || null)}
+      />
     </div>
   )
 }
