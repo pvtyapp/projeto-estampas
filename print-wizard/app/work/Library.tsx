@@ -139,9 +139,7 @@ export default function Library({ onPreview, version }: Props) {
                 </div>
               </div>
 
-              {/* Ações */}
               <div className="flex gap-2">
-                {/* Nota */}
                 <div className="relative">
                   <button
                     onClick={() =>
@@ -152,14 +150,12 @@ export default function Library({ onPreview, version }: Props) {
                     <StickyNote size={16} />
                   </button>
 
-                  {/* Tooltip hover */}
                   {notes[p.id] && openNote !== p.id && (
-                    <div className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10 opacity-0 group-hover:opacity-100 pointer-events-none">
+                    <div className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10">
                       {notes[p.id]}
                     </div>
                   )}
 
-                  {/* Editor */}
                   {openNote === p.id && (
                     <div
                       ref={noteRef}
@@ -178,7 +174,6 @@ export default function Library({ onPreview, version }: Props) {
                   )}
                 </div>
 
-                {/* Editar */}
                 <button
                   onClick={() => setEditing(p)}
                   className="text-gray-400 hover:text-black"
@@ -212,8 +207,6 @@ export default function Library({ onPreview, version }: Props) {
     </div>
   )
 }
-
-/* ---------- Modal ---------- */
 
 function EditModal({
   print,
