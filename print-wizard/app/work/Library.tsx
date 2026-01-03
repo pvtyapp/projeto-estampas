@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
 import { Print } from '@/app/types/print'
@@ -18,9 +18,9 @@ function normalizePrint(p: any): Print {
   return {
     ...p,
     slots: {
-      front: p.slots?.front ? { ...p.slots.front } : { ...EMPTY_SLOT },
-      back: p.slots?.back ? { ...p.slots.back } : { ...EMPTY_SLOT },
-      extra: p.slots?.extra ? { ...p.slots.extra } : { ...EMPTY_SLOT },
+      front: p?.slots?.front ? { ...p.slots.front } : { ...EMPTY_SLOT },
+      back: p?.slots?.back ? { ...p.slots.back } : { ...EMPTY_SLOT },
+      extra: p?.slots?.extra ? { ...p.slots.extra } : { ...EMPTY_SLOT },
     },
   }
 }
@@ -38,9 +38,22 @@ export default function Library({ onPreview, version }: Props) {
 
   const noteRef = useRef<HTMLDivElement>(null)
 
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const data = (await api('/prints')) as any[]
+      setPrints(data.map(normalizePrint))
+    } catch (err) {
+      console.error('Erro ao carregar biblioteca', err)
+      alert('Erro ao carregar biblioteca. Veja o console.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     load()
-  }, [version])
+  }, [version, load])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -52,19 +65,6 @@ export default function Library({ onPreview, version }: Props) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  async function load() {
-    try {
-      setLoading(true)
-      const data = (await api('/prints')) as any[]
-      setPrints(data.map(normalizePrint))
-    } catch (err) {
-      console.error('Erro ao carregar biblioteca', err)
-      alert('Erro ao carregar biblioteca. Veja o console.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return prints.filter(
@@ -75,7 +75,7 @@ export default function Library({ onPreview, version }: Props) {
   }, [prints, search])
 
   function setPrintQty(id: string, value: number) {
-    setQty(q => ({ ...q, [id]: Math.max(0, value || 0) }))
+    setQty(q => ({ ...q, [id]: Math.max(0, Number(value) || 0) }))
   }
 
   function buildPreview() {
@@ -90,7 +90,10 @@ export default function Library({ onPreview, version }: Props) {
       }))
       .filter(i => i.qty > 0)
 
-    if (!items.length) return alert('Informe a quantidade.')
+    if (!items.length) {
+      alert('Informe a quantidade.')
+      return
+    }
 
     onPreview(items)
     setToast('Preview gerado 👇')
@@ -149,6 +152,7 @@ export default function Library({ onPreview, version }: Props) {
               </div>
 
               <div className="flex gap-2">
+                {/* Nota */}
                 <div className="relative">
                   <button
                     onClick={() =>
@@ -184,10 +188,11 @@ export default function Library({ onPreview, version }: Props) {
                   )}
                 </div>
 
+                {/* Editar */}
                 <button
                   onClick={async () => {
                     try {
-                      const full = (await api(`/prints/${p.id}`)) as any
+                      const full = await api(`/prints/${p.id}`)
                       setEditing(normalizePrint(full))
                     } catch (err) {
                       console.error('Erro ao abrir estampa', err)

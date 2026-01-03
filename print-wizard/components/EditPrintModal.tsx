@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 
 type Slot = {
@@ -65,8 +65,8 @@ export default function EditPrintModal({
     field: 'width_cm' | 'height_cm',
     value: string,
   ) {
-    const num = Number(value.replace(',', '.'))
-    if (Number.isNaN(num)) return
+    const parsed = Number(value.replace(',', '.'))
+    const num = Number.isFinite(parsed) ? parsed : 0
 
     setLocal(p => ({
       ...p,
@@ -85,8 +85,24 @@ export default function EditPrintModal({
     try {
       const updated = await api(`/prints/${print.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ slots: local.slots }),
+        body: JSON.stringify({
+          slots: {
+            front: {
+              width_cm: local.slots.front.width_cm,
+              height_cm: local.slots.front.height_cm,
+            },
+            back: {
+              width_cm: local.slots.back.width_cm,
+              height_cm: local.slots.back.height_cm,
+            },
+            extra: {
+              width_cm: local.slots.extra.width_cm,
+              height_cm: local.slots.extra.height_cm,
+            },
+          },
+        }),
       })
+
       onUpdated(updated ?? local)
       onClose()
     } catch (err) {
@@ -146,7 +162,7 @@ export default function EditPrintModal({
                     <input
                       className="input"
                       placeholder="Largura (horizontal em cm)"
-                      value={slot.width_cm.toString()}
+                      value={slot.width_cm}
                       onChange={e =>
                         updateSlot(k, 'width_cm', e.target.value)
                       }
@@ -154,7 +170,7 @@ export default function EditPrintModal({
                     <input
                       className="input"
                       placeholder="Altura (vertical em cm)"
-                      value={slot.height_cm.toString()}
+                      value={slot.height_cm}
                       onChange={e =>
                         updateSlot(k, 'height_cm', e.target.value)
                       }

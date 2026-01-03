@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="3.9")
+app = FastAPI(title="Projeto Estampas API", version="4.0")
 
 # =========================
 # CORS
@@ -73,18 +73,27 @@ def current_user(user=Depends(get_current_user)):
 # HELPERS
 # =========================
 
+EMPTY_SLOT = {"url": "", "width_cm": 0, "height_cm": 0}
+
 def normalize_slots(files: List[dict]) -> Dict[str, dict]:
-    slots = {"front": None, "back": None, "extra": None}
+    slots = {
+        "front": dict(EMPTY_SLOT),
+        "back": dict(EMPTY_SLOT),
+        "extra": dict(EMPTY_SLOT),
+    }
+
     for f in files:
         t = f.get("type")
         if t not in slots:
             continue
+
         slots[t] = {
-            "id": f["id"],
-            "url": f["public_url"],
+            "id": f.get("id"),
+            "url": f.get("public_url") or "",
             "width_cm": f.get("width_cm") or 0,
             "height_cm": f.get("height_cm") or 0,
         }
+
     return slots
 
 # =========================
@@ -148,9 +157,8 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not isinstance(slots, dict):
         raise HTTPException(status_code=400, detail="Slots inválidos")
 
-    for slot_type, slot in slots.items():
-        if slot_type not in ("front", "back", "extra"):
-            continue
+    for slot_type in ("front", "back", "extra"):
+        slot = slots.get(slot_type)
         if not isinstance(slot, dict):
             continue
 
