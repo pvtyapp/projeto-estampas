@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.2")
+app = FastAPI(title="Projeto Estampas API", version="4.3")
 
 # =========================
 # CORS
@@ -172,7 +172,14 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
             update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
 
     if update:
-        supabase.table("prints").update(update).eq("id", print_id).execute()
+        res = supabase.table("prints") \
+            .update(update) \
+            .eq("id", print_id) \
+            .eq("user_id", user["sub"]) \
+            .execute()
+
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Update não afetou nenhuma linha")
 
     return get_print(print_id, user)
 
@@ -217,17 +224,16 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     job_id = str(uuid.uuid4())
 
     payload_clean = {
-    "items": [
-        {
-            "print_id": str(i.print_id),
-            "qty": int(i.qty),
-            "width_cm": float(i.width_cm),
-            "height_cm": float(i.height_cm),
-        }
-        for i in payload.items
-    ]
-}
-
+        "items": [
+            {
+                "print_id": str(i.print_id),
+                "qty": int(i.qty),
+                "width_cm": float(i.width_cm),
+                "height_cm": float(i.height_cm),
+            }
+            for i in payload.items
+        ]
+    }
 
     supabase.table("jobs").insert({
         "id": job_id,
