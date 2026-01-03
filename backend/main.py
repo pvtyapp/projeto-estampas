@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.3")
+app = FastAPI(title="Projeto Estampas API", version="4.4")
 
 # =========================
 # CORS
@@ -195,6 +195,10 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
         "id": str(uuid.uuid4()),
         "user_id": user["sub"],
         "created_at": datetime.now(timezone.utc).isoformat(),
+
+        # 👇 adicionados para satisfazer NOT NULL
+        "width_cm": 0,
+        "height_cm": 0,
     })
 
     res = supabase.table("prints").insert(data).execute()
