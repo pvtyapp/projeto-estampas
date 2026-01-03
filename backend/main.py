@@ -81,6 +81,17 @@ def root():
 # PRINTS
 # =========================
 
+def normalize_slots(files: List[dict]) -> Dict[str, dict]:
+    slots = {"front": None, "back": None, "extra": None}
+    for f in files:
+        slots[f["type"]] = {
+            "id": f["id"],
+            "url": f["public_url"],
+            "width_cm": f.get("width_cm") or 0,
+            "height_cm": f.get("height_cm") or 0,
+        }
+    return slots
+
 @app.get("/prints")
 def list_prints(user=Depends(current_user)):
     res = supabase.table("prints").select("""
@@ -89,15 +100,7 @@ def list_prints(user=Depends(current_user)):
     """).eq("user_id", user["sub"]).order("created_at", desc=True).execute().data or []
 
     for p in res:
-        p["slots"] = {
-            f["type"]: {
-                "id": f["id"],
-                "url": f["public_url"],
-                "width_cm": f.get("width_cm") or 0,
-                "height_cm": f.get("height_cm") or 0,
-            }
-            for f in p.get("print_files", [])
-        }
+        p["slots"] = normalize_slots(p.get("print_files", []))
         p.pop("print_files", None)
 
     return res
@@ -119,26 +122,29 @@ def get_print(print_id: str, user=Depends(current_user)):
         .eq("print_id", print_id) \
         .execute().data or []
 
-    p["slots"] = {
-        f["type"]: {
-            "id": f["id"],
-            "url": f["public_url"],
-            "width_cm": f.get("width_cm") or 0,
-            "height_cm": f.get("height_cm") or 0,
-        }
-        for f in files
-    }
-
+    p["slots"] = normalize_slots(files)
     return p
 
 @app.patch("/prints/{print_id}")
 def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
+    exists = supabase.table("prints") \
+        .select("id") \
+        .eq("id", print_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
+
+    if not exists:
+        raise HTTPException(status_code=404, detail="Print não encontrado")
+
     slots = payload.get("slots")
     if not isinstance(slots, dict):
         raise HTTPException(status_code=400, detail="Slots inválidos")
 
     for slot_type, slot in slots.items():
-        if not slot:
+        if slot_type not in ("front", "back", "extra"):
+            continue
+        if not isinstance(slot, dict):
             continue
 
         width = slot.get("width_cm")

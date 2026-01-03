@@ -1,7 +1,7 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/apiClient'
 
 type Slot = {
@@ -14,10 +14,10 @@ type Print = {
   id: string
   name: string
   sku: string
-  slots?: {
-    front?: Slot
-    back?: Slot
-    extra?: Slot
+  slots: {
+    front: Slot
+    back: Slot
+    extra: Slot
   }
 }
 
@@ -28,14 +28,23 @@ type Props = {
   onDeleted: () => void
 }
 
-function createEmptySlot(): Slot {
-  return { url: '', width_cm: 0, height_cm: 0 }
-}
+const EMPTY_SLOT: Slot = { url: '', width_cm: 0, height_cm: 0 }
 
 const SLOT_LABEL: Record<'front' | 'back' | 'extra', string> = {
   front: 'Frente (principal)',
   back: 'Costas (secundária)',
   extra: 'Extra (opcional)',
+}
+
+function normalizePrint(p: Print): Print {
+  return {
+    ...p,
+    slots: {
+      front: p.slots?.front ?? { ...EMPTY_SLOT },
+      back: p.slots?.back ?? { ...EMPTY_SLOT },
+      extra: p.slots?.extra ?? { ...EMPTY_SLOT },
+    },
+  }
 }
 
 export default function EditPrintModal({
@@ -44,18 +53,11 @@ export default function EditPrintModal({
   onUpdated,
   onDeleted,
 }: Props) {
-  const [local, setLocal] = useState<Print>(print)
+  const [local, setLocal] = useState<Print>(() => normalizePrint(print))
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLocal({
-      ...print,
-      slots: {
-        front: print.slots?.front ?? createEmptySlot(),
-        back: print.slots?.back ?? createEmptySlot(),
-        extra: print.slots?.extra ?? createEmptySlot(),
-      },
-    })
+    setLocal(normalizePrint(print))
   }, [print])
 
   function updateSlot(
@@ -71,7 +73,7 @@ export default function EditPrintModal({
       slots: {
         ...p.slots,
         [key]: {
-          ...(p.slots?.[key] ?? createEmptySlot()),
+          ...p.slots[key],
           [field]: num,
         },
       },
@@ -119,7 +121,7 @@ export default function EditPrintModal({
 
         <div className="space-y-4">
           {(['front', 'back', 'extra'] as const).map(k => {
-            const slot = local.slots?.[k] ?? createEmptySlot()
+            const slot = local.slots[k]
 
             return (
               <div
@@ -144,7 +146,7 @@ export default function EditPrintModal({
                     <input
                       className="input"
                       placeholder="Largura (horizontal em cm)"
-                      value={slot.width_cm}
+                      value={slot.width_cm.toString()}
                       onChange={e =>
                         updateSlot(k, 'width_cm', e.target.value)
                       }
@@ -152,7 +154,7 @@ export default function EditPrintModal({
                     <input
                       className="input"
                       placeholder="Altura (vertical em cm)"
-                      value={slot.height_cm}
+                      value={slot.height_cm.toString()}
                       onChange={e =>
                         updateSlot(k, 'height_cm', e.target.value)
                       }

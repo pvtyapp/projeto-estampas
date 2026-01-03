@@ -3,29 +3,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
+import { Print } from '@/app/types/print'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
-
-type Slot = {
-  url: string
-  width_cm: number
-  height_cm: number
-}
-
-type Print = {
-  id: string
-  name: string
-  sku: string
-  slots?: {
-    front?: Slot
-    back?: Slot
-    extra?: Slot
-  }
-}
 
 type Props = {
   onPreview: (items: PreviewItem[]) => void
   version: number
+}
+
+const EMPTY_SLOT = { url: '', width_cm: 0, height_cm: 0 }
+
+function normalizePrint(p: any): Print {
+  return {
+    ...p,
+    slots: {
+      front: p.slots?.front ?? EMPTY_SLOT,
+      back: p.slots?.back ?? EMPTY_SLOT,
+      extra: p.slots?.extra ?? EMPTY_SLOT,
+    },
+  }
 }
 
 export default function Library({ onPreview, version }: Props) {
@@ -58,8 +55,8 @@ export default function Library({ onPreview, version }: Props) {
   async function load() {
     try {
       setLoading(true)
-      const data = (await api('/prints')) as Print[]
-      setPrints(data)
+      const data = (await api('/prints')) as any[]
+      setPrints(data.map(normalizePrint))
     } catch (err) {
       console.error('Erro ao carregar biblioteca', err)
       alert('Erro ao carregar biblioteca. Veja o console.')
@@ -86,8 +83,8 @@ export default function Library({ onPreview, version }: Props) {
         name: p.name,
         sku: p.sku,
         qty: qty[p.id] || 0,
-        width_cm: p.slots?.front?.width_cm || 10,
-        height_cm: p.slots?.front?.height_cm || 10,
+        width_cm: p.slots.front.width_cm || 10,
+        height_cm: p.slots.front.height_cm || 10,
       }))
       .filter(i => i.qty > 0)
 
@@ -190,8 +187,8 @@ export default function Library({ onPreview, version }: Props) {
                 <button
                   onClick={async () => {
                     try {
-                      const full = (await api(`/prints/${p.id}`)) as Print
-                      setEditing(full)
+                      const full = (await api(`/prints/${p.id}`)) as any
+                      setEditing(normalizePrint(full))
                     } catch (err) {
                       console.error('Erro ao abrir estampa', err)
                       alert('Erro ao abrir estampa. Veja o console.')
@@ -222,9 +219,7 @@ export default function Library({ onPreview, version }: Props) {
           print={editing}
           onClose={() => setEditing(null)}
           onUpdated={updated => {
-            setPrints(prev =>
-              prev.map(x => (x.id === updated.id ? updated : x)),
-            )
+            setPrints(prev => prev.map(x => (x.id === updated.id ? updated : x)))
             setEditing(null)
           }}
           onDeleted={() => {
