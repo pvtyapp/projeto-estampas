@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
-import { Pencil, StickyNote, X } from 'lucide-react'
+import { Pencil, StickyNote } from 'lucide-react'
+import EditPrintModal from '@/components/EditPrintModal'
 
 type Print = {
   id: string
@@ -49,13 +50,10 @@ export default function Library({ onPreview, version }: Props) {
   }, [])
 
   async function load() {
-    try {
-      setLoading(true)
-      const data = await api('/prints')
-      setPrints(data)
-    } finally {
-      setLoading(false)
-    }
+    setLoading(true)
+    const data = await api('/prints')
+    setPrints(data)
+    setLoading(false)
   }
 
   const filtered = useMemo(() => {
@@ -140,6 +138,7 @@ export default function Library({ onPreview, version }: Props) {
               </div>
 
               <div className="flex gap-2">
+                {/* Nota */}
                 <div className="relative">
                   <button
                     onClick={() =>
@@ -174,6 +173,7 @@ export default function Library({ onPreview, version }: Props) {
                   )}
                 </div>
 
+                {/* Editar */}
                 <button
                   onClick={() => setEditing(p)}
                   className="text-gray-400 hover:text-black"
@@ -195,66 +195,20 @@ export default function Library({ onPreview, version }: Props) {
       </div>
 
       {editing && (
-        <EditModal
+        <EditPrintModal
           print={editing}
           onClose={() => setEditing(null)}
+          onUpdated={updated => {
+            setPrints(p =>
+              p.map(x => (x.id === updated.id ? updated : x))
+            )
+          }}
           onDeleted={() => {
             setPrints(p => p.filter(x => x.id !== editing.id))
             setEditing(null)
           }}
         />
       )}
-    </div>
-  )
-}
-
-function EditModal({
-  print,
-  onClose,
-  onDeleted,
-}: {
-  print: Print
-  onClose: () => void
-  onDeleted: () => void
-}) {
-  async function remove() {
-    if (!confirm('Excluir estampa?')) return
-    await api(`/prints/${print.id}`, { method: 'DELETE' })
-    onDeleted()
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-[400px] space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold">Editar {print.name}</h3>
-          <button onClick={onClose}>
-            <X />
-          </button>
-        </div>
-
-        {(['front', 'back', 'extra'] as const).map(
-          k =>
-            print.slots?.[k] && (
-              <div key={k} className="flex items-center gap-3">
-                <img
-                  src={print.slots[k]!.url}
-                  className="w-16 h-16 object-contain border rounded"
-                />
-                <div className="text-sm">
-                  {k} — {print.slots[k]!.width_cm} × {print.slots[k]!.height_cm} cm
-                </div>
-              </div>
-            ),
-        )}
-
-        <button
-          onClick={remove}
-          className="bg-red-600 text-white px-4 py-2 rounded"
-        >
-          Excluir
-        </button>
-      </div>
     </div>
   )
 }
