@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.4")
+app = FastAPI(title="Projeto Estampas API", version="4.5")
 
 # =========================
 # CORS
@@ -166,10 +166,18 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
         slot = slots.get(key)
         if not isinstance(slot, dict):
             continue
+
         if "width_cm" in slot:
-            update[f"{key}_width_cm"] = float(slot.get("width_cm") or 0)
+            w = float(slot.get("width_cm") or 0)
+            update[f"{key}_width_cm"] = w
+            if key == "front":
+                update["width_cm"] = w
+
         if "height_cm" in slot:
-            update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
+            h = float(slot.get("height_cm") or 0)
+            update[f"{key}_height_cm"] = h
+            if key == "front":
+                update["height_cm"] = h
 
     if update:
         res = supabase.table("prints") \
@@ -196,7 +204,6 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
         "user_id": user["sub"],
         "created_at": datetime.now(timezone.utc).isoformat(),
 
-        # 👇 adicionados para satisfazer NOT NULL
         "width_cm": 0,
         "height_cm": 0,
     })
