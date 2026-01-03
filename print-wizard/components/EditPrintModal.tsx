@@ -28,6 +28,12 @@ type Props = {
   onDeleted: () => void
 }
 
+const EMPTY_SLOT: Slot = {
+  url: '',
+  width_cm: 0,
+  height_cm: 0,
+}
+
 export default function EditPrintModal({
   print,
   onClose,
@@ -38,7 +44,14 @@ export default function EditPrintModal({
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLocal(print)
+    setLocal({
+      ...print,
+      slots: {
+        front: print.slots?.front || EMPTY_SLOT,
+        back: print.slots?.back || EMPTY_SLOT,
+        extra: print.slots?.extra || EMPTY_SLOT,
+      },
+    })
   }, [print])
 
   function updateSlot(
@@ -54,7 +67,7 @@ export default function EditPrintModal({
       slots: {
         ...p.slots,
         [key]: {
-          ...(p.slots?.[key] as Slot),
+          ...(p.slots?.[key] || EMPTY_SLOT),
           [field]: num,
         },
       },
@@ -101,42 +114,50 @@ export default function EditPrintModal({
         </div>
 
         <div className="space-y-4">
-          {(['front', 'back', 'extra'] as const).map(
-            k =>
-              local.slots?.[k] && (
-                <div
-                  key={k}
-                  className="flex gap-4 items-center border rounded-xl p-3"
-                >
+          {(['front', 'back', 'extra'] as const).map(k => {
+            const slot = local.slots?.[k]
+
+            return (
+              <div
+                key={k}
+                className="flex gap-4 items-center border rounded-xl p-3"
+              >
+                {slot?.url ? (
                   <img
-                    src={local.slots[k]!.url}
+                    src={slot.url}
                     className="w-20 h-20 object-contain border rounded"
                     alt={k}
                   />
-                  <div className="flex-1 space-y-2">
-                    <div className="font-medium capitalize">{k}</div>
-                    <div className="flex gap-2">
-                      <input
-                        className="input"
-                        placeholder="Largura (cm)"
-                        value={local.slots[k]!.width_cm}
-                        onChange={e =>
-                          updateSlot(k, 'width_cm', e.target.value)
-                        }
-                      />
-                      <input
-                        className="input"
-                        placeholder="Altura (cm)"
-                        value={local.slots[k]!.height_cm}
-                        onChange={e =>
-                          updateSlot(k, 'height_cm', e.target.value)
-                        }
-                      />
-                    </div>
+                ) : (
+                  <div className="w-20 h-20 flex items-center justify-center text-xs text-gray-400 border rounded">
+                    Sem imagem
+                  </div>
+                )}
+
+                <div className="flex-1 space-y-2">
+                  <div className="font-medium capitalize">{k}</div>
+                  <div className="flex gap-2">
+                    <input
+                      className="input"
+                      placeholder="Largura (cm)"
+                      value={slot?.width_cm}
+                      onChange={e =>
+                        updateSlot(k, 'width_cm', e.target.value)
+                      }
+                    />
+                    <input
+                      className="input"
+                      placeholder="Altura (cm)"
+                      value={slot?.height_cm}
+                      onChange={e =>
+                        updateSlot(k, 'height_cm', e.target.value)
+                      }
+                    />
                   </div>
                 </div>
-              ),
-          )}
+              </div>
+            )
+          })}
         </div>
 
         <div className="flex justify-between items-center pt-2">

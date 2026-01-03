@@ -52,7 +52,7 @@ export default function Library({ onPreview, version }: Props) {
   async function load() {
     try {
       setLoading(true)
-      const data = await api('/prints')
+      const data = (await api('/prints')) as Print[]
       setPrints(data)
     } catch (err) {
       console.error('Erro ao carregar biblioteca', err)
@@ -184,8 +184,7 @@ export default function Library({ onPreview, version }: Props) {
                 <button
                   onClick={async () => {
                     try {
-                      const full = await api(`/prints/${p.id}`)
-                      console.log('abrindo edição', full)
+                      const full = (await api(`/prints/${p.id}`)) as Print
                       setEditing(full)
                     } catch (err) {
                       console.error('Erro ao abrir estampa', err)
@@ -217,13 +216,13 @@ export default function Library({ onPreview, version }: Props) {
           print={editing}
           onClose={() => setEditing(null)}
           onUpdated={updated => {
-            setPrints(p =>
-              p.map(x => (x.id === updated.id ? updated : x)),
+            setPrints(prev =>
+              prev.map(x => (x.id === updated.id ? updated : x)),
             )
             setEditing(null)
           }}
           onDeleted={() => {
-            setPrints(p => p.filter(x => x.id !== editing.id))
+            setPrints(prev => prev.filter(x => x.id !== editing.id))
             setEditing(null)
           }}
         />
