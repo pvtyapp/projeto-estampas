@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.7")
+app = FastAPI(title="Projeto Estampas API", version="4.8")
 
 # =========================
 # CORS
@@ -176,50 +176,18 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
             continue
 
         if "width_cm" in slot:
-            w = float(slot.get("width_cm") or 0)
-            update[f"{key}_width_cm"] = w
-            if key == "front":
-                update["width_cm"] = w
-
+            update[f"{key}_width_cm"] = float(slot.get("width_cm") or 0)
         if "height_cm" in slot:
-            h = float(slot.get("height_cm") or 0)
-            update[f"{key}_height_cm"] = h
-            if key == "front":
-                update["height_cm"] = h
+            update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
 
     if update:
-        res = supabase.table("prints") \
+        supabase.table("prints") \
             .update(update) \
             .eq("id", print_id) \
             .eq("user_id", user["sub"]) \
             .execute()
 
-        if not res.data:
-            raise HTTPException(status_code=500, detail="Update não afetou nenhuma linha")
-
     return get_print(print_id, user)
-
-@app.delete("/prints/{print_id}")
-def delete_print(print_id: str, user=Depends(current_user)):
-    supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
-    return {"status": "deleted"}
-
-@app.post("/prints")
-def create_print(payload: PrintCreate, user=Depends(current_user)):
-    data = payload.dict()
-    data.update({
-        "id": str(uuid.uuid4()),
-        "user_id": user["sub"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "width_cm": 0,
-        "height_cm": 0,
-    })
-
-    res = supabase.table("prints").insert(data).execute()
-    if not res.data:
-        raise HTTPException(status_code=500, detail="Erro ao criar estampa")
-
-    return res.data[0]
 
 @app.post("/prints/{print_id}/upload")
 def upload_print_file(
@@ -238,8 +206,11 @@ def upload_print_file(
     if not p:
         raise HTTPException(status_code=404, detail="Print não encontrado")
 
-    path = f"{user['sub']}/{print_id}/{type}.png"
     content = file.file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Arquivo vazio")
+
+    path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
 
     supabase.storage.from_("prints").upload(path, content, {"content-type": file.content_type})
     public_url = supabase.storage.from_("prints").get_public_url(path)
@@ -249,10 +220,10 @@ def upload_print_file(
     return {"url": public_url}
 
 # =========================
-# PRINT ASSETS UPDATE (NEW)
+# PRINT ASSETS UPDATE
 # =========================
 
-@app.patch("/print-assets/{asset_id}")  # NEW
+@app.patch("/print-assets/{asset_id}")
 def update_asset(asset_id: str, payload: Dict[str, Any], user=Depends(current_user)):
     update = {}
     if "width_cm" in payload:
@@ -272,7 +243,7 @@ def update_asset(asset_id: str, payload: Dict[str, Any], user=Depends(current_us
     return res.data[0]
 
 # =========================
-# JOBS (original + preview/confirm)
+# JOBS / PREVIEW / CONFIRM
 # =========================
 
 @app.post("/print-jobs")
@@ -301,16 +272,16 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     supabase.table("jobs").insert({
         "id": job_id,
         "user_id": user["sub"],
-        "status": "preview",  # NEW: começa como preview
+        "status": "preview",
         "payload": payload_clean,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
-    queue.enqueue(process_render, job_id, preview=True, job_timeout=600)  # NEW
+    queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
 
     return {"job_id": job_id, "total_units": total_units}
 
-@app.post("/print-jobs/{job_id}/confirm")  # NEW
+@app.post("/print-jobs/{job_id}/confirm")
 def confirm_print_job(job_id: str, user=Depends(current_user)):
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
     if not job:
@@ -330,13 +301,12 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     return {"status": "confirmed"}
 
-@app.get("/jobs/{job_id}/files")  # NEW
+@app.get("/jobs/{job_id}/files")
 def get_job_files(job_id: str, user=Depends(current_user)):
-    files = supabase.table("generated_files").select("*").eq("job_id", job_id).execute().data or []
-    return files
+    return supabase.table("generated_files").select("*").eq("job_id", job_id).execute().data or []
 
 # =========================
-# HISTORY (inalterado)
+# HISTORY
 # =========================
 
 @app.get("/jobs/history")
@@ -381,7 +351,7 @@ def cancel_job(job_id: str, user=Depends(current_user)):
     raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
 
 # =========================
-# USAGE (inalterado)
+# USAGE
 # =========================
 
 @app.get("/me/usage")

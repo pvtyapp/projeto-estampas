@@ -6,7 +6,7 @@ import { PreviewItem } from '@/app/types/preview'
 
 type Job = {
   id: string
-  status: 'preview' | 'processing' | 'preview_done' | 'queued' | 'done' | 'error'
+  status: 'preview' | 'preview_done' | 'queued' | 'processing' | 'done' | 'error'
   zip_url?: string
   error?: string
 }
@@ -59,7 +59,7 @@ export default function PreviewPanel(props: Props) {
         }),
       })
       onJobCreated(res.job_id)
-      setToast('🔍 Gerando preview — isso é apenas para visualização.')
+      setToast('🔍 Gerando preview — isto é apenas uma visualização.')
       setTimeout(() => setToast(null), 4000)
     } catch (e: any) {
       alert(e.message || 'Erro ao gerar preview')
@@ -69,9 +69,13 @@ export default function PreviewPanel(props: Props) {
   }
 
   async function confirm(jobId: string) {
+    if (!job || job.status !== 'preview_done') return
+
     setConfirming(true)
     try {
       await api(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
+      setJob(j => (j ? { ...j, status: 'queued' } : j))
+      setProgress(5)
     } catch (e: any) {
       alert(e.message || 'Erro ao confirmar')
     } finally {
@@ -87,7 +91,7 @@ export default function PreviewPanel(props: Props) {
         <h2 className="font-bold text-lg">Gerar preview</h2>
 
         <div className="text-sm text-gray-600">
-          Total de estampas: <b>{totalUnits}</b>
+          Total de artes: <b>{totalUnits}</b>
         </div>
 
         <div className="border rounded p-3 max-h-[240px] overflow-y-auto space-y-2">
@@ -137,15 +141,22 @@ export default function PreviewPanel(props: Props) {
         if (data.status === 'preview_done') {
           const f = await api(`/jobs/${jobId}/files`)
           setFiles(f)
+          setProgress(100)
+          clearInterval(interval)
         }
 
-        setProgress(p =>
-          data.status === 'preview_done' || data.status === 'done'
-            ? 100
-            : Math.min(p + 12, 95),
-        )
+        if (data.status === 'done') {
+          setProgress(100)
+          clearInterval(interval)
+        }
 
-        if (data.status === 'done' || data.status === 'error') clearInterval(interval)
+        if (data.status === 'error') {
+          clearInterval(interval)
+        }
+
+        if (data.status !== 'preview_done' && data.status !== 'done') {
+          setProgress(p => Math.min(p + 8, 95))
+        }
       } catch (e: any) {
         setError(e.message || 'Erro ao consultar status')
         clearInterval(interval)
@@ -160,7 +171,7 @@ export default function PreviewPanel(props: Props) {
 
   return (
     <div className="border rounded-lg p-6 bg-white space-y-4">
-      <h2 className="font-bold text-lg">Preview</h2>
+      <h2 className="font-bold text-lg">Processamento</h2>
 
       {toast && (
         <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
@@ -170,19 +181,23 @@ export default function PreviewPanel(props: Props) {
 
       {error && <p className="text-red-600 text-sm">{error}</p>}
 
-      {job && job.status === 'processing' && (
+      {job && job.status !== 'preview_done' && job.status !== 'done' && (
         <>
           <div className="w-full bg-gray-200 rounded h-3 overflow-hidden">
             <div className="h-full bg-black transition-all" style={{ width: `${progress}%` }} />
           </div>
-          <p className="text-sm text-gray-600">⚙️ Gerando preview…</p>
+          <p className="text-sm text-gray-600">
+            {job.status === 'preview' && '🔍 Gerando preview…'}
+            {job.status === 'queued' && '⏳ Na fila de processamento'}
+            {job.status === 'processing' && '⚙️ Gerando arquivos finais…'}
+          </p>
         </>
       )}
 
       {job?.status === 'preview_done' && (
         <>
           <p className="text-sm text-gray-600">
-            {files.length} folhas geradas — isto é apenas uma prévia para visualizar o layout e os encaixes.
+            {files.length} folhas geradas — isto é apenas uma prévia.
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-h-[300px] overflow-y-auto">

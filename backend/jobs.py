@@ -14,7 +14,6 @@ def process_render(job_id: str, preview: bool = False):
     if not job:
         return
 
-    # Preview pode rodar mesmo se status=preview
     if preview:
         if job["status"] != "preview":
             return
@@ -22,10 +21,11 @@ def process_render(job_id: str, preview: bool = False):
         if job["status"] != "queued":
             return
 
-    supabase.table("jobs").update({
-        "status": "processing",
-        "started_at": datetime.now(timezone.utc).isoformat()
-    }).eq("id", job_id).execute()
+    if not preview:
+        supabase.table("jobs").update({
+            "status": "processing",
+            "started_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", job_id).execute()
 
     try:
         payload = job.get("payload")
@@ -34,7 +34,6 @@ def process_render(job_id: str, preview: bool = False):
 
         urls = process_print_job(job_id, payload, preview=preview)
 
-        # Só gera ZIP quando for confirmado (não preview)
         if not preview:
             zip_bytes = create_zip_from_urls(urls)
             if hasattr(zip_bytes, "getvalue"):
@@ -54,7 +53,6 @@ def process_render(job_id: str, preview: bool = False):
                 "zip_url": zip_url
             }).eq("id", job_id).execute()
 
-        # Status final já é tratado no render_engine
     except Exception as e:
         logger.exception("Erro ao processar job %s", job_id)
 

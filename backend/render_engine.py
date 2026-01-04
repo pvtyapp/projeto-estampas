@@ -1,4 +1,3 @@
-import uuid
 import io
 from datetime import datetime, timezone
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
@@ -39,24 +38,15 @@ def apply_watermark(img: Image.Image, text: str = "PREVIEW • PrintWizard") -> 
     w, h = img.size
     step = 260
 
-    # repetido no fundo
     for y in range(0, h, step):
         for x in range(0, w, step):
             draw.text((x, y), text, fill=(0, 0, 0, 30))
 
-    # centralizado maior
     text_w, text_h = draw.textbbox((0, 0), text)[2:]
-    draw.text(
-        ((w - text_w) / 2, (h - text_h) / 2),
-        text,
-        fill=(0, 0, 0, 80),
-    )
+    draw.text(((w - text_w) / 2, (h - text_h) / 2), text, fill=(0, 0, 0, 80))
 
     img = Image.alpha_composite(img, overlay)
-
-    # blur leve
     img = img.filter(ImageFilter.GaussianBlur(radius=1.1))
-
     return img
 
 
@@ -69,10 +59,7 @@ def pack_items(items, sheet_width, sheet_height):
 
         for sheet in sheets:
             for shelf in sheet.shelves:
-                for w, h, rotated in [
-                    (item["w"], item["h"], False),
-                    (item["h"], item["w"], True),
-                ]:
+                for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                     if shelf.used_width + w + SPACING_PX <= sheet_width and shelf.y + h + SPACING_PX <= sheet_height:
                         item.update({"x": shelf.used_width, "y": shelf.y, "rotated": rotated})
                         shelf.used_width += w + SPACING_PX
@@ -85,10 +72,7 @@ def pack_items(items, sheet_width, sheet_height):
             if placed:
                 break
 
-            for w, h, rotated in [
-                (item["w"], item["h"], False),
-                (item["h"], item["w"], True),
-            ]:
+            for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                 if sheet.used_height + h + SPACING_PX <= sheet_height:
                     shelf = Shelf(sheet.used_height)
                     shelf.used_width = w + SPACING_PX
@@ -105,10 +89,7 @@ def pack_items(items, sheet_width, sheet_height):
 
         if not placed:
             sheet = Sheet()
-            for w, h, rotated in [
-                (item["w"], item["h"], False),
-                (item["h"], item["w"], True),
-            ]:
+            for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                 if h + SPACING_PX <= sheet_height:
                     shelf = Shelf(0)
                     shelf.used_width = w + SPACING_PX
@@ -128,31 +109,25 @@ def pack_items(items, sheet_width, sheet_height):
 
 
 def process_print_job(job_id: str, payload: dict, preview: bool = False):
+    supabase.table("generated_files").delete().eq("job_id", job_id).execute()
+
     items = []
 
     for it in payload["items"]:
         w = cm_to_px(it["width_cm"])
         h = cm_to_px(it["height_cm"])
 
-        asset = supabase.table("print_assets") \
-            .select("public_url") \
-            .eq("print_id", it["print_id"]) \
-            .single() \
-            .execute().data
+        q = supabase.table("print_assets").select("public_url").eq("id", it["asset_id"]).single().execute()
+        asset = q.data
 
         if not asset:
-            raise ValueError(f"Arquivo não encontrado para print {it['print_id']}")
+            raise ValueError(f"Asset não encontrado: {it['asset_id']}")
 
         for _ in range(it["qty"]):
-            items.append({
-                "print_url": asset["public_url"],
-                "w": w,
-                "h": h,
-            })
+            items.append({"print_url": asset["public_url"], "w": w, "h": h})
 
     sheet_w = cm_to_px(SHEET_WIDTH_CM)
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)
-
     sheets = pack_items(items, sheet_w, sheet_h)
 
     results = []
@@ -164,10 +139,8 @@ def process_print_job(job_id: str, payload: dict, preview: bool = False):
             art = load_print_image(item["print_url"])
             art = trim_transparency(art)
             art = resize_to_slot(art, item["w"], item["h"])
-
             if item["rotated"]:
                 art = art.rotate(90, expand=True)
-
             img.alpha_composite(art, dest=(item["x"], item["y"]))
 
         if preview:
@@ -178,12 +151,7 @@ def process_print_job(job_id: str, payload: dict, preview: bool = False):
         img.save(buffer, format="PNG")
         buffer.seek(0)
 
-        supabase.storage.from_("jobs-output").upload(
-            filename,
-            buffer.read(),
-            {"content-type": "image/png"}
-        )
-
+        supabase.storage.from_("jobs-output").upload(filename, buffer.read(), {"content-type": "image/png"})
         public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
 
         supabase.table("generated_files").insert({
@@ -196,7 +164,7 @@ def process_print_job(job_id: str, payload: dict, preview: bool = False):
         results.append(public_url)
 
     supabase.table("jobs").update({
-        "status": "done" if not preview else "preview_done",
+        "status": "preview_done" if preview else "done",
         "finished_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", job_id).execute()
 

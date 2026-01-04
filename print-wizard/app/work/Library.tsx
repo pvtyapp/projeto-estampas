@@ -82,15 +82,21 @@ export default function Library({ onPreview, version }: Props) {
           asset_id: a.id,
           name: p.name,
           sku: p.sku,
-          qty: a.quantity,
-          width_cm: a.width_cm || 10,
-          height_cm: a.height_cm || 10,
+          qty: Number(a.quantity) || 0,
+          width_cm: Number(a.width_cm) || 0,
+          height_cm: Number(a.height_cm) || 0,
         })),
       )
       .filter(i => i.qty > 0)
 
     if (!items.length) {
       alert('Informe a quantidade.')
+      return
+    }
+
+    const invalid = items.find(i => !i.width_cm || !i.height_cm)
+    if (invalid) {
+      alert('Alguma arte está sem largura ou altura definida.')
       return
     }
 
@@ -140,7 +146,17 @@ export default function Library({ onPreview, version }: Props) {
 
                 {p.assets.map(a => (
                   <div key={a.id} className="mt-2 flex items-center gap-2 text-sm">
-                    <img src={a.public_url} className="w-8 h-8 border rounded" />
+                    {a.public_url ? (
+                      <img
+                        src={a.public_url}
+                        className="w-8 h-8 border rounded object-contain"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 border rounded bg-gray-100 flex items-center justify-center text-xs text-gray-400">
+                        ?
+                      </div>
+                    )}
+
                     <span>Qtd:</span>
                     <span className="font-mono">{a.quantity}</span>
                     <span className="text-xs text-gray-400">

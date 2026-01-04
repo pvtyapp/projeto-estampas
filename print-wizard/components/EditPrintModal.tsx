@@ -50,7 +50,14 @@ export default function EditPrintModal({
     setLocal(p => ({
       ...p,
       assets: p.assets.map(a =>
-        a.id === id ? { ...a, [field]: field === 'quantity' ? Math.max(0, Math.round(num)) : num } : a,
+        a.id === id
+          ? {
+              ...a,
+              [field]: field === 'quantity'
+                ? Math.max(0, Math.round(num))
+                : Math.max(0, num),
+            }
+          : a,
       ),
     }))
   }
@@ -58,16 +65,18 @@ export default function EditPrintModal({
   async function save() {
     setLoading(true)
     try {
-      for (const asset of local.assets) {
-        await api(`/print-assets/${asset.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            width_cm: asset.width_cm,
-            height_cm: asset.height_cm,
-            quantity: asset.quantity,
+      await Promise.all(
+        local.assets.map(asset =>
+          api(`/print-assets/${asset.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              width_cm: asset.width_cm,
+              height_cm: asset.height_cm,
+              quantity: asset.quantity,
+            }),
           }),
-        })
-      }
+        ),
+      )
 
       onUpdated(local)
       onClose()
@@ -113,21 +122,27 @@ export default function EditPrintModal({
               <div className="flex-1 space-y-2">
                 <div className="flex gap-2">
                   <input
+                    type="number"
+                    step="0.1"
                     className="input"
                     placeholder="Largura (cm)"
-                    value={asset.width_cm}
+                    value={String(asset.width_cm ?? '')}
                     onChange={e => updateAsset(asset.id, 'width_cm', e.target.value)}
                   />
                   <input
+                    type="number"
+                    step="0.1"
                     className="input"
                     placeholder="Altura (cm)"
-                    value={asset.height_cm}
+                    value={String(asset.height_cm ?? '')}
                     onChange={e => updateAsset(asset.id, 'height_cm', e.target.value)}
                   />
                   <input
+                    type="number"
+                    step="1"
                     className="input"
                     placeholder="Qtd"
-                    value={asset.quantity}
+                    value={String(asset.quantity ?? '')}
                     onChange={e => updateAsset(asset.id, 'quantity', e.target.value)}
                   />
                 </div>
