@@ -52,15 +52,20 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
     setLoading(true)
     try {
+      const slots = [
+        { type: 'front', width_cm: Number(frontW.replace(',', '.')), height_cm: Number(frontH.replace(',', '.')) },
+      ]
+
+      if (hasBack) {
+        slots.push({ type: 'back', width_cm: Number(backW.replace(',', '.')), height_cm: Number(backH.replace(',', '.')) })
+        if (hasExtra) {
+          slots.push({ type: 'extra', width_cm: Number(extraW.replace(',', '.')), height_cm: Number(extraH.replace(',', '.')) })
+        }
+      }
+
       const print = await api('/prints', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          sku,
-          width_cm: Number(frontW.replace(',', '.')),
-          height_cm: Number(frontH.replace(',', '.')),
-          is_composite: hasBack || hasExtra,
-        }),
+        body: JSON.stringify({ name, sku, slots }),
       })
 
       const upload = async (file: File, type: string) => {
@@ -72,9 +77,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
           data: { session },
         } = await supabase.auth.getSession()
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL
-        if (!API_URL) throw new Error('API_URL não configurada')
-
+        const API_URL = process.env.NEXT_PUBLIC_API_URL!
         await fetch(`${API_URL}/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,

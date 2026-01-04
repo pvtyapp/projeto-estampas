@@ -108,28 +108,30 @@ def pack_items(items, sheet_width, sheet_height):
     return sheets
 
 
-def process_print_job(job_id: str, payload: dict, preview: bool = False):
+def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     supabase.table("generated_files").delete().eq("job_id", job_id).execute()
 
     items = []
 
-    for it in payload["items"]:
-        w = cm_to_px(it["width_cm"])
-        h = cm_to_px(it["height_cm"])
+    for p in pieces:
+        w = cm_to_px(p["width"])
+        h = cm_to_px(p["height"])
 
-        # buscar imagem pelo print_id
-        q = supabase.table("prints").select("front_url").eq("id", it["print_id"]).single().execute()
-        p = q.data
+        slot = supabase.table("print_slots") \
+            .select("url") \
+            .eq("print_id", p["print_id"]) \
+            .eq("type", p["type"]) \
+            .single() \
+            .execute().data
 
-        if not p or not p.get("front_url"):
-            raise ValueError(f"Print sem imagem: {it['print_id']}")
+        if not slot or not slot.get("url"):
+            raise ValueError(f"Slot sem imagem: {p['print_id']} / {p['type']}")
 
-        for _ in range(it["qty"]):
-            items.append({
-                "print_url": p["front_url"],
-                "w": w,
-                "h": h
-            })
+        items.append({
+            "print_url": slot["url"],
+            "w": w,
+            "h": h
+        })
 
     sheet_w = cm_to_px(SHEET_WIDTH_CM)
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)
@@ -144,7 +146,7 @@ def process_print_job(job_id: str, payload: dict, preview: bool = False):
             art = load_print_image(item["print_url"])
             art = trim_transparency(art)
             art = resize_to_slot(art, item["w"], item["h"])
-            if item["rotated"]:
+            if item.get("rotated"):
                 art = art.rotate(90, expand=True)
             img.alpha_composite(art, dest=(item["x"], item["y"]))
 
@@ -156,21 +158,17 @@ def process_print_job(job_id: str, payload: dict, preview: bool = False):
         img.save(buffer, format="PNG")
         buffer.seek(0)
 
-        supabase.storage.from_("jobs-output").upload(filename, buffer.read(), {"content-type": "image/png"})
-        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
+        supabase.storage.from_("jobs-output").upload(filename, buffer.read(), {"content-type": "image/png", "upsert": "true"})
+        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)["publicUrl"]
 
         supabase.table("generated_files").insert({
             "job_id": job_id,
             "page_index": idx,
             "file_path": filename,
             "public_url": public_url,
+            "preview": preview,
         }).execute()
 
         results.append(public_url)
-
-    supabase.table("jobs").update({
-        "status": "preview_done" if preview else "done",
-        "finished_at": datetime.now(timezone.utc).isoformat()
-    }).eq("id", job_id).execute()
 
     return results

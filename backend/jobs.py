@@ -32,11 +32,14 @@ def process_render(job_id: str, preview: bool = False):
         }).eq("id", job_id).execute()
 
     try:
-        payload = job.get("payload")
-        if not payload:
-            raise ValueError("Payload vazio no job")
+        payload = job.get("payload") or {}
+        pieces = payload.get("pieces")
 
-        urls = process_print_job(job_id, payload, preview=preview)
+        if not pieces or not isinstance(pieces, list):
+            raise ValueError("Payload inválido: 'pieces' ausente ou inválido")
+
+        # renderiza usando as peças já expandidas
+        urls = process_print_job(job_id, pieces, preview=preview)
 
         if not preview:
             zip_bytes = create_zip_from_urls(urls)
@@ -48,10 +51,13 @@ def process_render(job_id: str, preview: bool = False):
             supabase.storage.from_("jobs-output").upload(
                 zip_name,
                 zip_bytes,
-                {"content-type": "application/zip"}
+                {
+                    "content-type": "application/zip",
+                    "upsert": "true",
+                }
             )
 
-            zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
+            zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)["publicUrl"]
 
             supabase.table("jobs").update({
                 "zip_url": zip_url

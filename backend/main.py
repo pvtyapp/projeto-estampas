@@ -1,10 +1,10 @@
 import uuid
 import os
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from backend.job_queue import queue
 from backend.jobs import process_render
@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="5.1")
+app = FastAPI(title="Projeto Estampas API", version="6.0")
 
 # =========================
 # CORS
@@ -22,10 +22,7 @@ app = FastAPI(title="Projeto Estampas API", version="5.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://pvty.vercel.app",
-    ],
+    allow_origins=["http://localhost:3000", "https://pvty.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,12 +36,16 @@ async def preflight_handler(path: str, request: Request):
 # MODELOS
 # =========================
 
+class Slot(BaseModel):
+    type: str  # front | back | extra
+    width_cm: float
+    height_cm: float
+    url: Optional[str] = None
+
 class PrintCreate(BaseModel):
     name: str
     sku: str
-    width_cm: float
-    height_cm: float
-    is_composite: bool = False
+    slots: List[Slot]
 
 class PrintJobItem(BaseModel):
     print_id: str
@@ -71,30 +72,18 @@ def current_user(user=Depends(get_current_user)):
 # HELPERS
 # =========================
 
-def build_slots_from_print(p: dict) -> Dict[str, dict]:
-    return {
-        "front": {
-            "url": p.get("front_url") or "",
-            "width_cm": p.get("front_width_cm") or 0,
-            "height_cm": p.get("front_height_cm") or 0,
-        },
-        "back": {
-            "url": p.get("back_url") or "",
-            "width_cm": p.get("back_width_cm") or 0,
-            "height_cm": p.get("back_height_cm") or 0,
-        },
-        "extra": {
-            "url": p.get("extra_url") or "",
-            "width_cm": p.get("extra_width_cm") or 0,
-            "height_cm": p.get("extra_height_cm") or 0,
-        },
-    }
+def validate_slots(slots: List[Slot]):
+    types = [s.type for s in slots]
+    if "front" not in types:
+        raise ValueError("Slot 'front' é obrigatório")
+    if "extra" in types and "back" not in types:
+        raise ValueError("Slot 'extra' só pode existir se 'back' existir")
+    invalid = set(types) - {"front", "back", "extra"}
+    if invalid:
+        raise ValueError(f"Tipos inválidos: {invalid}")
 
-def load_assets(print_id: str):
-    return supabase.table("print_assets") \
-        .select("id, public_url, width_cm, height_cm, quantity") \
-        .eq("print_id", print_id) \
-        .execute().data or []
+def load_slots(print_id: str):
+    return supabase.table("print_slots").select("*").eq("print_id", print_id).execute().data or []
 
 # =========================
 # ROTAS
@@ -110,102 +99,72 @@ def root():
 
 @app.get("/prints")
 def list_prints(user=Depends(current_user)):
-    rows = supabase.table("prints") \
-        .select("*") \
-        .eq("user_id", user["sub"]) \
-        .order("created_at", desc=True) \
-        .execute().data or []
-
+    prints = supabase.table("prints").select("*").eq("user_id", user["sub"]).order("created_at", desc=True).execute().data or []
     result = []
-    for p in rows:
-        p["slots"] = build_slots_from_print(p)
-        p["assets"] = load_assets(p["id"])
-        for k in (
-            "front_url","front_width_cm","front_height_cm",
-            "back_url","back_width_cm","back_height_cm",
-            "extra_url","extra_width_cm","extra_height_cm"
-        ):
-            p.pop(k, None)
+    for p in prints:
+        p["slots"] = load_slots(p["id"])
         result.append(p)
-
     return result
 
 @app.get("/prints/{print_id}")
 def get_print(print_id: str, user=Depends(current_user)):
-    p = supabase.table("prints") \
-        .select("*") \
-        .eq("id", print_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
+    p = supabase.table("prints").select("*").eq("id", print_id).eq("user_id", user["sub"]).single().execute().data
     if not p:
         raise HTTPException(status_code=404, detail="Print não encontrado")
-
-    p["slots"] = build_slots_from_print(p)
-    p["assets"] = load_assets(p["id"])
-    for k in (
-        "front_url","front_width_cm","front_height_cm",
-        "back_url","back_width_cm","back_height_cm",
-        "extra_url","extra_width_cm","extra_height_cm"
-    ):
-        p.pop(k, None)
-
+    p["slots"] = load_slots(p["id"])
     return p
 
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
-    data = payload.dict()
-    data.update({
-        "id": str(uuid.uuid4()),
+    try:
+        validate_slots(payload.slots)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    print_id = str(uuid.uuid4())
+
+    supabase.table("prints").insert({
+        "id": print_id,
         "user_id": user["sub"],
+        "name": payload.name,
+        "sku": payload.sku,
         "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    }).execute()
 
-    res = supabase.table("prints").insert(data).execute()
-    if not res.data:
-        raise HTTPException(status_code=500, detail="Erro ao criar estampa")
+    for s in payload.slots:
+        supabase.table("print_slots").insert({
+            "id": str(uuid.uuid4()),
+            "print_id": print_id,
+            "type": s.type,
+            "width_cm": s.width_cm,
+            "height_cm": s.height_cm,
+            "url": s.url,
+        }).execute()
 
-    return res.data[0]
+    return get_print(print_id, user)
 
 @app.patch("/prints/{print_id}")
 def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
-    exists = supabase.table("prints") \
-        .select("id") \
-        .eq("id", print_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
-    if not exists:
-        raise HTTPException(status_code=404, detail="Print não encontrado")
-
-    update = {}
-
-    if "width_cm" in payload:
-        update["width_cm"] = float(payload["width_cm"])
-    if "height_cm" in payload:
-        update["height_cm"] = float(payload["height_cm"])
-
     slots = payload.get("slots")
-    if isinstance(slots, dict):
-        for key in ("front","back","extra"):
-            slot = slots.get(key)
-            if not isinstance(slot, dict):
-                continue
-            if "width_cm" in slot:
-                update[f"{key}_width_cm"] = float(slot.get("width_cm") or 0)
-            if "height_cm" in slot:
-                update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
+    if not isinstance(slots, list):
+        raise HTTPException(status_code=400, detail="slots inválido")
 
-    if not update:
-        raise HTTPException(status_code=400, detail="Nada para atualizar")
+    try:
+        validate_slots([Slot(**s) for s in slots])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    supabase.table("prints") \
-        .update(update) \
-        .eq("id", print_id) \
-        .eq("user_id", user["sub"]) \
-        .execute()
+    supabase.table("print_slots").delete().eq("print_id", print_id).execute()
+
+    for s in slots:
+        supabase.table("print_slots").insert({
+            "id": str(uuid.uuid4()),
+            "print_id": print_id,
+            "type": s["type"],
+            "width_cm": s["width_cm"],
+            "height_cm": s["height_cm"],
+            "url": s.get("url"),
+        }).execute()
 
     return get_print(print_id, user)
 
@@ -221,116 +180,52 @@ def upload_print_file(
     type: str = "front",
     width_cm: float = 0,
     height_cm: float = 0,
-    user=Depends(current_user)
+    user=Depends(current_user),
 ):
-    p = supabase.table("prints") \
-        .select("id") \
-        .eq("id", print_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
-    if not p:
-        raise HTTPException(status_code=404, detail="Print não encontrado")
-
     content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
+    path = f"{user['sub']}/{print_id}/{type}.png"
 
-    supabase.storage.from_("prints").upload(
-        path,
-        content,
-        {
-            "content-type": file.content_type or "application/octet-stream",
-            "upsert": "true",
-        },
-    )
+    supabase.storage.from_("prints").upload(path, content, {"upsert": "true"})
+    public_url = supabase.storage.from_("prints").get_public_url(path)["publicUrl"]
 
-    public_url = supabase.storage.from_("prints").get_public_url(path).get("publicUrl")
-
-    asset_id = str(uuid.uuid4())
-
-    supabase.table("print_assets").insert({
-        "id": asset_id,
-        "print_id": print_id,
-        "slot": type,
-        "type": "print",
-        "file_path": path,
-        "public_url": public_url,
-        "width_cm": float(width_cm or 0),
-        "height_cm": float(height_cm or 0),
-        "quantity": 1,
-        "user_id": user["sub"],
-    }).execute()
-
-    supabase.table("prints").update({
-        f"{type}_url": public_url,
-        f"{type}_width_cm": float(width_cm or 0),
-        f"{type}_height_cm": float(height_cm or 0),
-    }).eq("id", print_id).execute()
+    supabase.table("print_slots").update({
+        "url": public_url,
+        "width_cm": width_cm,
+        "height_cm": height_cm,
+    }).eq("print_id", print_id).eq("type", type).execute()
 
     return {"url": public_url}
-
-
-# =========================
-# PRINT ASSETS
-# =========================
-
-@app.patch("/print-assets/{asset_id}")
-def update_asset(asset_id: str, payload: Dict[str, Any], user=Depends(current_user)):
-    update = {}
-    if "width_cm" in payload:
-        update["width_cm"] = float(payload["width_cm"])
-    if "height_cm" in payload:
-        update["height_cm"] = float(payload["height_cm"])
-    if "quantity" in payload:
-        update["quantity"] = int(payload["quantity"])
-
-    if not update:
-        raise HTTPException(status_code=400, detail="Nada para atualizar")
-
-    res = supabase.table("print_assets").update(update).eq("id", asset_id).execute()
-    if not res.data:
-        raise HTTPException(status_code=404, detail="Asset não encontrado")
-
-    return res.data[0]
 
 # =========================
 # JOBS
 # =========================
 
+def build_pieces(print_obj, qty):
+    pieces = []
+    for _ in range(qty):
+        for s in print_obj["slots"]:
+            pieces.append({
+                "width": s["width_cm"],
+                "height": s["height_cm"],
+                "type": s["type"],
+                "print_id": print_obj["id"],
+            })
+    return pieces
+
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
-    total_units = sum(max(item.qty, 0) for item in payload.items)
+    total = sum(max(i.qty, 0) for i in payload.items)
+    if total <= 0 or total > 100:
+        raise HTTPException(status_code=400, detail="Quantidade inválida")
 
-    if total_units <= 0:
-        raise HTTPException(status_code=400, detail="Nenhuma unidade informada.")
-    if total_units > 100:
-        raise HTTPException(status_code=400, detail="Limite máximo de 100 unidades.")
+    pieces = []
 
-    print_ids = [i.print_id for i in payload.items]
-
-    prints = supabase.table("prints") \
-        .select("id,width_cm,height_cm") \
-        .in_("id", print_ids) \
-        .execute().data or []
-
-    dim_map = {p["id"]: p for p in prints}
-
-    items = []
-    for i in payload.items:
-        p = dim_map.get(i.print_id)
-        if not p:
-            raise HTTPException(status_code=400, detail=f"Print {i.print_id} inválido")
-
-        items.append({
-            "print_id": i.print_id,
-            "qty": i.qty,
-            "width_cm": p["width_cm"],
-            "height_cm": p["height_cm"],
-        })
+    for item in payload.items:
+        p = get_print(item.print_id, user)
+        pieces.extend(build_pieces(p, item.qty))
 
     job_id = str(uuid.uuid4())
 
@@ -338,23 +233,21 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         "id": job_id,
         "user_id": user["sub"],
         "status": "preview",
-        "payload": {"items": items},
+        "payload": {"pieces": pieces},
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
     queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
 
-    return {"job_id": job_id, "total_units": total_units}
+    return {"job_id": job_id, "total_units": total}
 
 @app.post("/print-jobs/{job_id}/confirm")
 def confirm_print_job(job_id: str, user=Depends(current_user)):
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-    if job["status"] != "preview":
-        raise HTTPException(status_code=400, detail="Job não está em preview")
+    if not job or job["status"] != "preview":
+        raise HTTPException(status_code=400, detail="Job inválido")
 
-    total_units = sum(i["qty"] for i in job["payload"]["items"])
+    total_units = len(job["payload"]["pieces"])
 
     try:
         check_and_consume_limits(supabase, user["sub"], total_units)
@@ -365,116 +258,3 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
     return {"status": "confirmed"}
-
-@app.get("/jobs/{job_id}/files")
-def get_job_files(job_id: str, user=Depends(current_user)):
-    return supabase.table("generated_files").select("*").eq("job_id", job_id).execute().data or []
-
-# =========================
-# HISTORY
-# =========================
-
-@app.get("/jobs/history")
-def jobs_history(user=Depends(current_user)):
-    return supabase.table("jobs") \
-        .select("*") \
-        .eq("user_id", user["sub"]) \
-        .order("created_at", desc=True) \
-        .limit(50) \
-        .execute().data or []
-
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs") \
-        .select("*") \
-        .eq("id", job_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    return job
-
-@app.post("/jobs/{job_id}/cancel")
-def cancel_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs") \
-        .select("*") \
-        .eq("id", job_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    if job["status"] in ("queued", "done"):
-        supabase.table("jobs").update({"status": "canceled"}).eq("id", job_id).execute()
-        return {"status": "canceled"}
-
-    raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
-
-# =========================
-# USAGE
-# =========================
-
-@app.get("/me/usage")
-def get_usage(user=Depends(current_user)):
-    user_id = user["sub"]
-    now = datetime.now(timezone.utc)
-    year, month = now.year, now.month
-
-    usage = supabase.table("usage_monthly") \
-        .select("*") \
-        .eq("user_id", user_id) \
-        .eq("year", year) \
-        .eq("month", month) \
-        .execute().data or []
-
-    usage = usage[0] if usage else None
-
-    plan = supabase.table("plans").select("*").eq("user_id", user_id).execute().data or []
-    plan = plan[0] if plan else {"plan": "free", "monthly_limit": 2}
-
-    packages = supabase.table("extra_packages") \
-        .select("remaining") \
-        .eq("user_id", user_id) \
-        .gt("remaining", 0) \
-        .execute().data or []
-
-    credits = sum(int(p["remaining"]) for p in packages)
-
-    if not usage:
-        used_plan = 0
-        used_extra = 0
-        limit = int(plan["monthly_limit"])
-    else:
-        used_plan = int(usage.get("used_plan", 0))
-        used_extra = int(usage.get("used_extra", 0))
-        limit = int(usage.get("limit_snapshot") or plan["monthly_limit"])
-
-    used = used_plan + used_extra
-    percent = round((used_plan / limit) * 100, 1) if limit else 0
-
-    renew_at = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=timezone.utc)
-    remaining_days = max((renew_at - now).days, 0)
-
-    if used_plan >= limit and credits <= 0:
-        status = "blocked"
-    elif used_plan >= limit:
-        status = "using_credits"
-    elif percent >= 90:
-        status = "warning"
-    else:
-        status = "ok"
-
-    return {
-        "plan": plan["plan"],
-        "used": used,
-        "limit": limit,
-        "credits": credits,
-        "percent": percent,
-        "remaining_days": remaining_days,
-        "status": status,
-    }
