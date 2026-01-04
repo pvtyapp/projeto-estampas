@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.1")
+app = FastAPI(title="Projeto Estampas API", version="6.2")
 
 # =========================
 # CORS
@@ -132,6 +132,7 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
 
         for s in payload.slots:
             supabase.table("print_slots").upsert({
+                "id": str(uuid.uuid4()),
                 "print_id": print_id,
                 "type": s.type,
                 "width_cm": s.width_cm,
@@ -159,6 +160,7 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
 
     for s in slots:
         supabase.table("print_slots").insert({
+            "id": str(uuid.uuid4()),
             "print_id": print_id,
             "type": s["type"],
             "width_cm": s["width_cm"],
@@ -191,6 +193,7 @@ def upload_print_file(
     public_url = supabase.storage.from_("prints").get_public_url(path)
 
     supabase.table("print_slots").upsert({
+        "id": str(uuid.uuid4()),
         "print_id": print_id,
         "type": type,
         "url": public_url,
