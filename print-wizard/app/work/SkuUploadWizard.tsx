@@ -68,9 +68,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
       if (hasBack) {
         slots.push({ type: 'back', width_cm: bw!, height_cm: bh! })
-        if (hasExtra) {
-          slots.push({ type: 'extra', width_cm: ew!, height_cm: eh! })
-        }
+        if (hasExtra) slots.push({ type: 'extra', width_cm: ew!, height_cm: eh! })
       }
 
       const print = await api('/prints', {
@@ -85,17 +83,14 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         form.append('width_cm', String(w))
         form.append('height_cm', String(h))
 
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) throw new Error('Sessão expirada. Faça login novamente.')
 
         const API_URL = process.env.NEXT_PUBLIC_API_URL!
         const res = await fetch(`${API_URL}/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-          },
+          headers: { Authorization: `Bearer ${session.access_token}` },
         })
 
         if (!res.ok) throw new Error(`Falha ao enviar ${type}`)

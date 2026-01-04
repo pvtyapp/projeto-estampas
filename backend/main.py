@@ -1,7 +1,7 @@
 import uuid
 import os
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.2")
+app = FastAPI(title="Projeto Estampas API", version="6.3")
 
 # =========================
 # CORS
@@ -180,12 +180,17 @@ def delete_print(print_id: str, user=Depends(current_user)):
 def upload_print_file(
     print_id: str,
     file: UploadFile = File(...),
-    type: str = "front",
+    type: str = Form(...),
+    width_cm: float = Form(...),
+    height_cm: float = Form(...),
     user=Depends(current_user),
 ):
     content = file.file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
+
+    if width_cm <= 0 or height_cm <= 0:
+        raise HTTPException(status_code=400, detail="width_cm e height_cm devem ser > 0")
 
     path = f"{user['sub']}/{print_id}/{type}.png"
 
@@ -196,6 +201,8 @@ def upload_print_file(
         "id": str(uuid.uuid4()),
         "print_id": print_id,
         "type": type,
+        "width_cm": width_cm,
+        "height_cm": height_cm,
         "url": public_url,
     }, on_conflict="print_id,type").execute()
 
