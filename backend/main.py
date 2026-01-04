@@ -114,26 +114,33 @@ def get_print(print_id: str, user=Depends(current_user)):
 
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
-    validate_slots(payload.slots)
+    try:
+        validate_slots(payload.slots)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     print_id = str(uuid.uuid4())
 
-    supabase.table("prints").insert({
-        "id": print_id,
-        "user_id": user["sub"],
-        "name": payload.name,
-        "sku": payload.sku,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    try:
+        supabase.table("prints").insert({
+            "id": print_id,
+            "user_id": user["sub"],
+            "name": payload.name,
+            "sku": payload.sku,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
 
-    for s in payload.slots:
-        supabase.table("print_slots").upsert({
-            "print_id": print_id,
-            "type": s.type,
-            "width_cm": s.width_cm,
-            "height_cm": s.height_cm,
-            "url": s.url,
-        }, on_conflict="print_id,type").execute()
+        for s in payload.slots:
+            supabase.table("print_slots").upsert({
+                "print_id": print_id,
+                "type": s.type,
+                "width_cm": s.width_cm,
+                "height_cm": s.height_cm,
+                "url": s.url,
+            }, on_conflict="print_id,type").execute()
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar print: {e}")
 
     return get_print(print_id, user)
 
@@ -143,16 +150,21 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not isinstance(slots, list):
         raise HTTPException(status_code=400, detail="slots inválido")
 
-    validate_slots([Slot(**s) for s in slots])
+    try:
+        validate_slots([Slot(**s) for s in slots])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    supabase.table("print_slots").delete().eq("print_id", print_id).execute()
 
     for s in slots:
-        supabase.table("print_slots").upsert({
+        supabase.table("print_slots").insert({
             "print_id": print_id,
             "type": s["type"],
             "width_cm": s["width_cm"],
             "height_cm": s["height_cm"],
             "url": s.get("url"),
-        }, on_conflict="print_id,type").execute()
+        }).execute()
 
     return get_print(print_id, user)
 
@@ -176,7 +188,7 @@ def upload_print_file(
     path = f"{user['sub']}/{print_id}/{type}.png"
 
     supabase.storage.from_("prints").upload(path, content, {"upsert": "true"})
-    public_url = supabase.storage.from_("prints").get_public_url(path)["publicUrl"]
+    public_url = supabase.storage.from_("prints").get_public_url(path)
 
     supabase.table("print_slots").upsert({
         "print_id": print_id,
@@ -224,7 +236,6 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     }).execute()
 
     queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
-
     return {"job_id": job_id, "total_units": total}
 
 @app.post("/print-jobs/{job_id}/confirm")
@@ -235,9 +246,11 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     total_units = len(job["payload"]["pieces"])
 
-    check_and_consume_limits(supabase, user["sub"], total_units)
+    try:
+        check_and_consume_limits(supabase, user["sub"], total_units)
+    except LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
-
     return {"status": "confirmed"}
