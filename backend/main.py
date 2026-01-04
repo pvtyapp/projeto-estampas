@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.7")  # NEW version bump
+app = FastAPI(title="Projeto Estampas API", version="4.7")
 
 # =========================
 # CORS
@@ -90,6 +90,12 @@ def build_slots_from_print(p: dict) -> Dict[str, dict]:
         },
     }
 
+def load_assets(print_id: str):
+    return supabase.table("print_assets") \
+        .select("id, public_url, width_cm, height_cm, quantity") \
+        .eq("print_id", print_id) \
+        .execute().data or []
+
 # =========================
 # ROTAS
 # =========================
@@ -99,7 +105,7 @@ def root():
     return {"status": "ok"}
 
 # =========================
-# PRINTS (inalterado)
+# PRINTS
 # =========================
 
 @app.get("/prints")
@@ -113,6 +119,7 @@ def list_prints(user=Depends(current_user)):
     result = []
     for p in rows:
         p["slots"] = build_slots_from_print(p)
+        p["assets"] = load_assets(p["id"])
         for k in (
             "front_url","front_width_cm","front_height_cm",
             "back_url","back_width_cm","back_height_cm",
@@ -136,6 +143,7 @@ def get_print(print_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="Print não encontrado")
 
     p["slots"] = build_slots_from_print(p)
+    p["assets"] = load_assets(p["id"])
     for k in (
         "front_url","front_width_cm","front_height_cm",
         "back_url","back_width_cm","back_height_cm",
