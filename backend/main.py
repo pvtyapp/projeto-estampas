@@ -1,7 +1,7 @@
 import uuid
 import os
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.5")
+app = FastAPI(title="Projeto Estampas API", version="4.6")
 
 # =========================
 # CORS
@@ -203,7 +203,6 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
         "id": str(uuid.uuid4()),
         "user_id": user["sub"],
         "created_at": datetime.now(timezone.utc).isoformat(),
-
         "width_cm": 0,
         "height_cm": 0,
     })
@@ -213,6 +212,33 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
         raise HTTPException(status_code=500, detail="Erro ao criar estampa")
 
     return res.data[0]
+
+@app.post("/prints/{print_id}/upload")
+def upload_print_file(
+    print_id: str,
+    file: UploadFile = File(...),
+    type: str = "front",
+    user=Depends(current_user)
+):
+    p = supabase.table("prints") \
+        .select("id") \
+        .eq("id", print_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
+
+    if not p:
+        raise HTTPException(status_code=404, detail="Print não encontrado")
+
+    path = f"{user['sub']}/{print_id}/{type}.png"
+    content = file.file.read()
+
+    supabase.storage.from_("prints").upload(path, content, {"content-type": file.content_type})
+    public_url = supabase.storage.from_("prints").get_public_url(path)
+
+    supabase.table("prints").update({f"{type}_url": public_url}).eq("id", print_id).execute()
+
+    return {"url": public_url}
 
 # =========================
 # JOBS
