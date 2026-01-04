@@ -244,7 +244,7 @@ def upload_print_file(
         content,
         {
             "content-type": file.content_type or "application/octet-stream",
-            "upsert": True,
+            "upsert": "true",
         },
     )
 
