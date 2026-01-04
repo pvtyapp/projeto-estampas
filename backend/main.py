@@ -218,11 +218,14 @@ def delete_print(print_id: str, user=Depends(current_user)):
 def upload_print_file(
     print_id: str,
     file: UploadFile = File(...),
-    type: str = Query("front", regex="^(front|back|extra)$"),
+    type: str = "front",
     width_cm: float = 0,
     height_cm: float = 0,
     user=Depends(current_user)
 ):
+    if type not in ("front", "back", "extra"):
+        raise HTTPException(status_code=400, detail="Tipo inválido")
+
     p = supabase.table("prints") \
         .select("id") \
         .eq("id", print_id) \
@@ -237,25 +240,39 @@ def upload_print_file(
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
+    asset_id = str(uuid.uuid4())
+    path = f"{user['sub']}/{print_id}/{asset_id}.png"
 
     supabase.storage.from_("prints").upload(
         path,
         content,
-        {
-            "content-type": file.content_type or "image/png",
-        },
+        {"content-type": file.content_type},
     )
 
     public_url = supabase.storage.from_("prints").get_public_url(path)
 
+    # atualiza print principal
     supabase.table("prints").update({
         f"{type}_url": public_url,
         f"{type}_width_cm": width_cm,
         f"{type}_height_cm": height_cm,
     }).eq("id", print_id).execute()
 
+    # cria asset
+    supabase.table("print_assets").insert({
+        "id": asset_id,
+        "print_id": print_id,
+        "type": type,
+        "file_path": path,
+        "public_url": public_url,
+        "width_cm": width_cm,
+        "height_cm": height_cm,
+        "quantity": 1,
+        "user_id": user["sub"],
+    }).execute()
+
     return {"url": public_url}
+
 
 # =========================
 # PRINT ASSETS
