@@ -5,12 +5,18 @@ import { api } from '@/lib/apiClient'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
 
+type Slot = {
+  type: 'front' | 'back' | 'extra'
+  width_cm: number
+  height_cm: number
+  url?: string
+}
+
 type Print = {
   id: string
   name: string
   sku: string
-  width_cm: number
-  height_cm: number
+  slots: Slot[]
 }
 
 type PreviewItem = {
@@ -94,6 +100,10 @@ export default function Library({ onPreview, version }: Props) {
     }, 200)
   }
 
+  function getFrontSlot(p: Print) {
+    return p.slots.find(s => s.type === 'front')
+  }
+
   return (
     <div className="space-y-4">
       {toast && (
@@ -116,77 +126,81 @@ export default function Library({ onPreview, version }: Props) {
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
         {!loading &&
-          filtered.map(p => (
-            <div
-              key={p.id}
-              className="border rounded p-3 flex justify-between items-start relative"
-            >
-              <div>
-                <div className="text-sm font-medium">
-                  {p.name} / {p.sku}
+          filtered.map(p => {
+            const front = getFrontSlot(p)
+
+            return (
+              <div
+                key={p.id}
+                className="border rounded p-3 flex justify-between items-start relative"
+              >
+                <div>
+                  <div className="text-sm font-medium">
+                    {p.name} / {p.sku}
+                  </div>
+
+                  <div className="mt-2 text-xs text-gray-400">
+                    {front ? `${front.width_cm}×${front.height_cm} cm` : '—'}
+                  </div>
                 </div>
 
-                <div className="mt-2 text-xs text-gray-400">
-                  {p.width_cm}×{p.height_cm} cm
-                </div>
-              </div>
+                <div className="flex gap-2">
+                  {/* Nota */}
+                  <div className="relative">
+                    <button
+                      onClick={() =>
+                        setOpenNote(openNote === p.id ? null : p.id)
+                      }
+                      className="text-gray-400 hover:text-black"
+                      type="button"
+                    >
+                      <StickyNote size={16} />
+                    </button>
 
-              <div className="flex gap-2">
-                {/* Nota */}
-                <div className="relative">
+                    {notes[p.id] && openNote !== p.id && (
+                      <div className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10">
+                        {notes[p.id]}
+                      </div>
+                    )}
+
+                    {openNote === p.id && (
+                      <div
+                        ref={noteRef}
+                        className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-20"
+                      >
+                        <textarea
+                          maxLength={500}
+                          placeholder="Anotação..."
+                          value={notes[p.id] || ''}
+                          onChange={e =>
+                            setNotes(n => ({ ...n, [p.id]: e.target.value }))
+                          }
+                          className="w-full h-24 bg-transparent outline-none resize-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Editar */}
                   <button
-                    onClick={() =>
-                      setOpenNote(openNote === p.id ? null : p.id)
-                    }
+                    onClick={async () => {
+                      try {
+                        const full = await api(`/prints/${p.id}`)
+                        setEditing(full)
+                      } catch (err) {
+                        console.error('Erro ao abrir estampa', err)
+                        alert('Erro ao abrir estampa. Veja o console.')
+                      }
+                    }}
                     className="text-gray-400 hover:text-black"
                     type="button"
                   >
-                    <StickyNote size={16} />
+                    <Pencil size={16} />
                   </button>
-
-                  {notes[p.id] && openNote !== p.id && (
-                    <div className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10">
-                      {notes[p.id]}
-                    </div>
-                  )}
-
-                  {openNote === p.id && (
-                    <div
-                      ref={noteRef}
-                      className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-20"
-                    >
-                      <textarea
-                        maxLength={500}
-                        placeholder="Anotação..."
-                        value={notes[p.id] || ''}
-                        onChange={e =>
-                          setNotes(n => ({ ...n, [p.id]: e.target.value }))
-                        }
-                        className="w-full h-24 bg-transparent outline-none resize-none"
-                      />
-                    </div>
-                  )}
                 </div>
-
-                {/* Editar */}
-                <button
-                  onClick={async () => {
-                    try {
-                      const full = await api(`/prints/${p.id}`)
-                      setEditing(full)
-                    } catch (err) {
-                      console.error('Erro ao abrir estampa', err)
-                      alert('Erro ao abrir estampa. Veja o console.')
-                    }
-                  }}
-                  className="text-gray-400 hover:text-black"
-                  type="button"
-                >
-                  <Pencil size={16} />
-                </button>
               </div>
-            </div>
-          ))}
+            )
+          })}
       </div>
 
       <div className="pt-2">
