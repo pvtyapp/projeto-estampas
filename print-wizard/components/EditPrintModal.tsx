@@ -4,21 +4,19 @@ import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 
-type Slot = {
-  url: string
+type PrintAsset = {
+  id: string
+  public_url: string
   width_cm: number
   height_cm: number
+  quantity: number
 }
 
 type Print = {
   id: string
   name: string
   sku: string
-  slots: {
-    front: Slot
-    back: Slot
-    extra: Slot
-  }
+  assets: PrintAsset[]
 }
 
 type Props = {
@@ -28,41 +26,22 @@ type Props = {
   onDeleted: () => void
 }
 
-const EMPTY_SLOT: Slot = { url: '', width_cm: 0, height_cm: 0 }
-
-const SLOT_LABEL: Record<'front' | 'back' | 'extra', string> = {
-  front: 'Frente (principal)',
-  back: 'Costas (secundária)',
-  extra: 'Extra (opcional)',
-}
-
-function normalizePrint(p: Print): Print {
-  return {
-    ...p,
-    slots: {
-      front: p.slots?.front ?? { ...EMPTY_SLOT },
-      back: p.slots?.back ?? { ...EMPTY_SLOT },
-      extra: p.slots?.extra ?? { ...EMPTY_SLOT },
-    },
-  }
-}
-
 export default function EditPrintModal({
   print,
   onClose,
   onUpdated,
   onDeleted,
 }: Props) {
-  const [local, setLocal] = useState<Print>(() => normalizePrint(print))
+  const [local, setLocal] = useState<Print>(print)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLocal(normalizePrint(print))
+    setLocal(print)
   }, [print])
 
-  function updateSlot(
-    key: 'front' | 'back' | 'extra',
-    field: 'width_cm' | 'height_cm',
+  function updateAsset(
+    id: string,
+    field: 'width_cm' | 'height_cm' | 'quantity',
     value: string,
   ) {
     const parsed = Number(value.replace(',', '.'))
@@ -70,40 +49,27 @@ export default function EditPrintModal({
 
     setLocal(p => ({
       ...p,
-      slots: {
-        ...p.slots,
-        [key]: {
-          ...p.slots[key],
-          [field]: num,
-        },
-      },
+      assets: p.assets.map(a =>
+        a.id === id ? { ...a, [field]: field === 'quantity' ? Math.max(0, Math.round(num)) : num } : a,
+      ),
     }))
   }
 
   async function save() {
     setLoading(true)
     try {
-      const updated = await api(`/prints/${print.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          slots: {
-            front: {
-              width_cm: local.slots.front.width_cm,
-              height_cm: local.slots.front.height_cm,
-            },
-            back: {
-              width_cm: local.slots.back.width_cm,
-              height_cm: local.slots.back.height_cm,
-            },
-            extra: {
-              width_cm: local.slots.extra.width_cm,
-              height_cm: local.slots.extra.height_cm,
-            },
-          },
-        }),
-      })
+      for (const asset of local.assets) {
+        await api(`/print-assets/${asset.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            width_cm: asset.width_cm,
+            height_cm: asset.height_cm,
+            quantity: asset.quantity,
+          }),
+        })
+      }
 
-      onUpdated(updated ?? local)
+      onUpdated(local)
       onClose()
     } catch (err) {
       console.error('Erro ao salvar estampa', err)
@@ -136,50 +102,38 @@ export default function EditPrintModal({
         </div>
 
         <div className="space-y-4">
-          {(['front', 'back', 'extra'] as const).map(k => {
-            const slot = local.slots[k]
+          {local.assets.map(asset => (
+            <div key={asset.id} className="flex gap-4 items-center border rounded-xl p-3">
+              <img
+                src={asset.public_url}
+                className="w-20 h-20 object-contain border rounded"
+                alt="estampa"
+              />
 
-            return (
-              <div
-                key={k}
-                className="flex gap-4 items-center border rounded-xl p-3"
-              >
-                {slot.url ? (
-                  <img
-                    src={slot.url}
-                    className="w-20 h-20 object-contain border rounded"
-                    alt={k}
+              <div className="flex-1 space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    className="input"
+                    placeholder="Largura (cm)"
+                    value={asset.width_cm}
+                    onChange={e => updateAsset(asset.id, 'width_cm', e.target.value)}
                   />
-                ) : (
-                  <div className="w-20 h-20 flex items-center justify-center text-xs text-gray-400 border rounded">
-                    Sem imagem
-                  </div>
-                )}
-
-                <div className="flex-1 space-y-2">
-                  <div className="font-medium">{SLOT_LABEL[k]}</div>
-                  <div className="flex gap-2">
-                    <input
-                      className="input"
-                      placeholder="Largura (horizontal em cm)"
-                      value={slot.width_cm}
-                      onChange={e =>
-                        updateSlot(k, 'width_cm', e.target.value)
-                      }
-                    />
-                    <input
-                      className="input"
-                      placeholder="Altura (vertical em cm)"
-                      value={slot.height_cm}
-                      onChange={e =>
-                        updateSlot(k, 'height_cm', e.target.value)
-                      }
-                    />
-                  </div>
+                  <input
+                    className="input"
+                    placeholder="Altura (cm)"
+                    value={asset.height_cm}
+                    onChange={e => updateAsset(asset.id, 'height_cm', e.target.value)}
+                  />
+                  <input
+                    className="input"
+                    placeholder="Qtd"
+                    value={asset.quantity}
+                    onChange={e => updateAsset(asset.id, 'quantity', e.target.value)}
+                  />
                 </div>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
 
         <div className="flex justify-between items-center pt-2">

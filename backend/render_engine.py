@@ -1,6 +1,7 @@
 import uuid
 import io
-from PIL import Image
+from datetime import datetime, timezone
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from backend.print_utils import load_print_image, cm_to_px
 from backend.print_config import SHEET_WIDTH_CM, SHEET_HEIGHT_CM, SPACING_PX
 from backend.supabase_client import supabase
@@ -18,6 +19,45 @@ class Sheet:
         self.shelves = []
         self.used_height = 0
         self.items = []
+
+
+def trim_transparency(img: Image.Image) -> Image.Image:
+    bg = Image.new(img.mode, img.size, (0, 0, 0, 0))
+    diff = ImageChops.difference(img, bg)
+    bbox = diff.getbbox()
+    return img.crop(bbox) if bbox else img
+
+
+def resize_to_slot(img: Image.Image, w: int, h: int) -> Image.Image:
+    return img.resize((w, h), Image.LANCZOS)
+
+
+def apply_watermark(img: Image.Image, text: str = "PREVIEW • PrintWizard") -> Image.Image:
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    w, h = img.size
+    step = 260
+
+    # repetido no fundo
+    for y in range(0, h, step):
+        for x in range(0, w, step):
+            draw.text((x, y), text, fill=(0, 0, 0, 30))
+
+    # centralizado maior
+    text_w, text_h = draw.textbbox((0, 0), text)[2:]
+    draw.text(
+        ((w - text_w) / 2, (h - text_h) / 2),
+        text,
+        fill=(0, 0, 0, 80),
+    )
+
+    img = Image.alpha_composite(img, overlay)
+
+    # blur leve
+    img = img.filter(ImageFilter.GaussianBlur(radius=1.1))
+
+    return img
 
 
 def pack_items(items, sheet_width, sheet_height):
@@ -87,21 +127,25 @@ def pack_items(items, sheet_width, sheet_height):
     return sheets
 
 
-def process_print_job(payload):
+def process_print_job(job_id: str, payload: dict, preview: bool = False):
     items = []
 
     for it in payload["items"]:
         w = cm_to_px(it["width_cm"])
         h = cm_to_px(it["height_cm"])
 
-        # buscar URL real do print
-        print_row = supabase.table("print_files").select("public_url").eq("print_id", it["print_id"]).eq("type", "front").single().execute().data
-        if not print_row:
+        asset = supabase.table("print_assets") \
+            .select("public_url") \
+            .eq("print_id", it["print_id"]) \
+            .single() \
+            .execute().data
+
+        if not asset:
             raise ValueError(f"Arquivo não encontrado para print {it['print_id']}")
 
         for _ in range(it["qty"]):
             items.append({
-                "print_url": print_row["public_url"],
+                "print_url": asset["public_url"],
                 "w": w,
                 "h": h,
             })
@@ -110,20 +154,26 @@ def process_print_job(payload):
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)
 
     sheets = pack_items(items, sheet_w, sheet_h)
+
     results = []
 
-    for sheet in sheets:
+    for idx, sheet in enumerate(sheets):
         img = Image.new("RGBA", (sheet_w, sheet_h), (255, 255, 255, 0))
 
         for item in sheet.items:
             art = load_print_image(item["print_url"])
+            art = trim_transparency(art)
+            art = resize_to_slot(art, item["w"], item["h"])
 
             if item["rotated"]:
                 art = art.rotate(90, expand=True)
 
             img.alpha_composite(art, dest=(item["x"], item["y"]))
 
-        filename = f"jobs/{uuid.uuid4()}.png"
+        if preview:
+            img = apply_watermark(img)
+
+        filename = f"jobs/{job_id}/{idx}.png"
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
@@ -134,6 +184,20 @@ def process_print_job(payload):
             {"content-type": "image/png"}
         )
 
-        results.append(supabase.storage.from_("jobs-output").get_public_url(filename))
+        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
+
+        supabase.table("generated_files").insert({
+            "job_id": job_id,
+            "page_index": idx,
+            "file_path": filename,
+            "public_url": public_url,
+        }).execute()
+
+        results.append(public_url)
+
+    supabase.table("jobs").update({
+        "status": "done" if not preview else "preview_done",
+        "finished_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", job_id).execute()
 
     return results

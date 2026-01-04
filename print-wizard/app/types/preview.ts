@@ -1,5 +1,6 @@
 export type PreviewItem = {
   print_id: string
+  asset_id: string
   name: string
   sku: string
   qty: number

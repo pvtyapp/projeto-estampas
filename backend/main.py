@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.6")
+app = FastAPI(title="Projeto Estampas API", version="4.7")  # NEW version bump
 
 # =========================
 # CORS
@@ -99,7 +99,7 @@ def root():
     return {"status": "ok"}
 
 # =========================
-# PRINTS
+# PRINTS (inalterado)
 # =========================
 
 @app.get("/prints")
@@ -241,7 +241,30 @@ def upload_print_file(
     return {"url": public_url}
 
 # =========================
-# JOBS
+# PRINT ASSETS UPDATE (NEW)
+# =========================
+
+@app.patch("/print-assets/{asset_id}")  # NEW
+def update_asset(asset_id: str, payload: Dict[str, Any], user=Depends(current_user)):
+    update = {}
+    if "width_cm" in payload:
+        update["width_cm"] = float(payload["width_cm"])
+    if "height_cm" in payload:
+        update["height_cm"] = float(payload["height_cm"])
+    if "quantity" in payload:
+        update["quantity"] = int(payload["quantity"])
+
+    if not update:
+        raise HTTPException(status_code=400, detail="Nada para atualizar")
+
+    res = supabase.table("print_assets").update(update).eq("id", asset_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Asset não encontrado")
+
+    return res.data[0]
+
+# =========================
+# JOBS (original + preview/confirm)
 # =========================
 
 @app.post("/print-jobs")
@@ -252,11 +275,6 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Nenhuma unidade informada.")
     if total_units > 100:
         raise HTTPException(status_code=400, detail="Limite máximo de 100 unidades.")
-
-    try:
-        check_and_consume_limits(supabase, user["sub"], total_units)
-    except LimitExceeded as e:
-        raise HTTPException(status_code=429, detail=str(e))
 
     job_id = str(uuid.uuid4())
 
@@ -275,14 +293,43 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     supabase.table("jobs").insert({
         "id": job_id,
         "user_id": user["sub"],
-        "status": "queued",
+        "status": "preview",  # NEW: começa como preview
         "payload": payload_clean,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
-    queue.enqueue(process_render, job_id, job_timeout=600)
+    queue.enqueue(process_render, job_id, preview=True, job_timeout=600)  # NEW
 
     return {"job_id": job_id, "total_units": total_units}
+
+@app.post("/print-jobs/{job_id}/confirm")  # NEW
+def confirm_print_job(job_id: str, user=Depends(current_user)):
+    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    if job["status"] != "preview":
+        raise HTTPException(status_code=400, detail="Job não está em preview")
+
+    total_units = sum(i["qty"] for i in job["payload"]["items"])
+
+    try:
+        check_and_consume_limits(supabase, user["sub"], total_units)
+    except LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
+
+    supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
+    queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
+
+    return {"status": "confirmed"}
+
+@app.get("/jobs/{job_id}/files")  # NEW
+def get_job_files(job_id: str, user=Depends(current_user)):
+    files = supabase.table("generated_files").select("*").eq("job_id", job_id).execute().data or []
+    return files
+
+# =========================
+# HISTORY (inalterado)
+# =========================
 
 @app.get("/jobs/history")
 def jobs_history(user=Depends(current_user)):
@@ -326,7 +373,7 @@ def cancel_job(job_id: str, user=Depends(current_user)):
     raise HTTPException(status_code=400, detail="Job não pode ser cancelado nesse estado")
 
 # =========================
-# USAGE
+# USAGE (inalterado)
 # =========================
 
 @app.get("/me/usage")

@@ -3,31 +3,31 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { api } from '@/lib/apiClient'
 import { PreviewItem } from '@/app/types/preview'
-import { Print } from '@/app/types/print'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
+
+type PrintAsset = {
+  id: string
+  public_url: string
+  width_cm: number
+  height_cm: number
+  quantity: number
+}
+
+type Print = {
+  id: string
+  name: string
+  sku: string
+  assets: PrintAsset[]
+}
 
 type Props = {
   onPreview: (items: PreviewItem[]) => void
   version: number
 }
 
-const EMPTY_SLOT = { url: '', width_cm: 0, height_cm: 0 }
-
-function normalizePrint(p: any): Print {
-  return {
-    ...p,
-    slots: {
-      front: p?.slots?.front ? { ...p.slots.front } : { ...EMPTY_SLOT },
-      back: p?.slots?.back ? { ...p.slots.back } : { ...EMPTY_SLOT },
-      extra: p?.slots?.extra ? { ...p.slots.extra } : { ...EMPTY_SLOT },
-    },
-  }
-}
-
 export default function Library({ onPreview, version }: Props) {
   const [prints, setPrints] = useState<Print[]>([])
-  const [qty, setQty] = useState<Record<string, number>>({})
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -41,8 +41,8 @@ export default function Library({ onPreview, version }: Props) {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const data = (await api('/prints')) as any[]
-      setPrints(data.map(normalizePrint))
+      const data = (await api('/prints')) as Print[]
+      setPrints(data)
     } catch (err) {
       console.error('Erro ao carregar biblioteca', err)
       alert('Erro ao carregar biblioteca. Veja o console.')
@@ -74,20 +74,19 @@ export default function Library({ onPreview, version }: Props) {
     )
   }, [prints, search])
 
-  function setPrintQty(id: string, value: number) {
-    setQty(q => ({ ...q, [id]: Math.max(0, Number(value) || 0) }))
-  }
-
   function buildPreview() {
     const items: PreviewItem[] = prints
-      .map(p => ({
-        print_id: p.id,
-        name: p.name,
-        sku: p.sku,
-        qty: qty[p.id] || 0,
-        width_cm: p.slots.front.width_cm || 10,
-        height_cm: p.slots.front.height_cm || 10,
-      }))
+      .flatMap(p =>
+        p.assets.map(a => ({
+          print_id: p.id,
+          asset_id: a.id,
+          name: p.name,
+          sku: p.sku,
+          qty: a.quantity,
+          width_cm: a.width_cm || 10,
+          height_cm: a.height_cm || 10,
+        })),
+      )
       .filter(i => i.qty > 0)
 
     if (!items.length) {
@@ -139,16 +138,16 @@ export default function Library({ onPreview, version }: Props) {
                   {p.name} / {p.sku}
                 </div>
 
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <span>Qtd:</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={qty[p.id] || ''}
-                    onChange={e => setPrintQty(p.id, Number(e.target.value))}
-                    className="w-20 border rounded px-2 py-0.5"
-                  />
-                </div>
+                {p.assets.map(a => (
+                  <div key={a.id} className="mt-2 flex items-center gap-2 text-sm">
+                    <img src={a.public_url} className="w-8 h-8 border rounded" />
+                    <span>Qtd:</span>
+                    <span className="font-mono">{a.quantity}</span>
+                    <span className="text-xs text-gray-400">
+                      {a.width_cm}×{a.height_cm}cm
+                    </span>
+                  </div>
+                ))}
               </div>
 
               <div className="flex gap-2">
@@ -193,7 +192,7 @@ export default function Library({ onPreview, version }: Props) {
                   onClick={async () => {
                     try {
                       const full = await api(`/prints/${p.id}`)
-                      setEditing(normalizePrint(full))
+                      setEditing(full)
                     } catch (err) {
                       console.error('Erro ao abrir estampa', err)
                       alert('Erro ao abrir estampa. Veja o console.')
