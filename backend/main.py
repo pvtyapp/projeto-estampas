@@ -31,6 +31,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.options("/{path:path}")
+async def preflight_handler(path: str, request: Request):
+    return {}
+
 # =========================
 # MODELOS
 # =========================
@@ -185,6 +189,28 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
 
     return get_print(print_id, user)
 
+@app.delete("/prints/{print_id}")
+def delete_print(print_id: str, user=Depends(current_user)):
+    supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
+    return {"status": "deleted"}
+
+@app.post("/prints")
+def create_print(payload: PrintCreate, user=Depends(current_user)):
+    data = payload.dict()
+    data.update({
+        "id": str(uuid.uuid4()),
+        "user_id": user["sub"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "width_cm": 0,
+        "height_cm": 0,
+    })
+
+    res = supabase.table("prints").insert(data).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Erro ao criar estampa")
+
+    return res.data[0]
+
 @app.post("/prints/{print_id}/upload")
 def upload_print_file(
     print_id: str,
@@ -206,7 +232,7 @@ def upload_print_file(
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    path = f"{user['sub']}/{print_id}/{type}.png"
+    path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
 
     supabase.storage.from_("prints").upload(path, content, {"content-type": file.content_type})
     public_url = supabase.storage.from_("prints").get_public_url(path)
@@ -216,7 +242,7 @@ def upload_print_file(
     return {"url": public_url}
 
 # =========================
-# PRINT ASSETS UPDATE
+# PRINT ASSETS
 # =========================
 
 @app.patch("/print-assets/{asset_id}")
@@ -239,7 +265,7 @@ def update_asset(asset_id: str, payload: Dict[str, Any], user=Depends(current_us
     return res.data[0]
 
 # =========================
-# JOBS / PREVIEW / CONFIRM
+# JOBS
 # =========================
 
 @app.post("/print-jobs")
@@ -287,7 +313,10 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     total_units = sum(i["qty"] for i in job["payload"]["items"])
 
-    check_and_consume_limits(supabase, user["sub"], total_units)
+    try:
+        check_and_consume_limits(supabase, user["sub"], total_units)
+    except LimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
