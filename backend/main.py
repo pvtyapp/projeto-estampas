@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="5.0")
+app = FastAPI(title="Projeto Estampas API", version="5.2")
 
 # =========================
 # CORS
@@ -92,9 +92,34 @@ def build_slots_from_print(p: dict) -> Dict[str, dict]:
 
 def load_assets(print_id: str):
     return supabase.table("print_assets") \
-        .select("id, public_url, width_cm, height_cm, quantity") \
+        .select("id, public_url, width_cm, height_cm, quantity, slot") \
         .eq("print_id", print_id) \
         .execute().data or []
+
+def upsert_asset(print_id: str, slot: str, public_url: str, width_cm: float, height_cm: float):
+    existing = supabase.table("print_assets") \
+        .select("id") \
+        .eq("print_id", print_id) \
+        .eq("slot", slot) \
+        .execute().data
+
+    if existing:
+        supabase.table("print_assets").update({
+            "public_url": public_url,
+            "width_cm": width_cm,
+            "height_cm": height_cm,
+        }).eq("id", existing[0]["id"]).execute()
+    else:
+        supabase.table("print_assets").insert({
+            "id": str(uuid.uuid4()),
+            "print_id": print_id,
+            "slot": slot,
+            "public_url": public_url,
+            "width_cm": width_cm,
+            "height_cm": height_cm,
+            "quantity": 0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
 
 # =========================
 # ROTAS
@@ -254,6 +279,8 @@ def upload_print_file(
         f"{type}_width_cm": width_cm,
         f"{type}_height_cm": height_cm,
     }).eq("id", print_id).execute()
+
+    upsert_asset(print_id, type, public_url, width_cm, height_cm)
 
     return {"url": public_url}
 
