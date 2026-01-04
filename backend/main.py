@@ -28,12 +28,8 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["*"],
 )
-
-@app.options("/{path:path}")
-async def preflight_handler(path: str, request: Request):
-    return {}
 
 # =========================
 # MODELOS
@@ -210,7 +206,7 @@ def upload_print_file(
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
+    path = f"{user['sub']}/{print_id}/{type}.png"
 
     supabase.storage.from_("prints").upload(path, content, {"content-type": file.content_type})
     public_url = supabase.storage.from_("prints").get_public_url(path)
@@ -291,10 +287,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     total_units = sum(i["qty"] for i in job["payload"]["items"])
 
-    try:
-        check_and_consume_limits(supabase, user["sub"], total_units)
-    except LimitExceeded as e:
-        raise HTTPException(status_code=429, detail=str(e))
+    check_and_consume_limits(supabase, user["sub"], total_units)
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
