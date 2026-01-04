@@ -223,9 +223,6 @@ def upload_print_file(
     height_cm: float = 0,
     user=Depends(current_user)
 ):
-    if type not in ("front", "back", "extra"):
-        raise HTTPException(status_code=400, detail="Tipo inválido")
-
     p = supabase.table("prints") \
         .select("id") \
         .eq("id", print_id) \
@@ -240,37 +237,42 @@ def upload_print_file(
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    asset_id = str(uuid.uuid4())
-    path = f"{user['sub']}/{print_id}/{asset_id}.png"
+    path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
 
     supabase.storage.from_("prints").upload(
         path,
         content,
-        {"content-type": file.content_type or "application/octet-stream"},
+        {
+            "content-type": file.content_type or "application/octet-stream",
+            "upsert": True,
+        },
     )
 
-    public_url = supabase.storage.from_("prints").get_public_url(path)
+    public_url = supabase.storage.from_("prints").get_public_url(path).get("publicUrl")
 
-    supabase.table("prints").update({
-        f"{type}_url": public_url,
-        f"{type}_width_cm": width_cm,
-        f"{type}_height_cm": height_cm,
-    }).eq("id", print_id).execute()
+    asset_id = str(uuid.uuid4())
 
     supabase.table("print_assets").insert({
         "id": asset_id,
         "print_id": print_id,
         "slot": type,
-        "type": print,
+        "type": "print",
         "file_path": path,
         "public_url": public_url,
-        "width_cm": width_cm,
-        "height_cm": height_cm,
+        "width_cm": float(width_cm or 0),
+        "height_cm": float(height_cm or 0),
         "quantity": 1,
         "user_id": user["sub"],
     }).execute()
 
+    supabase.table("prints").update({
+        f"{type}_url": public_url,
+        f"{type}_width_cm": float(width_cm or 0),
+        f"{type}_height_cm": float(height_cm or 0),
+    }).eq("id", print_id).execute()
+
     return {"url": public_url}
+
 
 # =========================
 # PRINT ASSETS
