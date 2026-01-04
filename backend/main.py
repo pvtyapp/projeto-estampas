@@ -246,19 +246,17 @@ def upload_print_file(
     supabase.storage.from_("prints").upload(
         path,
         content,
-        {"content-type": file.content_type},
+        {"content-type": file.content_type or "application/octet-stream"},
     )
 
     public_url = supabase.storage.from_("prints").get_public_url(path)
 
-    # atualiza print principal
     supabase.table("prints").update({
         f"{type}_url": public_url,
         f"{type}_width_cm": width_cm,
         f"{type}_height_cm": height_cm,
     }).eq("id", print_id).execute()
 
-    # cria asset
     supabase.table("print_assets").insert({
         "id": asset_id,
         "print_id": print_id,
@@ -272,7 +270,6 @@ def upload_print_file(
     }).execute()
 
     return {"url": public_url}
-
 
 # =========================
 # PRINT ASSETS
