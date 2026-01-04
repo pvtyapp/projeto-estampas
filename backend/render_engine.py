@@ -158,8 +158,13 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
         img.save(buffer, format="PNG")
         buffer.seek(0)
 
-        supabase.storage.from_("jobs-output").upload(filename, buffer.read(), {"content-type": "image/png", "upsert": "true"})
-        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)["publicUrl"]
+        supabase.storage.from_("jobs-output").upload(
+            filename,
+            buffer.read(),
+            {"content-type": "image/png", "upsert": "true"}
+        )
+
+        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
 
         supabase.table("generated_files").insert({
             "job_id": job_id,

@@ -189,7 +189,7 @@ def upload_print_file(
     path = f"{user['sub']}/{print_id}/{type}.png"
 
     supabase.storage.from_("prints").upload(path, content, {"upsert": "true"})
-    public_url = supabase.storage.from_("prints").get_public_url(path)["publicUrl"]
+    public_url = supabase.storage.from_("prints").get_public_url(path)
 
     supabase.table("print_slots").update({
         "url": public_url,

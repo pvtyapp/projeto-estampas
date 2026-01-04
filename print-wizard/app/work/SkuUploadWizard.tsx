@@ -44,22 +44,32 @@ export default function SkuUploadWizard({ onComplete }: Props) {
     return URL.createObjectURL(file)
   }
 
+  function parseNumber(v: string) {
+    const n = Number(v.replace(',', '.'))
+    return Number.isFinite(n) ? n : null
+  }
+
   async function submit() {
+    const fw = parseNumber(frontW)
+    const fh = parseNumber(frontH)
+    const bw = parseNumber(backW)
+    const bh = parseNumber(backH)
+    const ew = parseNumber(extraW)
+    const eh = parseNumber(extraH)
+
     if (!front) return alert('Envie a frente.')
-    if (!frontW || !frontH) return alert('Informe medidas da frente.')
-    if (hasBack && (!back || !backW || !backH)) return alert('Complete as costas.')
-    if (hasExtra && (!extra || !extraW || !extraH)) return alert('Complete a extra.')
+    if (fw === null || fh === null) return alert('Informe medidas válidas da frente.')
+    if (hasBack && (!back || bw === null || bh === null)) return alert('Complete as costas.')
+    if (hasExtra && (!extra || ew === null || eh === null)) return alert('Complete a extra.')
 
     setLoading(true)
     try {
-      const slots = [
-        { type: 'front', width_cm: Number(frontW.replace(',', '.')), height_cm: Number(frontH.replace(',', '.')) },
-      ]
+      const slots = [{ type: 'front', width_cm: fw, height_cm: fh }]
 
       if (hasBack) {
-        slots.push({ type: 'back', width_cm: Number(backW.replace(',', '.')), height_cm: Number(backH.replace(',', '.')) })
+        slots.push({ type: 'back', width_cm: bw!, height_cm: bh! })
         if (hasExtra) {
-          slots.push({ type: 'extra', width_cm: Number(extraW.replace(',', '.')), height_cm: Number(extraH.replace(',', '.')) })
+          slots.push({ type: 'extra', width_cm: ew!, height_cm: eh! })
         }
       }
 
@@ -78,13 +88,15 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         } = await supabase.auth.getSession()
 
         const API_URL = process.env.NEXT_PUBLIC_API_URL!
-        await fetch(`${API_URL}/prints/${print.id}/upload`, {
+        const res = await fetch(`${API_URL}/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,
           headers: {
             Authorization: `Bearer ${session?.access_token}`,
           },
         })
+
+        if (!res.ok) throw new Error(`Falha ao enviar ${type}`)
       }
 
       await upload(front, 'front')

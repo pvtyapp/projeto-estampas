@@ -57,7 +57,7 @@ def process_render(job_id: str, preview: bool = False):
                 }
             )
 
-            zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)["publicUrl"]
+            zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
 
             supabase.table("jobs").update({
                 "zip_url": zip_url
