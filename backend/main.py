@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.0")
+app = FastAPI(title="Projeto Estampas API", version="6.1")
 
 # =========================
 # CORS
@@ -37,7 +37,7 @@ async def preflight_handler(path: str, request: Request):
 # =========================
 
 class Slot(BaseModel):
-    type: str  # front | back | extra
+    type: str
     width_cm: float
     height_cm: float
     url: Optional[str] = None
@@ -100,11 +100,9 @@ def root():
 @app.get("/prints")
 def list_prints(user=Depends(current_user)):
     prints = supabase.table("prints").select("*").eq("user_id", user["sub"]).order("created_at", desc=True).execute().data or []
-    result = []
     for p in prints:
         p["slots"] = load_slots(p["id"])
-        result.append(p)
-    return result
+    return prints
 
 @app.get("/prints/{print_id}")
 def get_print(print_id: str, user=Depends(current_user)):
@@ -116,10 +114,7 @@ def get_print(print_id: str, user=Depends(current_user)):
 
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
-    try:
-        validate_slots(payload.slots)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    validate_slots(payload.slots)
 
     print_id = str(uuid.uuid4())
 
@@ -132,14 +127,13 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
     }).execute()
 
     for s in payload.slots:
-        supabase.table("print_slots").insert({
-            "id": str(uuid.uuid4()),
+        supabase.table("print_slots").upsert({
             "print_id": print_id,
             "type": s.type,
             "width_cm": s.width_cm,
             "height_cm": s.height_cm,
             "url": s.url,
-        }).execute()
+        }, on_conflict="print_id,type").execute()
 
     return get_print(print_id, user)
 
@@ -149,27 +143,22 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not isinstance(slots, list):
         raise HTTPException(status_code=400, detail="slots inválido")
 
-    try:
-        validate_slots([Slot(**s) for s in slots])
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    supabase.table("print_slots").delete().eq("print_id", print_id).execute()
+    validate_slots([Slot(**s) for s in slots])
 
     for s in slots:
-        supabase.table("print_slots").insert({
-            "id": str(uuid.uuid4()),
+        supabase.table("print_slots").upsert({
             "print_id": print_id,
             "type": s["type"],
             "width_cm": s["width_cm"],
             "height_cm": s["height_cm"],
             "url": s.get("url"),
-        }).execute()
+        }, on_conflict="print_id,type").execute()
 
     return get_print(print_id, user)
 
 @app.delete("/prints/{print_id}")
 def delete_print(print_id: str, user=Depends(current_user)):
+    supabase.table("print_slots").delete().eq("print_id", print_id).execute()
     supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
     return {"status": "deleted"}
 
@@ -178,8 +167,6 @@ def upload_print_file(
     print_id: str,
     file: UploadFile = File(...),
     type: str = "front",
-    width_cm: float = 0,
-    height_cm: float = 0,
     user=Depends(current_user),
 ):
     content = file.file.read()
@@ -189,13 +176,13 @@ def upload_print_file(
     path = f"{user['sub']}/{print_id}/{type}.png"
 
     supabase.storage.from_("prints").upload(path, content, {"upsert": "true"})
-    public_url = supabase.storage.from_("prints").get_public_url(path)
+    public_url = supabase.storage.from_("prints").get_public_url(path)["publicUrl"]
 
-    supabase.table("print_slots").update({
+    supabase.table("print_slots").upsert({
+        "print_id": print_id,
+        "type": type,
         "url": public_url,
-        "width_cm": width_cm,
-        "height_cm": height_cm,
-    }).eq("print_id", print_id).eq("type", type).execute()
+    }, on_conflict="print_id,type").execute()
 
     return {"url": public_url}
 
@@ -222,7 +209,6 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Quantidade inválida")
 
     pieces = []
-
     for item in payload.items:
         p = get_print(item.print_id, user)
         pieces.extend(build_pieces(p, item.qty))
@@ -249,10 +235,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     total_units = len(job["payload"]["pieces"])
 
-    try:
-        check_and_consume_limits(supabase, user["sub"], total_units)
-    except LimitExceeded as e:
-        raise HTTPException(status_code=429, detail=str(e))
+    check_and_consume_limits(supabase, user["sub"], total_units)
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
