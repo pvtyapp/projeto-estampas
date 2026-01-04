@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.9")
+app = FastAPI(title="Projeto Estampas API", version="5.0")
 
 # =========================
 # CORS
@@ -219,6 +219,8 @@ def upload_print_file(
     print_id: str,
     file: UploadFile = File(...),
     type: str = "front",
+    width_cm: float = 0,
+    height_cm: float = 0,
     user=Depends(current_user)
 ):
     p = supabase.table("prints") \
@@ -237,10 +239,21 @@ def upload_print_file(
 
     path = f"{user['sub']}/{print_id}/{type}.png".lstrip("/")
 
-    supabase.storage.from_("prints").upload(path, content, {"content-type": file.content_type})
+    supabase.storage.from_("prints").upload(
+        path,
+        content,
+        {
+            "content-type": file.content_type,
+            "upsert": True,
+        },
+    )
     public_url = supabase.storage.from_("prints").get_public_url(path)
 
-    supabase.table("prints").update({f"{type}_url": public_url}).eq("id", print_id).execute()
+    supabase.table("prints").update({
+        f"{type}_url": public_url,
+        f"{type}_width_cm": width_cm,
+        f"{type}_height_cm": height_cm,
+    }).eq("id", print_id).execute()
 
     return {"url": public_url}
 
