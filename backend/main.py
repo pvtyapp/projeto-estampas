@@ -260,7 +260,8 @@ def upload_print_file(
     supabase.table("print_assets").insert({
         "id": asset_id,
         "print_id": print_id,
-        "type": type,
+        "slot": type,
+        "type": print,
         "file_path": path,
         "public_url": public_url,
         "width_cm": width_cm,
