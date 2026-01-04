@@ -78,10 +78,12 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         body: JSON.stringify({ name, sku, slots }),
       })
 
-      const upload = async (file: File, type: string) => {
+      const upload = async (file: File, type: string, w: number, h: number) => {
         const form = new FormData()
         form.append('file', file)
         form.append('type', type)
+        form.append('width_cm', String(w))
+        form.append('height_cm', String(h))
 
         const {
           data: { session },
@@ -99,9 +101,9 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         if (!res.ok) throw new Error(`Falha ao enviar ${type}`)
       }
 
-      await upload(front, 'front')
-      if (hasBack && back) await upload(back, 'back')
-      if (hasExtra && extra) await upload(extra, 'extra')
+      await upload(front, 'front', fw!, fh!)
+      if (hasBack && back) await upload(back, 'back', bw!, bh!)
+      if (hasExtra && extra) await upload(extra, 'extra', ew!, eh!)
 
       reset()
       onComplete()
@@ -165,7 +167,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   )
 }
 
-/* ---------- helpers ---------- */
+/* helpers */
 
 function Slot({ title, onPick, children, preview, disabled = false }: any) {
   return (
