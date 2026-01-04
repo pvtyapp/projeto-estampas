@@ -1,22 +1,15 @@
 'use client'
 
 import { X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '@/lib/apiClient'
-
-type PrintAsset = {
-  id: string
-  public_url: string
-  width_cm: number
-  height_cm: number
-  quantity: number
-}
 
 type Print = {
   id: string
   name: string
   sku: string
-  assets: PrintAsset[]
+  width_cm: number
+  height_cm: number
 }
 
 type Props = {
@@ -26,136 +19,114 @@ type Props = {
   onDeleted: () => void
 }
 
-export default function EditPrintModal({
-  print,
-  onClose,
-  onUpdated,
-  onDeleted,
-}: Props) {
+export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }: Props) {
   const [local, setLocal] = useState<Print>(print)
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    setLocal(print)
-  }, [print])
-
-  function updateAsset(
-    id: string,
-    field: 'width_cm' | 'height_cm' | 'quantity',
-    value: string,
-  ) {
-    const parsed = Number(value.replace(',', '.'))
-    const num = Number.isFinite(parsed) ? parsed : 0
-
-    setLocal(p => ({
-      ...p,
-      assets: p.assets.map(a =>
-        a.id === id
-          ? {
-              ...a,
-              [field]: field === 'quantity'
-                ? Math.max(0, Math.round(num))
-                : Math.max(0, num),
-            }
-          : a,
-      ),
-    }))
-  }
-
   async function save() {
+    if (!local.width_cm || !local.height_cm) {
+      alert('Informe largura e altura válidas.')
+      return
+    }
+
+    if (loading) return
     setLoading(true)
     try {
-      await Promise.all(
-        local.assets.map(asset =>
-          api(`/print-assets/${asset.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              width_cm: asset.width_cm,
-              height_cm: asset.height_cm,
-              quantity: asset.quantity,
-            }),
-          }),
-        ),
-      )
-
+      await api(`/prints/${local.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          width_cm: Number(local.width_cm) || 0,
+          height_cm: Number(local.height_cm) || 0,
+        }),
+      })
       onUpdated(local)
       onClose()
     } catch (err) {
-      console.error('Erro ao salvar estampa', err)
-      alert('Erro ao salvar. Veja o console.')
+      alert('Erro ao salvar estampa')
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
   async function remove() {
-    if (!confirm('Excluir esta estampa?')) return
+    if (!confirm('Deseja realmente excluir esta estampa?')) return
+    if (loading) return
+    setLoading(true)
     try {
-      await api(`/prints/${print.id}`, { method: 'DELETE' })
+      await api(`/prints/${local.id}`, { method: 'DELETE' })
       onDeleted()
       onClose()
     } catch (err) {
-      console.error('Erro ao excluir estampa', err)
-      alert('Erro ao excluir. Veja o console.')
+      alert('Erro ao excluir')
+      console.error(err)
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999]">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-lg space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-bold">Editar {print.name}</h2>
-          <button onClick={onClose} type="button">
-            <X />
-          </button>
-        </div>
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl relative">
+        <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-black">
+          <X size={18} />
+        </button>
 
-        <div className="space-y-4">
-          {local.assets.map(asset => (
-            <div key={asset.id} className="flex gap-4 items-center border rounded-xl p-3">
-              <img
-                src={asset.public_url}
-                className="w-20 h-20 object-contain border rounded"
-                alt="estampa"
+        <h2 className="text-lg font-semibold mb-4">Editar {local.name}</h2>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm text-gray-600">Nome</label>
+            <input
+              value={local.name}
+              disabled
+              className="w-full border rounded px-3 py-2 bg-gray-100"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-600">SKU</label>
+            <input
+              value={local.sku}
+              disabled
+              className="w-full border rounded px-3 py-2 bg-gray-100"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm text-gray-600">Largura (cm)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={local.width_cm}
+                onChange={e =>
+                  setLocal(p => ({ ...p, width_cm: Number(e.target.value) || 0 }))
+                }
+                className="w-full border rounded px-3 py-2"
               />
-
-              <div className="flex-1 space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="input"
-                    placeholder="Largura (cm)"
-                    value={String(asset.width_cm ?? '')}
-                    onChange={e => updateAsset(asset.id, 'width_cm', e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="input"
-                    placeholder="Altura (cm)"
-                    value={String(asset.height_cm ?? '')}
-                    onChange={e => updateAsset(asset.id, 'height_cm', e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    step="1"
-                    className="input"
-                    placeholder="Qtd"
-                    value={String(asset.quantity ?? '')}
-                    onChange={e => updateAsset(asset.id, 'quantity', e.target.value)}
-                  />
-                </div>
-              </div>
             </div>
-          ))}
+
+            <div>
+              <label className="text-sm text-gray-600">Altura (cm)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={local.height_cm}
+                onChange={e =>
+                  setLocal(p => ({ ...p, height_cm: Number(e.target.value) || 0 }))
+                }
+                className="w-full border rounded px-3 py-2"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex justify-between items-center mt-6">
           <button
             onClick={remove}
+            disabled={loading}
             className="text-red-600 hover:underline text-sm"
-            type="button"
           >
             Excluir estampa
           </button>
@@ -163,18 +134,17 @@ export default function EditPrintModal({
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="border rounded-xl px-4 py-2 hover:bg-gray-100"
-              type="button"
+              disabled={loading}
+              className="px-4 py-2 border rounded"
             >
               Cancelar
             </button>
             <button
               onClick={save}
               disabled={loading}
-              className="bg-black text-white px-4 py-2 rounded-xl disabled:opacity-50"
-              type="button"
+              className="px-4 py-2 bg-black text-white rounded"
             >
-              {loading ? 'Salvando…' : 'Salvar'}
+              Salvar
             </button>
           </div>
         </div>

@@ -1,9 +1,24 @@
+// app/types/preview.ts
+
 export type PreviewItem = {
   print_id: string
-  asset_id: string
-  name: string
-  sku: string
   qty: number
-  width_cm: number
-  height_cm: number
 }
+
+export type PreviewJobRequest = {
+  items: PreviewItem[]
+}
+
+export type GeneratedFile = {
+  id: string
+  public_url: string
+  page_index: number
+}
+
+export type JobStatus =
+  | 'preview'
+  | 'preview_done'
+  | 'queued'
+  | 'processing'
+  | 'done'
+  | 'error'

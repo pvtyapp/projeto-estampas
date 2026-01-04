@@ -117,14 +117,19 @@ def process_print_job(job_id: str, payload: dict, preview: bool = False):
         w = cm_to_px(it["width_cm"])
         h = cm_to_px(it["height_cm"])
 
-        q = supabase.table("print_assets").select("public_url").eq("id", it["asset_id"]).single().execute()
-        asset = q.data
+        # buscar imagem pelo print_id
+        q = supabase.table("prints").select("front_url").eq("id", it["print_id"]).single().execute()
+        p = q.data
 
-        if not asset:
-            raise ValueError(f"Asset não encontrado: {it['asset_id']}")
+        if not p or not p.get("front_url"):
+            raise ValueError(f"Print sem imagem: {it['print_id']}")
 
         for _ in range(it["qty"]):
-            items.append({"print_url": asset["public_url"], "w": w, "h": h})
+            items.append({
+                "print_url": p["front_url"],
+                "w": w,
+                "h": h
+            })
 
     sheet_w = cm_to_px(SHEET_WIDTH_CM)
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)

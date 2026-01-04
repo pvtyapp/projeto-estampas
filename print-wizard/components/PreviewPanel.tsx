@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
-import { PreviewItem } from '@/app/types/preview'
+
+type PreviewItem = {
+  print_id: string
+  qty: number
+}
 
 type Job = {
   id: string
@@ -51,10 +55,7 @@ export default function PreviewPanel(props: Props) {
         body: JSON.stringify({
           items: items.map(i => ({
             print_id: i.print_id,
-            asset_id: i.asset_id,
             qty: i.qty,
-            width_cm: i.width_cm,
-            height_cm: i.height_cm,
           })),
         }),
       })
@@ -96,8 +97,8 @@ export default function PreviewPanel(props: Props) {
 
         <div className="border rounded p-3 max-h-[240px] overflow-y-auto space-y-2">
           {props.items.map(i => (
-            <div key={`${i.print_id}-${i.asset_id}`} className="flex justify-between text-sm">
-              <span>{i.name} / {i.sku}</span>
+            <div key={i.print_id} className="flex justify-between text-sm">
+              <span>{i.print_id}</span>
               <span className="font-medium">{i.qty}x</span>
             </div>
           ))}

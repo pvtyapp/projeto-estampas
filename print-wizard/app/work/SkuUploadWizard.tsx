@@ -63,12 +63,10 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         }),
       })
 
-      const upload = async (file: File, type: string, w: string, h: string) => {
+      const upload = async (file: File, type: string) => {
         const form = new FormData()
         form.append('file', file)
         form.append('type', type)
-        form.append('width_cm', w.replace(',', '.'))
-        form.append('height_cm', h.replace(',', '.'))
 
         const {
           data: { session },
@@ -86,9 +84,9 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         })
       }
 
-      await upload(front, 'front', frontW, frontH)
-      if (hasBack && back) await upload(back, 'back', backW, backH)
-      if (hasExtra && extra) await upload(extra, 'extra', extraW, extraH)
+      await upload(front, 'front')
+      if (hasBack && back) await upload(back, 'back')
+      if (hasExtra && extra) await upload(extra, 'extra')
 
       reset()
       onComplete()

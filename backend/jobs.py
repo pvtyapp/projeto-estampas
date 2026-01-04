@@ -8,17 +8,21 @@ logger = logging.getLogger(__name__)
 
 
 def process_render(job_id: str, preview: bool = False):
-    job_res = supabase.table("jobs").select("*").eq("id", job_id).execute()
-    job = job_res.data[0] if job_res.data else None
+    job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+    job = job_res.data
 
     if not job:
+        logger.warning("Job não encontrado: %s", job_id)
         return
 
+    # valida estado do job
     if preview:
         if job["status"] != "preview":
+            logger.info("Job %s ignorado (status=%s, preview=True)", job_id, job["status"])
             return
     else:
         if job["status"] != "queued":
+            logger.info("Job %s ignorado (status=%s, preview=False)", job_id, job["status"])
             return
 
     if not preview:
@@ -59,5 +63,13 @@ def process_render(job_id: str, preview: bool = False):
         supabase.table("jobs").update({
             "status": "error",
             "error": str(e),
+            "finished_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", job_id).execute()
+        return
+
+    # finalização
+    if not preview:
+        supabase.table("jobs").update({
+            "status": "done",
             "finished_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()

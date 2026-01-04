@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="4.8")
+app = FastAPI(title="Projeto Estampas API", version="4.9")
 
 # =========================
 # CORS
@@ -42,13 +42,13 @@ async def preflight_handler(path: str, request: Request):
 class PrintCreate(BaseModel):
     name: str
     sku: str
+    width_cm: float
+    height_cm: float
     is_composite: bool = False
 
 class PrintJobItem(BaseModel):
     print_id: str
     qty: int
-    width_cm: float
-    height_cm: float
 
 class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
@@ -153,6 +153,21 @@ def get_print(print_id: str, user=Depends(current_user)):
 
     return p
 
+@app.post("/prints")
+def create_print(payload: PrintCreate, user=Depends(current_user)):
+    data = payload.dict()
+    data.update({
+        "id": str(uuid.uuid4()),
+        "user_id": user["sub"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    res = supabase.table("prints").insert(data).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Erro ao criar estampa")
+
+    return res.data[0]
+
 @app.patch("/prints/{print_id}")
 def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
     exists = supabase.table("prints") \
@@ -165,27 +180,32 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not exists:
         raise HTTPException(status_code=404, detail="Print não encontrado")
 
-    slots = payload.get("slots")
-    if not isinstance(slots, dict):
-        raise HTTPException(status_code=400, detail="Slots inválidos")
-
     update = {}
-    for key in ("front","back","extra"):
-        slot = slots.get(key)
-        if not isinstance(slot, dict):
-            continue
 
-        if "width_cm" in slot:
-            update[f"{key}_width_cm"] = float(slot.get("width_cm") or 0)
-        if "height_cm" in slot:
-            update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
+    if "width_cm" in payload:
+        update["width_cm"] = float(payload["width_cm"])
+    if "height_cm" in payload:
+        update["height_cm"] = float(payload["height_cm"])
 
-    if update:
-        supabase.table("prints") \
-            .update(update) \
-            .eq("id", print_id) \
-            .eq("user_id", user["sub"]) \
-            .execute()
+    slots = payload.get("slots")
+    if isinstance(slots, dict):
+        for key in ("front","back","extra"):
+            slot = slots.get(key)
+            if not isinstance(slot, dict):
+                continue
+            if "width_cm" in slot:
+                update[f"{key}_width_cm"] = float(slot.get("width_cm") or 0)
+            if "height_cm" in slot:
+                update[f"{key}_height_cm"] = float(slot.get("height_cm") or 0)
+
+    if not update:
+        raise HTTPException(status_code=400, detail="Nada para atualizar")
+
+    supabase.table("prints") \
+        .update(update) \
+        .eq("id", print_id) \
+        .eq("user_id", user["sub"]) \
+        .execute()
 
     return get_print(print_id, user)
 
@@ -193,23 +213,6 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
 def delete_print(print_id: str, user=Depends(current_user)):
     supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
     return {"status": "deleted"}
-
-@app.post("/prints")
-def create_print(payload: PrintCreate, user=Depends(current_user)):
-    data = payload.dict()
-    data.update({
-        "id": str(uuid.uuid4()),
-        "user_id": user["sub"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "width_cm": 0,
-        "height_cm": 0,
-    })
-
-    res = supabase.table("prints").insert(data).execute()
-    if not res.data:
-        raise HTTPException(status_code=500, detail="Erro ao criar estampa")
-
-    return res.data[0]
 
 @app.post("/prints/{print_id}/upload")
 def upload_print_file(
@@ -277,25 +280,35 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     if total_units > 100:
         raise HTTPException(status_code=400, detail="Limite máximo de 100 unidades.")
 
-    job_id = str(uuid.uuid4())
+    print_ids = [i.print_id for i in payload.items]
 
-    payload_clean = {
-        "items": [
-            {
-                "print_id": str(i.print_id),
-                "qty": int(i.qty),
-                "width_cm": float(i.width_cm),
-                "height_cm": float(i.height_cm),
-            }
-            for i in payload.items
-        ]
-    }
+    prints = supabase.table("prints") \
+        .select("id,width_cm,height_cm") \
+        .in_("id", print_ids) \
+        .execute().data or []
+
+    dim_map = {p["id"]: p for p in prints}
+
+    items = []
+    for i in payload.items:
+        p = dim_map.get(i.print_id)
+        if not p:
+            raise HTTPException(status_code=400, detail=f"Print {i.print_id} inválido")
+
+        items.append({
+            "print_id": i.print_id,
+            "qty": i.qty,
+            "width_cm": p["width_cm"],
+            "height_cm": p["height_cm"],
+        })
+
+    job_id = str(uuid.uuid4())
 
     supabase.table("jobs").insert({
         "id": job_id,
         "user_id": user["sub"],
         "status": "preview",
-        "payload": payload_clean,
+        "payload": {"items": items},
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
