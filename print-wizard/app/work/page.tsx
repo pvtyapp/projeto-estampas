@@ -65,8 +65,9 @@ export default function WorkPage() {
 
         {/* PREVIEW CENTRALIZADO EMBAIXO */}
         <section className="bg-white rounded-2xl shadow p-6">
-          {previewItems ? (
+          {previewItems && !selectedJob ? (
             <PreviewPanel
+              key="preview"
               items={previewItems}
               onJobCreated={jobId => {
                 setSelectedJob(jobId)
@@ -75,7 +76,10 @@ export default function WorkPage() {
               onReset={() => setPreviewItems(null)}
             />
           ) : selectedJob ? (
-            <PreviewPanel jobId={selectedJob} />
+            <PreviewPanel
+              key={selectedJob}
+              jobId={selectedJob}
+            />
           ) : (
             <div className="text-gray-400 text-sm text-center">
               Preencha as quantidades e clique em “Gerar folhas”.
