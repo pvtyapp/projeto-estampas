@@ -41,7 +41,14 @@ def process_render(job_id: str, preview: bool = False):
         # renderiza usando as peças já expandidas
         urls = process_print_job(job_id, pieces, preview=preview)
 
-        if not preview:
+        if preview:
+            supabase.table("jobs").update({
+                "status": "preview_done",
+                "finished_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", job_id).execute()
+
+        else:
+            # cria ZIP com os arquivos finais
             zip_bytes = create_zip_from_urls(urls)
             if hasattr(zip_bytes, "getvalue"):
                 zip_bytes = zip_bytes.getvalue()
@@ -60,7 +67,9 @@ def process_render(job_id: str, preview: bool = False):
             zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
 
             supabase.table("jobs").update({
-                "zip_url": zip_url
+                "zip_url": zip_url,
+                "status": "done",
+                "finished_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", job_id).execute()
 
     except Exception as e:
@@ -72,10 +81,3 @@ def process_render(job_id: str, preview: bool = False):
             "finished_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
         return
-
-    # finalização
-    if not preview:
-        supabase.table("jobs").update({
-            "status": "done",
-            "finished_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", job_id).execute()

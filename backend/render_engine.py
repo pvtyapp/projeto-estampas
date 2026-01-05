@@ -109,7 +109,8 @@ def pack_items(items, sheet_width, sheet_height):
 
 
 def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
-    supabase.table("generated_files").delete().eq("job_id", job_id).execute()
+    # Remove só arquivos do mesmo tipo
+    supabase.table("generated_files").delete().eq("job_id", job_id).eq("preview", preview).execute()
 
     items = []
 
@@ -153,7 +154,8 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
         if preview:
             img = apply_watermark(img)
 
-        filename = f"jobs/{job_id}/{idx}.png"
+        filename = f"jobs/{job_id}/{ 'preview' if preview else 'final' }/{idx}.png"
+
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
         buffer.seek(0)
@@ -172,6 +174,7 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
             "file_path": filename,
             "public_url": public_url,
             "preview": preview,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
 
         results.append(public_url)
