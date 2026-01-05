@@ -123,7 +123,7 @@ export default function Library({ onPreview, version }: Props) {
         className="w-full border rounded px-3 py-1 text-sm"
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[380px] overflow-y-auto pr-2">
+      <div className="grid grid-cols-1 gap-2 max-h-[380px] overflow-y-auto pr-2">
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
         {!loading &&
@@ -135,37 +135,37 @@ export default function Library({ onPreview, version }: Props) {
             return (
               <div
                 key={p.id}
-                className="border rounded p-3 flex justify-between items-start relative"
+                className="border rounded px-3 py-2 flex items-center justify-between gap-3"
               >
-                <div>
+                <div className="flex-1">
                   <div className="text-sm font-medium">
                     {p.name} / {p.sku}
                   </div>
 
-                  <div className="mt-2 text-xs text-gray-400 space-y-0.5">
+                  <div className="text-xs text-gray-400 flex gap-3">
                     {front && (
-                      <div>Frente: {front.width_cm}×{front.height_cm} cm</div>
+                      <span>F: {front.width_cm}×{front.height_cm}</span>
                     )}
                     {back && (
-                      <div>Costas: {back.width_cm}×{back.height_cm} cm</div>
+                      <span>C: {back.width_cm}×{back.height_cm}</span>
                     )}
                     {extra && (
-                      <div>Extra: {extra.width_cm}×{extra.height_cm} cm</div>
+                      <span>E: {extra.width_cm}×{extra.height_cm}</span>
                     )}
                   </div>
+                </div>
 
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-16 border rounded px-2 py-0.5 text-xs"
-                      value={qty[p.id] ?? 0}
-                      onChange={e =>
-                        setQty(q => ({ ...q, [p.id]: Number(e.target.value) }))
-                      }
-                    />
-                    <span className="text-xs text-gray-400">QTY</span>
-                  </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    className="w-14 border rounded px-2 py-0.5 text-xs text-center"
+                    value={qty[p.id] ?? 0}
+                    onChange={e =>
+                      setQty(q => ({ ...q, [p.id]: Number(e.target.value) }))
+                    }
+                  />
+                  <span className="text-xs text-gray-400">QTY</span>
                 </div>
 
                 <div className="flex gap-2">
