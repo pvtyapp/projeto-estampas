@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PYTHONPATH=/app
 
-CMD ["python", "-m", "rq", "worker", "default"]
+CMD ["rq", "worker", "default"]
