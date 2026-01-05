@@ -22,6 +22,8 @@ type Print = {
 type PreviewItem = {
   print_id: string
   qty: number
+  name?: string
+  sku?: string
 }
 
 type Props = {
@@ -82,7 +84,15 @@ export default function Library({ onPreview, version }: Props) {
   function buildPreview() {
     const items: PreviewItem[] = Object.entries(qty)
       .filter(([, v]) => v > 0)
-      .map(([id, v]) => ({ print_id: id, qty: v }))
+      .map(([id, v]) => {
+        const p = prints.find(p => p.id === id)
+        return {
+          print_id: id,
+          qty: v,
+          name: p?.name,
+          sku: p?.sku,
+        }
+      })
 
     if (!items.length) {
       alert('Informe ao menos um QTY maior que zero.')
@@ -169,7 +179,6 @@ export default function Library({ onPreview, version }: Props) {
                 </div>
 
                 <div className="flex gap-2">
-                  {/* Nota */}
                   <div className="relative">
                     <button
                       onClick={() =>
@@ -205,7 +214,6 @@ export default function Library({ onPreview, version }: Props) {
                     )}
                   </div>
 
-                  {/* Editar */}
                   <button
                     onClick={async () => {
                       try {
