@@ -203,14 +203,18 @@ export default function PreviewPanel(props: Props) {
             {files.length} folhas geradas — isto é apenas uma prévia.
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-h-[300px] overflow-y-auto">
-            {files.map(f => (
-              <img
-                key={f.id}
-                src={f.public_url}
-                className="border rounded shadow pointer-events-none select-none"
-                alt="preview"
-              />
+          {/* MINIMAPA */}
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 max-h-[240px] overflow-y-auto">
+            {files.map((f, i) => (
+              <div key={f.id} className="relative border rounded overflow-hidden text-xs">
+                <img src={f.public_url} className="w-full opacity-80" alt="preview" />
+                <div className="absolute inset-0 flex items-center justify-center text-white font-bold bg-black/30">
+                  PRÉVIA
+                </div>
+                <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1 rounded text-[10px]">
+                  {i + 1}
+                </div>
+              </div>
             ))}
           </div>
 
