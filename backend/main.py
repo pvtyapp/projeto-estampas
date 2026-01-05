@@ -276,3 +276,25 @@ def get_job(job_id: str, user=Depends(current_user)):
 def get_job_files(job_id: str, user=Depends(current_user)):
     files = supabase.table("job_files").select("*").eq("job_id", job_id).order("page_index").execute().data or []
     return files
+
+
+@app.get("/me/usage")
+def get_my_usage(user=Depends(current_user)):
+    # Busca limites do usuário
+    row = supabase.table("usage").select("*").eq("user_id", user["sub"]).single().execute().data
+
+    if not row:
+        return {
+            "used": 0,
+            "limit": 100,
+            "remaining": 100,
+        }
+
+    used = row.get("used", 0)
+    limit = row.get("limit", 100)
+
+    return {
+        "used": used,
+        "limit": limit,
+        "remaining": max(limit - used, 0),
+    }
