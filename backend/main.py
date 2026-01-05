@@ -280,21 +280,23 @@ def get_job_files(job_id: str, user=Depends(current_user)):
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    # Busca limites do usuário
-    row = supabase.table("usage").select("*").eq("user_id", user["sub"]).single().execute().data
+    try:
+        res = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute()
+        rows = res.data or []
 
-    if not row:
+        used = sum((r.get("amount") or 0) for r in rows)
+        limit = 100  # depois ligamos isso ao plano
+
+        return {
+            "used": used,
+            "limit": limit,
+            "remaining": max(limit - used, 0),
+        }
+
+    except Exception as e:
+        print("ERRO /me/usage:", e)
         return {
             "used": 0,
             "limit": 100,
             "remaining": 100,
         }
-
-    used = row.get("used", 0)
-    limit = row.get("limit", 100)
-
-    return {
-        "used": used,
-        "limit": limit,
-        "remaining": max(limit - used, 0),
-    }
