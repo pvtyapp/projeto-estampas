@@ -224,6 +224,7 @@ def build_pieces(print_obj, qty):
             })
     return pieces
 
+
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     total = sum(max(i.qty, 0) for i in payload.items)
@@ -246,24 +247,51 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     }).execute()
 
     queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
+
     return {"job_id": job_id, "total_units": total}
+
 
 @app.post("/print-jobs/{job_id}/confirm")
 def confirm_print_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job or job["status"] != "preview":
-        raise HTTPException(status_code=400, detail="Job inválido")
+    job = supabase.table("jobs") \
+        .select("*") \
+        .eq("id", job_id) \
+        .eq("user_id", user["sub"]) \
+        .single() \
+        .execute().data
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+
+    if job["status"] != "preview":
+        raise HTTPException(status_code=400, detail="Job não está em preview")
 
     total_units = len(job["payload"]["pieces"])
 
+    # Consome limite
     try:
         check_and_consume_limits(supabase, user["sub"], total_units)
     except LimitExceeded as e:
         raise HTTPException(status_code=429, detail=str(e))
 
+    # Registra uso
+    supabase.table("usage").insert({
+        "id": str(uuid.uuid4()),
+        "user_id": user["sub"],
+        "kind": "print",
+        "amount": total_units,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+    # Atualiza job e enfileira processamento final
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
+
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
-    return {"status": "confirmed"}
+
+    return {
+        "status": "confirmed",
+        "total_units": total_units
+    }
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
@@ -300,3 +328,20 @@ def get_my_usage(user=Depends(current_user)):
             "limit": 100,
             "remaining": 100,
         }
+
+
+@app.get("/me/plan")
+def get_my_plan(user=Depends(current_user)):
+    sub = user["sub"]
+
+    profile = supabase.table("profiles").select("*").eq("id", sub).single().execute().data
+    if not profile:
+        return {"name": "Free", "limit": 100, "renews_at": None}
+
+    plan = supabase.table("plans").select("*").eq("id", profile["plan_id"]).single().execute().data
+
+    return {
+        "name": plan["name"] if plan else "Free",
+        "limit": plan["monthly_limit"] if plan else 100,
+        "renews_at": profile.get("renews_at"),
+    }
