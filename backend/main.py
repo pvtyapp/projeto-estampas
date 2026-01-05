@@ -212,7 +212,7 @@ def upload_print_file(
 # JOBS
 # =========================
 
-def build_pieces(print_obj, qty):
+def build_pieces(print_obj, qty: int):
     pieces = []
     for _ in range(qty):
         for s in print_obj["slots"]:
@@ -228,8 +228,12 @@ def build_pieces(print_obj, qty):
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     total = sum(max(i.qty, 0) for i in payload.items)
-    if total <= 0 or total > 100:
+
+    if total <= 0:
         raise HTTPException(status_code=400, detail="Quantidade inválida")
+
+    if total > 100:
+        raise HTTPException(status_code=400, detail="Limite máximo por job é 100 unidades")
 
     pieces = []
     for item in payload.items:
@@ -253,6 +257,12 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 
 @app.post("/print-jobs/{job_id}/confirm")
 def confirm_print_job(job_id: str, user=Depends(current_user)):
+    # Valida UUID
+    try:
+        uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="job_id inválido")
+
     job = supabase.table("jobs") \
         .select("*") \
         .eq("id", job_id) \
@@ -264,11 +274,13 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
     if job["status"] != "preview":
-        raise HTTPException(status_code=400, detail="Job não está em preview")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job não está em preview (status atual: {job['status']})"
+        )
 
     total_units = len(job["payload"]["pieces"])
 
-    # Consome limite
     try:
         check_and_consume_limits(supabase, user["sub"], total_units)
     except LimitExceeded as e:
@@ -283,15 +295,20 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
-    # Atualiza job e enfileira processamento final
-    supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
+    # Atualiza status
+    supabase.table("jobs") \
+        .update({"status": "queued"}) \
+        .eq("id", job_id) \
+        .execute()
 
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
     return {
         "status": "confirmed",
+        "job_id": job_id,
         "total_units": total_units
     }
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
