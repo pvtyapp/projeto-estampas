@@ -101,8 +101,8 @@ export default function Library({ onPreview, version }: Props) {
     }, 200)
   }
 
-  function getFrontSlot(p: Print) {
-    return p.slots.find(s => s.type === 'front')
+  function getSlot(p: Print, type: Slot['type']) {
+    return p.slots.find(s => s.type === type)
   }
 
   return (
@@ -128,7 +128,9 @@ export default function Library({ onPreview, version }: Props) {
 
         {!loading &&
           filtered.map(p => {
-            const front = getFrontSlot(p)
+            const front = getSlot(p, 'front')
+            const back = getSlot(p, 'back')
+            const extra = getSlot(p, 'extra')
 
             return (
               <div
@@ -140,8 +142,16 @@ export default function Library({ onPreview, version }: Props) {
                     {p.name} / {p.sku}
                   </div>
 
-                  <div className="mt-2 text-xs text-gray-400">
-                    {front ? `${front.width_cm}×${front.height_cm} cm` : '—'}
+                  <div className="mt-2 text-xs text-gray-400 space-y-0.5">
+                    {front && (
+                      <div>Frente: {front.width_cm}×{front.height_cm} cm</div>
+                    )}
+                    {back && (
+                      <div>Costas: {back.width_cm}×{back.height_cm} cm</div>
+                    )}
+                    {extra && (
+                      <div>Extra: {extra.width_cm}×{extra.height_cm} cm</div>
+                    )}
                   </div>
 
                   <div className="mt-2 flex items-center gap-2">

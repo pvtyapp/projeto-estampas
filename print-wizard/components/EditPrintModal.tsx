@@ -113,6 +113,11 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
           {front && (
             <div>
               <div className="font-medium text-sm mb-1">Frente</div>
+
+              {front.url && (
+                <img src={front.url} className="max-h-24 object-contain border rounded mb-2" />
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="number"
@@ -137,6 +142,11 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
           {back && (
             <div>
               <div className="font-medium text-sm mb-1">Costas</div>
+
+              {back.url && (
+                <img src={back.url} className="max-h-24 object-contain border rounded mb-2" />
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="number"
@@ -159,6 +169,11 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
           {extra && (
             <div>
               <div className="font-medium text-sm mb-1">Extra</div>
+
+              {extra.url && (
+                <img src={extra.url} className="max-h-24 object-contain border rounded mb-2" />
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="number"
