@@ -38,39 +38,39 @@ def process_render(job_id: str, preview: bool = False):
         if not pieces or not isinstance(pieces, list):
             raise ValueError("Payload inválido: 'pieces' ausente ou inválido")
 
-        # renderiza usando as peças já expandidas
         urls = process_print_job(job_id, pieces, preview=preview)
 
         if preview:
+            # 👉 Marca preview como pronto
             supabase.table("jobs").update({
                 "status": "preview_done",
                 "finished_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", job_id).execute()
 
-        else:
-            # cria ZIP com os arquivos finais
-            zip_bytes = create_zip_from_urls(urls)
-            if hasattr(zip_bytes, "getvalue"):
-                zip_bytes = zip_bytes.getvalue()
+            logger.info("Preview finalizado para job %s", job_id)
+            return
 
-            zip_name = f"{job_id}.zip"
+        # ==========================
+        # PROCESSAMENTO FINAL
+        # ==========================
 
-            supabase.storage.from_("jobs-output").upload(
-                zip_name,
-                zip_bytes,
-                {
-                    "content-type": "application/zip",
-                    "upsert": "true",
-                }
-            )
+        zip_bytes = create_zip_from_urls(urls)
+        if hasattr(zip_bytes, "getvalue"):
+            zip_bytes = zip_bytes.getvalue()
 
-            zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
+        zip_name = f"jobs/{job_id}/final.zip"
 
-            supabase.table("jobs").update({
-                "zip_url": zip_url,
-                "status": "done",
-                "finished_at": datetime.now(timezone.utc).isoformat()
-            }).eq("id", job_id).execute()
+        supabase.storage.from_("jobs-output").upload(
+            zip_name,
+            zip_bytes,
+            {"content-type": "application/zip", "upsert": "true"}
+        )
+
+        zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
+
+        supabase.table("jobs").update({
+            "zip_url": zip_url
+        }).eq("id", job_id).execute()
 
     except Exception as e:
         logger.exception("Erro ao processar job %s", job_id)
@@ -81,3 +81,11 @@ def process_render(job_id: str, preview: bool = False):
             "finished_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
         return
+
+    # Finalização do job final
+    supabase.table("jobs").update({
+        "status": "done",
+        "finished_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", job_id).execute()
+
+    logger.info("Job %s finalizado com sucesso", job_id)
