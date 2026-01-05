@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.4")
+app = FastAPI(title="Projeto Estampas API", version="6.5")
 
 # =========================
 # CORS
@@ -86,7 +86,7 @@ def load_slots(print_id: str):
     return supabase.table("print_slots").select("*").eq("print_id", print_id).execute().data or []
 
 # =========================
-# ROTAS
+# ROOT
 # =========================
 
 @app.get("/")
@@ -121,27 +121,23 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
 
     print_id = str(uuid.uuid4())
 
-    try:
-        supabase.table("prints").insert({
-            "id": print_id,
-            "user_id": user["sub"],
-            "name": payload.name,
-            "sku": payload.sku,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
+    supabase.table("prints").insert({
+        "id": print_id,
+        "user_id": user["sub"],
+        "name": payload.name,
+        "sku": payload.sku,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
 
-        for s in payload.slots:
-            supabase.table("print_slots").upsert({
-                "id": str(uuid.uuid4()),
-                "print_id": print_id,
-                "type": s.type,
-                "width_cm": s.width_cm,
-                "height_cm": s.height_cm,
-                "url": s.url,
-            }, on_conflict="print_id,type").execute()
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao criar print: {e}")
+    for s in payload.slots:
+        supabase.table("print_slots").upsert({
+            "id": str(uuid.uuid4()),
+            "print_id": print_id,
+            "type": s.type,
+            "width_cm": s.width_cm,
+            "height_cm": s.height_cm,
+            "url": s.url,
+        }, on_conflict="print_id,type").execute()
 
     return get_print(print_id, user)
 
@@ -151,10 +147,7 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     if not isinstance(slots, list):
         raise HTTPException(status_code=400, detail="slots inválido")
 
-    try:
-        validate_slots([Slot(**s) for s in slots])
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    validate_slots([Slot(**s) for s in slots])
 
     supabase.table("print_slots").delete().eq("print_id", print_id).execute()
 
@@ -189,11 +182,7 @@ def upload_print_file(
     if not content:
         raise HTTPException(status_code=400, detail="Arquivo vazio")
 
-    if width_cm <= 0 or height_cm <= 0:
-        raise HTTPException(status_code=400, detail="width_cm e height_cm devem ser > 0")
-
     path = f"{user['sub']}/{print_id}/{type}.png"
-
     supabase.storage.from_("prints").upload(path, content, {"upsert": "true"})
     public_url = supabase.storage.from_("prints").get_public_url(path)
 
@@ -213,32 +202,25 @@ def upload_print_file(
 # =========================
 
 def build_pieces(print_obj, qty: int):
-    pieces = []
-    for _ in range(qty):
-        for s in print_obj["slots"]:
-            pieces.append({
-                "width": s["width_cm"],
-                "height": s["height_cm"],
-                "type": s["type"],
-                "print_id": print_obj["id"],
-            })
-    return pieces
+    return [
+        {"width": s["width_cm"], "height": s["height_cm"], "type": s["type"], "print_id": print_obj["id"]}
+        for _ in range(qty)
+        for s in print_obj["slots"]
+    ]
 
+@app.get("/jobs/history")
+def list_job_history(user=Depends(current_user)):
+    return supabase.table("jobs").select("id,status,created_at").eq("user_id", user["sub"]).order("created_at", desc=True).limit(50).execute().data or []
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     total = sum(max(i.qty, 0) for i in payload.items)
-
-    if total <= 0:
+    if total <= 0 or total > 100:
         raise HTTPException(status_code=400, detail="Quantidade inválida")
-
-    if total > 100:
-        raise HTTPException(status_code=400, detail="Limite máximo por job é 100 unidades")
 
     pieces = []
     for item in payload.items:
-        p = get_print(item.print_id, user)
-        pieces.extend(build_pieces(p, item.qty))
+        pieces.extend(build_pieces(get_print(item.print_id, user), item.qty))
 
     job_id = str(uuid.uuid4())
 
@@ -251,42 +233,19 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     }).execute()
 
     queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
-
     return {"job_id": job_id, "total_units": total}
-
 
 @app.post("/print-jobs/{job_id}/confirm")
 def confirm_print_job(job_id: str, user=Depends(current_user)):
-    # Valida UUID
-    try:
-        uuid.UUID(job_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="job_id inválido")
+    uuid.UUID(job_id)
 
-    job = supabase.table("jobs") \
-        .select("*") \
-        .eq("id", job_id) \
-        .eq("user_id", user["sub"]) \
-        .single() \
-        .execute().data
-
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    if job["status"] != "preview":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Job não está em preview (status atual: {job['status']})"
-        )
+    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    if not job or job["status"] != "preview":
+        raise HTTPException(status_code=400, detail="Job inválido")
 
     total_units = len(job["payload"]["pieces"])
+    check_and_consume_limits(supabase, user["sub"], total_units)
 
-    try:
-        check_and_consume_limits(supabase, user["sub"], total_units)
-    except LimitExceeded as e:
-        raise HTTPException(status_code=429, detail=str(e))
-
-    # Registra uso
     supabase.table("usage").insert({
         "id": str(uuid.uuid4()),
         "user_id": user["sub"],
@@ -295,23 +254,14 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
-    # Atualiza status
-    supabase.table("jobs") \
-        .update({"status": "queued"}) \
-        .eq("id", job_id) \
-        .execute()
-
+    supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
-    return {
-        "status": "confirmed",
-        "job_id": job_id,
-        "total_units": total_units
-    }
-
+    return {"status": "confirmed", "total_units": total_units}
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
+    uuid.UUID(job_id)
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
@@ -319,44 +269,27 @@ def get_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/jobs/{job_id}/files")
 def get_job_files(job_id: str, user=Depends(current_user)):
-    files = supabase.table("job_files").select("*").eq("job_id", job_id).order("page_index").execute().data or []
-    return files
+    uuid.UUID(job_id)
+    return supabase.table("job_files").select("*").eq("job_id", job_id).order("page_index").execute().data or []
 
+# =========================
+# ACCOUNT
+# =========================
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    try:
-        res = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute()
-        rows = res.data or []
-
-        used = sum((r.get("amount") or 0) for r in rows)
-        limit = 100  # depois ligamos isso ao plano
-
-        return {
-            "used": used,
-            "limit": limit,
-            "remaining": max(limit - used, 0),
-        }
-
-    except Exception as e:
-        print("ERRO /me/usage:", e)
-        return {
-            "used": 0,
-            "limit": 100,
-            "remaining": 100,
-        }
-
+    rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute().data or []
+    used = sum(r["amount"] or 0 for r in rows)
+    limit = 100
+    return {"used": used, "limit": limit, "remaining": max(limit - used, 0)}
 
 @app.get("/me/plan")
 def get_my_plan(user=Depends(current_user)):
-    sub = user["sub"]
-
-    profile = supabase.table("profiles").select("*").eq("id", sub).single().execute().data
+    profile = supabase.table("profiles").select("*").eq("id", user["sub"]).single().execute().data
     if not profile:
         return {"name": "Free", "limit": 100, "renews_at": None}
 
     plan = supabase.table("plans").select("*").eq("id", profile["plan_id"]).single().execute().data
-
     return {
         "name": plan["name"] if plan else "Free",
         "limit": plan["monthly_limit"] if plan else 100,
