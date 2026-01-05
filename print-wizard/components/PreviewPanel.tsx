@@ -6,6 +6,8 @@ import { api } from '@/lib/apiClient'
 type PreviewItem = {
   print_id: string
   qty: number
+  name?: string
+  sku?: string
 }
 
 type Job = {
@@ -98,7 +100,7 @@ export default function PreviewPanel(props: Props) {
         <div className="border rounded p-3 max-h-[240px] overflow-y-auto space-y-2">
           {props.items.map(i => (
             <div key={i.print_id} className="flex justify-between text-sm">
-              <span>{i.print_id}</span>
+              <span>{i.name ? `${i.name}${i.sku ? ` / ${i.sku}` : ''}` : i.print_id}</span>
               <span className="font-medium">{i.qty}x</span>
             </div>
           ))}
