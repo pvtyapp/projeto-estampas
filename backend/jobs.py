@@ -8,8 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 def process_render(job_id: str, preview: bool = False):
-    job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
-    job = job_res.data
+    try:
+        job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+        job = job_res.data
+    except Exception as e:
+        logger.exception("Erro ao buscar job %s", job_id)
+        return
 
     if not job:
         logger.warning("Job não encontrado: %s", job_id)
@@ -40,30 +44,30 @@ def process_render(job_id: str, preview: bool = False):
 
         urls = process_print_job(job_id, pieces, preview=preview)
 
+        # FINALIZA PREVIEW
         if preview:
-            # 👉 Marca preview como pronto
             supabase.table("jobs").update({
                 "status": "preview_done",
                 "finished_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", job_id).execute()
 
-            logger.info("Preview finalizado para job %s", job_id)
+            logger.info("Preview finalizado para job %s (%d páginas)", job_id, len(urls))
             return
 
-        # ==========================
-        # PROCESSAMENTO FINAL
-        # ==========================
-
+        # GERA ZIP FINAL
         zip_bytes = create_zip_from_urls(urls)
         if hasattr(zip_bytes, "getvalue"):
             zip_bytes = zip_bytes.getvalue()
 
-        zip_name = f"jobs/{job_id}/final.zip"
+        zip_name = f"{job_id}.zip"
 
         supabase.storage.from_("jobs-output").upload(
             zip_name,
             zip_bytes,
-            {"content-type": "application/zip", "upsert": "true"}
+            {
+                "content-type": "application/zip",
+                "upsert": "true",
+            }
         )
 
         zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
@@ -82,10 +86,10 @@ def process_render(job_id: str, preview: bool = False):
         }).eq("id", job_id).execute()
         return
 
-    # Finalização do job final
+    # FINALIZA JOB FINAL
     supabase.table("jobs").update({
         "status": "done",
         "finished_at": datetime.now(timezone.utc).isoformat()
     }).eq("id", job_id).execute()
 
-    logger.info("Job %s finalizado com sucesso", job_id)
+    logger.info("Job finalizado com sucesso: %s", job_id)
