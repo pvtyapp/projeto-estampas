@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.3")
+app = FastAPI(title="Projeto Estampas API", version="6.4")
 
 # =========================
 # CORS
@@ -264,3 +264,15 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
     return {"status": "confirmed"}
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str, user=Depends(current_user)):
+    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    return job
+
+@app.get("/jobs/{job_id}/files")
+def get_job_files(job_id: str, user=Depends(current_user)):
+    files = supabase.table("job_files").select("*").eq("job_id", job_id).order("page_index").execute().data or []
+    return files
