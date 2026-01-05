@@ -39,6 +39,8 @@ export default function Library({ onPreview, version }: Props) {
   const [editing, setEditing] = useState<Print | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
+  const [qty, setQty] = useState<Record<string, number>>({})
+
   const noteRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
@@ -78,13 +80,12 @@ export default function Library({ onPreview, version }: Props) {
   }, [prints, search])
 
   function buildPreview() {
-    const items: PreviewItem[] = prints.map(p => ({
-      print_id: p.id,
-      qty: 1,
-    }))
+    const items: PreviewItem[] = Object.entries(qty)
+      .filter(([, v]) => v > 0)
+      .map(([id, v]) => ({ print_id: id, qty: v }))
 
     if (!items.length) {
-      alert('Nenhuma estampa encontrada.')
+      alert('Informe ao menos um QTY maior que zero.')
       return
     }
 
@@ -141,6 +142,19 @@ export default function Library({ onPreview, version }: Props) {
 
                   <div className="mt-2 text-xs text-gray-400">
                     {front ? `${front.width_cm}×${front.height_cm} cm` : '—'}
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-16 border rounded px-2 py-0.5 text-xs"
+                      value={qty[p.id] ?? 0}
+                      onChange={e =>
+                        setQty(q => ({ ...q, [p.id]: Number(e.target.value) }))
+                      }
+                    />
+                    <span className="text-xs text-gray-400">QTY</span>
                   </div>
                 </div>
 
