@@ -36,7 +36,7 @@ type JobProps = {
 type Props = PreviewProps | JobProps
 
 function isPreviewProps(p: Props): p is PreviewProps {
-  return (p as PreviewProps).items !== undefined
+  return Array.isArray((p as any)?.items)
 }
 
 export default function PreviewPanel(props: Props) {
@@ -86,7 +86,7 @@ export default function PreviewPanel(props: Props) {
     }
   }
 
-  if (isPreviewProps(props)) {
+  if (isPreviewProps(props) && Array.isArray(props.items)) {
     const totalUnits = props.items.reduce((s, i) => s + i.qty, 0)
 
     return (
@@ -123,7 +123,7 @@ export default function PreviewPanel(props: Props) {
     )
   }
 
-  const { jobId } = props
+  const { jobId } = props as JobProps
 
   useEffect(() => {
     if (!jobId) return
