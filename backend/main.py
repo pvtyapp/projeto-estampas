@@ -285,7 +285,18 @@ def get_job(job_id: str, user=Depends(current_user)):
 @app.get("/jobs/{job_id}/files")
 def get_job_files(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
-    return supabase.table("job_files").select("*").eq("job_id", job_id).order("page_index").execute().data or []
+
+    return (
+        supabase
+        .table("generated_files")
+        .select("id, public_url, page_index")
+        .eq("job_id", job_id)
+        .order("page_index")
+        .execute()
+        .data
+        or []
+    )
+
 
 # =========================
 # ACCOUNT
