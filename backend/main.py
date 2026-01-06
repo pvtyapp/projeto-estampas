@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.5")
+app = FastAPI(title="Projeto Estampas API", version="6.6")
 
 # =========================
 # CORS
@@ -114,10 +114,7 @@ def get_print(print_id: str, user=Depends(current_user)):
 
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
-    try:
-        validate_slots(payload.slots)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    validate_slots(payload.slots)
 
     print_id = str(uuid.uuid4())
 
@@ -203,7 +200,13 @@ def upload_print_file(
 
 def build_pieces(print_obj, qty: int):
     return [
-        {"width": s["width_cm"], "height": s["height_cm"], "type": s["type"], "print_id": print_obj["id"]}
+        {
+            "width": s["width_cm"],
+            "height": s["height_cm"],
+            "type": s["type"],
+            "print_id": print_obj["id"],
+            "url": s.get("url"),
+        }
         for _ in range(qty)
         for s in print_obj["slots"]
     ]
@@ -214,13 +217,20 @@ def list_job_history(user=Depends(current_user)):
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="Nenhum item enviado")
+
     total = sum(max(i.qty, 0) for i in payload.items)
     if total <= 0 or total > 100:
         raise HTTPException(status_code=400, detail="Quantidade inválida")
 
     pieces = []
     for item in payload.items:
-        pieces.extend(build_pieces(get_print(item.print_id, user), item.qty))
+        print_obj = get_print(item.print_id, user)
+        pieces.extend(build_pieces(print_obj, item.qty))
+
+    if not pieces:
+        raise HTTPException(status_code=400, detail="Nenhuma peça gerada")
 
     job_id = str(uuid.uuid4())
 
@@ -243,7 +253,12 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     if not job or job["status"] != "preview":
         raise HTTPException(status_code=400, detail="Job inválido")
 
-    total_units = len(job["payload"]["pieces"])
+    pieces = job["payload"].get("pieces") or []
+    total_units = len(pieces)
+
+    if total_units <= 0:
+        raise HTTPException(status_code=400, detail="Job vazio")
+
     check_and_consume_limits(supabase, user["sub"], total_units)
 
     supabase.table("usage").insert({
