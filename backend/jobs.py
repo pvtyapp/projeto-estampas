@@ -1,81 +1,42 @@
-import uuid
-import time
-import logging
-from datetime import datetime, timezone
-from typing import List
-
 from backend.supabase_client import supabase
 from backend.render_engine import process_print_job
 
-logger = logging.getLogger(__name__)
-
-
 def process_render(job_id: str, preview: bool = False):
-    """
-    Worker principal que gera os arquivos do job.
-    Se preview=True, gera apenas as prévias com watermark e marca o job como preview_done.
-    """
+    # Buscar o job
+    job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+    job = job_res.data
 
-    logger.info("🚀 Iniciando processamento do job %s (preview=%s)", job_id, preview)
-
-    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute().data
     if not job:
-        raise RuntimeError(f"Job {job_id} não encontrado")
+        raise Exception(f"Job {job_id} not found")
 
-    # Marca como processing
-    supabase.table("jobs").update({
-        "status": "processing",
-        "started_at": datetime.now(timezone.utc).isoformat()
-    }).eq("id", job_id).execute()
-
-    pieces = supabase.table("job_pieces").select("*").eq("job_id", job_id).execute().data or []
+    pieces = job.get("items", [])
 
     if not pieces:
-        raise RuntimeError(f"Job {job_id} não tem peças para processar")
+        raise Exception(f"Job {job_id} has no pieces")
 
-    try:
-        urls = process_print_job(job_id, pieces, preview=preview)
+    # Atualiza status
+    supabase.table("jobs").update({
+        "status": "processing"
+    }).eq("id", job_id).execute()
 
-        if preview:
-            # Aguarda os arquivos realmente existirem antes de marcar preview_done
-            for _ in range(10):  # até ~5s
-                res = supabase.table("generated_files") \
-                    .select("id", count="exact") \
-                    .eq("job_id", job_id) \
-                    .eq("preview", True) \
-                    .execute()
+    # Processa render
+    files = process_print_job(
+        job_id=job_id,
+        pieces=pieces,
+        preview=preview
+    )
 
-                if res.count and res.count > 0:
-                    break
+    # Salva arquivos gerados
+    for f in files:
+        supabase.table("generated_files").insert({
+            "job_id": job_id,
+            "page_index": f["page_index"],
+            "file_path": f["file_path"],
+            "public_url": f["public_url"],
+            "preview": preview
+        }).execute()
 
-                time.sleep(0.5)
-
-            if not res.count or res.count == 0:
-                raise RuntimeError(f"Preview do job {job_id} terminou sem arquivos gerados")
-
-            supabase.table("jobs").update({
-                "status": "preview_done",
-                "finished_at": datetime.now(timezone.utc).isoformat()
-            }).eq("id", job_id).execute()
-
-            logger.info("✅ Preview finalizado: %s arquivos gerados — job=%s", res.count, job_id)
-            return
-
-        # Caso não seja preview, finaliza como done
-        supabase.table("jobs").update({
-            "status": "done",
-            "finished_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", job_id).execute()
-
-        logger.info("✅ Job %s finalizado com sucesso", job_id)
-
-    except Exception as e:
-        logger.exception("❌ Erro ao processar job %s", job_id)
-
-        supabase.table("jobs").update({
-            "status": "error",
-            "error": str(e),
-            "finished_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", job_id).execute()
-
-        raise
+    # Atualiza status final
+    supabase.table("jobs").update({
+        "status": "preview_done" if preview else "done"
+    }).eq("id", job_id).execute()
