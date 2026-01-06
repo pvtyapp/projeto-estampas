@@ -21,28 +21,21 @@ def process_render(job_id: str, preview: bool = False):
 
     print(f"📦 Job {job_id} has {len(pieces)} pieces")
 
-    # 2. Marcar status
+    # 2. Marcar como processing
     supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
 
-    # 3. Processar
-    result_files = process_print_job(job_id, pieces, preview=preview)
+    try:
+        # 3. Processar render
+        result_files = process_print_job(job_id, pieces, preview=preview)
 
-    if not isinstance(result_files, list):
-        raise Exception(f"process_print_job must return list, got {type(result_files)}")
+        if not isinstance(result_files, list):
+            raise Exception("process_print_job did not return a list")
 
-    # 4. Salvar arquivos
-    for idx, f in enumerate(result_files):
-        if isinstance(f, str):
-            supabase.table("generated_files").insert({
-                "id": str(uuid.uuid4()),
-                "job_id": job_id,
-                "file_path": f,
-                "public_url": f,
-                "page_index": idx,
-                "preview": preview,
-            }).execute()
+        # 4. Salvar arquivos gerados
+        for idx, f in enumerate(result_files):
+            if not isinstance(f, dict):
+                raise Exception(f"Invalid file result at index {idx}: {f}")
 
-        elif isinstance(f, dict):
             supabase.table("generated_files").insert({
                 "id": str(uuid.uuid4()),
                 "job_id": job_id,
@@ -52,12 +45,18 @@ def process_render(job_id: str, preview: bool = False):
                 "preview": preview,
             }).execute()
 
-        else:
-            raise Exception(f"Invalid file result type: {type(f)}")
+        # 5. Atualizar status final
+        final_status = "preview_done" if preview else "done"
+        supabase.table("jobs").update({"status": final_status}).eq("id", job_id).execute()
 
-    # 5. Atualizar status final
-    supabase.table("jobs").update({
-        "status": "preview_done" if preview else "done"
-    }).eq("id", job_id).execute()
+        print(f"✅ Job {job_id} finished with status {final_status}")
 
-    print(f"✅ Job {job_id} finished with status {'preview_done' if preview else 'done'}")
+    except Exception as e:
+        print(f"❌ Job {job_id} failed: {e}")
+
+        supabase.table("jobs").update({
+            "status": "error",
+            "error": str(e)
+        }).eq("id", job_id).execute()
+
+        raise
