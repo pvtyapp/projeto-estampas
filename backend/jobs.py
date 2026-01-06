@@ -1,92 +1,81 @@
+import uuid
+import time
 import logging
 from datetime import datetime, timezone
+from typing import List
+
 from backend.supabase_client import supabase
 from backend.render_engine import process_print_job
-from backend.zip_utils import create_zip_from_urls
 
 logger = logging.getLogger(__name__)
 
 
 def process_render(job_id: str, preview: bool = False):
-    logger.info("▶️ Iniciando process_render job=%s preview=%s", job_id, preview)
+    """
+    Worker principal que gera os arquivos do job.
+    Se preview=True, gera apenas as prévias com watermark e marca o job como preview_done.
+    """
 
-    job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
-    job = job_res.data
+    logger.info("🚀 Iniciando processamento do job %s (preview=%s)", job_id, preview)
 
+    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute().data
     if not job:
-        logger.warning("❌ Job não encontrado: %s", job_id)
-        return
+        raise RuntimeError(f"Job {job_id} não encontrado")
 
-    logger.info("📦 Job status atual: %s", job["status"])
+    # Marca como processing
+    supabase.table("jobs").update({
+        "status": "processing",
+        "started_at": datetime.now(timezone.utc).isoformat()
+    }).eq("id", job_id).execute()
 
-    # valida estado do job
-    if preview and job["status"] != "preview":
-        logger.info("⏭ Ignorado (preview=True, status=%s)", job["status"])
-        return
+    pieces = supabase.table("job_pieces").select("*").eq("job_id", job_id).execute().data or []
 
-    if not preview and job["status"] != "queued":
-        logger.info("⏭ Ignorado (preview=False, status=%s)", job["status"])
-        return
+    if not pieces:
+        raise RuntimeError(f"Job {job_id} não tem peças para processar")
 
     try:
-        payload = job.get("payload") or {}
-        pieces = payload.get("pieces")
-
-        if not pieces or not isinstance(pieces, list):
-            raise ValueError("Payload inválido: 'pieces' ausente ou inválido")
-
-        logger.info("🧩 Renderizando %d peças", len(pieces))
-
         urls = process_print_job(job_id, pieces, preview=preview)
 
-        logger.info("🖼 Render finalizado (%d imagens)", len(urls))
-
-        # FINALIZA PREVIEW
         if preview:
+            # Aguarda os arquivos realmente existirem antes de marcar preview_done
+            for _ in range(10):  # até ~5s
+                res = supabase.table("generated_files") \
+                    .select("id", count="exact") \
+                    .eq("job_id", job_id) \
+                    .eq("preview", True) \
+                    .execute()
+
+                if res.count and res.count > 0:
+                    break
+
+                time.sleep(0.5)
+
+            if not res.count or res.count == 0:
+                raise RuntimeError(f"Preview do job {job_id} terminou sem arquivos gerados")
+
             supabase.table("jobs").update({
                 "status": "preview_done",
                 "finished_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", job_id).execute()
 
-            logger.info("✅ Preview finalizado job=%s", job_id)
+            logger.info("✅ Preview finalizado: %s arquivos gerados — job=%s", res.count, job_id)
             return
 
-        # INICIA PROCESSAMENTO FINAL
+        # Caso não seja preview, finaliza como done
         supabase.table("jobs").update({
-            "status": "processing",
-            "started_at": datetime.now(timezone.utc).isoformat()
-        }).eq("id", job_id).execute()
-
-        zip_bytes = create_zip_from_urls(urls)
-        if hasattr(zip_bytes, "getvalue"):
-            zip_bytes = zip_bytes.getvalue()
-
-        zip_name = f"{job_id}.zip"
-
-        supabase.storage.from_("jobs-output").upload(
-            zip_name,
-            zip_bytes,
-            {
-                "content-type": "application/zip",
-                "upsert": "true",
-            }
-        )
-
-        zip_url = supabase.storage.from_("jobs-output").get_public_url(zip_name)
-
-        supabase.table("jobs").update({
-            "zip_url": zip_url,
             "status": "done",
             "finished_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
 
-        logger.info("🎉 Job finalizado job=%s", job_id)
+        logger.info("✅ Job %s finalizado com sucesso", job_id)
 
     except Exception as e:
-        logger.exception("💥 Erro ao processar job %s", job_id)
+        logger.exception("❌ Erro ao processar job %s", job_id)
 
         supabase.table("jobs").update({
             "status": "error",
             "error": str(e),
             "finished_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", job_id).execute()
+
+        raise

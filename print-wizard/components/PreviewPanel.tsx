@@ -86,7 +86,7 @@ export default function PreviewPanel(props: Props) {
     }
   }
 
-  if (isPreviewProps(props) && Array.isArray(props.items)) {
+  if (isPreviewProps(props)) {
     const totalUnits = props.items.reduce((s, i) => s + i.qty, 0)
 
     return (
@@ -143,6 +143,7 @@ export default function PreviewPanel(props: Props) {
 
         if (data.status === 'preview_done') {
           const f = await api(`/jobs/${jobId}/files`)
+          if (f.length === 0) return
           setFiles(f)
           setProgress(100)
           clearInterval(interval)
@@ -203,14 +204,19 @@ export default function PreviewPanel(props: Props) {
             {files.length} folhas geradas — isto é apenas uma prévia.
           </p>
 
-          {/* MINIMAPA */}
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2 max-h-[240px] overflow-y-auto">
             {files.map((f, i) => (
               <div key={f.id} className="relative border rounded overflow-hidden text-xs">
-                <img src={f.public_url} className="w-full opacity-80" alt="preview" />
-                <div className="absolute inset-0 flex items-center justify-center text-white font-bold bg-black/30">
-                  PRÉVIA
+                <img
+                  src={f.public_url}
+                  className="w-full blur-[1px] opacity-80 select-none pointer-events-none"
+                  alt="preview"
+                />
+
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <img src="/logo-watermark.png" className="w-12 opacity-60" alt="marca dagua" />
                 </div>
+
                 <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1 rounded text-[10px]">
                   {i + 1}
                 </div>
