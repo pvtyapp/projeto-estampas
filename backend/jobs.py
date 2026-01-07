@@ -1,6 +1,7 @@
 import uuid
 import os
 import zipfile
+import requests
 from datetime import datetime, timezone
 from backend.supabase_client import supabase
 from backend.render_engine import process_print_job
@@ -9,9 +10,7 @@ from backend.render_engine import process_print_job
 def process_render(job_id: str, preview: bool = False):
     print(f"▶️ Starting render for job {job_id}, preview={preview}")
 
-    job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
-    job = job_res.data
-
+    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute().data
     if not job:
         raise Exception(f"Job {job_id} not found")
 
@@ -32,6 +31,7 @@ def process_render(job_id: str, preview: bool = False):
             raise Exception("process_print_job did not return a list")
 
         file_paths = []
+        file_urls = []
 
         for idx, f in enumerate(result_files):
             if isinstance(f, str):
@@ -56,19 +56,33 @@ def process_render(job_id: str, preview: bool = False):
 
             if file_path:
                 file_paths.append(file_path)
+            if public_url:
+                file_urls.append(public_url)
 
         if not preview:
-            zip_name = f"{job_id}.zip"
+            zip_name = "PVTYARQUIVOS.zip"
             zip_local = f"/tmp/{zip_name}"
 
             with zipfile.ZipFile(zip_local, "w", zipfile.ZIP_DEFLATED) as z:
-                for path in file_paths:
-                    if os.path.exists(path):
-                        z.write(path, arcname=os.path.basename(path))
+                # Prioriza paths locais
+                if file_paths:
+                    for i, path in enumerate(file_paths):
+                        if os.path.exists(path):
+                            arc = f"PVTY_PAGE_{i+1}.png"
+                            z.write(path, arcname=arc)
+                # Fallback: baixa pelas URLs
+                else:
+                    for i, url in enumerate(file_urls):
+                        r = requests.get(url)
+                        if r.status_code == 200:
+                            tmp = f"/tmp/PVTY_PAGE_{i+1}.png"
+                            with open(tmp, "wb") as f:
+                                f.write(r.content)
+                            z.write(tmp, arcname=f"PVTY_PAGE_{i+1}.png")
 
-            storage_path = f"{job['user_id']}/{job_id}/final.zip"
+            storage_path = f"{job['user_id']}/{job_id}/{zip_name}"
             with open(zip_local, "rb") as f:
-                supabase.storage.from_("exports").upload(storage_path, f)
+                supabase.storage.from_("exports").upload(storage_path, f, {"upsert": "true"})
 
             zip_url = supabase.storage.from_("exports").get_public_url(storage_path)
 
