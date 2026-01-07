@@ -250,7 +250,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
 
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job or job["status"] not in ("preview", "preview_done"):
+    if not job or job["status"] != "preview":
         raise HTTPException(status_code=400, detail="Job inválido")
 
     pieces = job["payload"].get("pieces") or []
@@ -259,7 +259,10 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     if total_units <= 0:
         raise HTTPException(status_code=400, detail="Job vazio")
 
-    check_and_consume_limits(supabase, user["sub"], total_units)
+    try:
+        check_and_consume_limits(supabase, user["sub"], total_units)
+    except LimitExceeded as e:
+        raise HTTPException(status_code=402, detail=str(e))
 
     supabase.table("usage").insert({
         "id": str(uuid.uuid4()),
@@ -273,6 +276,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
     return {"status": "confirmed", "total_units": total_units}
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
