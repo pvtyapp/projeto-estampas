@@ -250,8 +250,8 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
 
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job or job["status"] != "preview":
-        raise HTTPException(status_code=400, detail="Job inválido")
+    if not job or job["status"] not in ("preview_done",):
+        raise HTTPException(status_code=400, detail="Job ainda não está pronto para confirmar")
 
     pieces = job["payload"].get("pieces") or []
     total_units = len(pieces)
