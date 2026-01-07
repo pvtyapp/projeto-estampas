@@ -109,9 +109,6 @@ def pack_items(items, sheet_width, sheet_height):
 
 
 def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
-    # Remove só arquivos do mesmo tipo
-    supabase.table("generated_files").delete().eq("job_id", job_id).eq("preview", preview).execute()
-
     items = []
 
     for p in pieces:
@@ -167,16 +164,6 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
         )
 
         public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
-
-        supabase.table("generated_files").insert({
-            "job_id": job_id,
-            "page_index": idx,
-            "file_path": filename,
-            "public_url": public_url,
-            "preview": preview,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
-
         results.append(public_url)
 
     return results

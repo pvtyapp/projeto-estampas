@@ -31,17 +31,25 @@ def process_render(job_id: str, preview: bool = False):
         if not isinstance(result_files, list):
             raise Exception("process_print_job did not return a list")
 
-        # 4. Salvar arquivos gerados
+        # 4. Salvar arquivos gerados (tolerante a string ou dict)
         for idx, f in enumerate(result_files):
-            if not isinstance(f, dict):
+            if isinstance(f, str):
+                file_path = None
+                public_url = f
+                page_index = idx
+            elif isinstance(f, dict):
+                file_path = f.get("path")
+                public_url = f.get("url")
+                page_index = f.get("page_index", idx)
+            else:
                 raise Exception(f"Invalid file result at index {idx}: {f}")
 
             supabase.table("generated_files").insert({
                 "id": str(uuid.uuid4()),
                 "job_id": job_id,
-                "file_path": f.get("path"),
-                "public_url": f.get("url"),
-                "page_index": f.get("page_index", idx),
+                "file_path": file_path,
+                "public_url": public_url,
+                "page_index": page_index,
                 "preview": preview,
             }).execute()
 
