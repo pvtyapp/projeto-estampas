@@ -358,19 +358,39 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute().data or []
-    used = sum(r["amount"] or 0 for r in rows)
-
     profile = supabase.table("profiles").select("*").eq("id", user["sub"]).execute().data
     plan_id = profile[0]["plan_id"] if profile else "free"
 
     plan = supabase.table("plans").select("*").eq("id", plan_id).execute().data
-    plan = plan[0] if plan else {"monthly_limit": 100}
+    plan = plan[0] if plan else {}
+
+    now = datetime.now(timezone.utc)
+
+    # Determine period
+    if plan.get("daily_limit"):
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        limit = plan["daily_limit"]
+        remaining_days = 0
+    else:
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        limit = plan.get("monthly_limit") or 100
+        remaining_days = 30 - now.day
+
+    rows = (
+        supabase
+        .table("usage")
+        .select("amount")
+        .eq("user_id", user["sub"])
+        .gte("created_at", start.isoformat())
+        .execute()
+        .data or []
+    )
+
+    used = sum(r["amount"] or 0 for r in rows)
 
     credits = supabase.table("credit_packs").select("remaining").eq("user_id", user["sub"]).execute().data or []
     total_credits = sum(c["remaining"] or 0 for c in credits)
 
-    limit = plan.get("monthly_limit") or 100
     status = "ok"
     if used > limit:
         status = "using_credits" if total_credits > 0 else "blocked"
@@ -382,6 +402,7 @@ def get_my_usage(user=Depends(current_user)):
         "used": used,
         "limit": limit,
         "credits": total_credits,
-        "remaining_days": 30,
+        "remaining_days": remaining_days,
         "status": status,
     }
+
