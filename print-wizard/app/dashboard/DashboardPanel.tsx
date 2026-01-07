@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
 
+type Plan = 'free' | 'start' | 'profissional' | 'enterprise'
+
 type Usage = {
-  plan: 'free' | 'pro' | 'business'
+  plan: Plan
   used: number
   limit: number
   credits: number
@@ -21,9 +23,13 @@ export default function DashboardPanel() {
     if (sessionLoading || !session) return
     let cancelled = false
 
-    api('/me/usage').then(res => {
-      if (!cancelled) setUsage(res)
-    })
+    api('/me/usage')
+      .then(res => {
+        if (!cancelled) setUsage(res)
+      })
+      .catch(() => {
+        if (!cancelled) setUsage(null)
+      })
 
     return () => {
       cancelled = true
@@ -42,6 +48,13 @@ export default function DashboardPanel() {
 
   const isFree = usage.plan === 'free'
   const percent = usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
+
+  const planLabel: Record<Plan, string> = {
+    free: 'Free',
+    start: 'Start',
+    profissional: 'Profissional',
+    enterprise: 'Enterprise',
+  }
 
   const statusLabel = {
     ok: 'Tudo certo',
@@ -63,7 +76,9 @@ export default function DashboardPanel() {
         <div>
           <div className="text-sm text-gray-500 mb-1">Seu plano ativo é:</div>
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-semibold uppercase">{usage.plan}</span>
+            <span className="text-2xl font-semibold uppercase">
+              {planLabel[usage.plan]}
+            </span>
             <span className={`text-xs px-2 py-1 rounded ${statusColor}`}>
               {statusLabel}
             </span>
@@ -81,7 +96,7 @@ export default function DashboardPanel() {
       <div>
         <div className="flex justify-between text-sm text-gray-600 mb-1">
           <span>
-            {usage.used} / {usage.limit} folhas {isFree ? 'hoje' : 'este mês'}
+            {usage.used} / {usage.limit} arquivos {isFree ? 'hoje' : 'este mês'}
           </span>
           <span>{percent}%</span>
         </div>
