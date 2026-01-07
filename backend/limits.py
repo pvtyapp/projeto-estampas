@@ -1,77 +1,96 @@
-from datetime import datetime
-
+from datetime import datetime, timezone, timedelta
 
 class LimitExceeded(Exception):
     pass
 
 
-def _current_period():
-    now = datetime.utcnow()
-    return now.year, now.month
+def check_and_consume_limits(supabase, user_id: str, amount: int):
+    profile = supabase.table("profiles").select("plan_id").eq("id", user_id).single().execute().data
+    plan_id = profile.get("plan_id") if profile else "free"
 
+    plan = supabase.table("plans").select("*").eq("id", plan_id).single().execute().data
+    if not plan:
+        raise LimitExceeded("Plano inválido.")
 
-def check_and_consume_limits(supabase, user_id: str, units: int):
-    units = int(units or 0)
-    if units <= 0:
+    now = datetime.now(timezone.utc)
+
+    # DAILY limit (Free)
+    if plan.get("daily_limit"):
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        used_today = (
+            supabase
+            .table("usage")
+            .select("amount")
+            .eq("user_id", user_id)
+            .eq("kind", "print")
+            .gte("created_at", start.isoformat())
+            .execute()
+            .data or []
+        )
+        total_today = sum(r["amount"] or 0 for r in used_today)
+        if total_today + amount > plan["daily_limit"]:
+            raise LimitExceeded("Limite diário atingido.")
+
+        supabase.table("usage").insert({
+            "user_id": user_id,
+            "kind": "print",
+            "amount": amount,
+            "created_at": now.isoformat(),
+        }).execute()
         return
 
-    year, month = _current_period()
+    # MONTHLY limit
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    used_month = (
+        supabase
+        .table("usage")
+        .select("amount")
+        .eq("user_id", user_id)
+        .eq("kind", "print")
+        .gte("created_at", start.isoformat())
+        .execute()
+        .data or []
+    )
+    total_month = sum(r["amount"] or 0 for r in used_month)
 
-    plan_res = supabase.table("plans").select("*").eq("user_id", user_id).execute().data or []
-    plan = plan_res[0] if plan_res else {"plan": "free", "monthly_limit": 2}
+    if total_month + amount <= plan["monthly_limit"]:
+        supabase.table("usage").insert({
+            "user_id": user_id,
+            "kind": "print",
+            "amount": amount,
+            "created_at": now.isoformat(),
+        }).execute()
+        return
 
-    monthly_limit = int(plan.get("monthly_limit") or 0)
+    # Use credit packs
+    needed = total_month + amount - plan["monthly_limit"]
 
-    usage_res = supabase.table("usage_monthly") \
-        .select("*") \
-        .eq("user_id", user_id) \
-        .eq("year", year) \
-        .eq("month", month) \
-        .execute().data or []
+    packs = (
+        supabase
+        .table("credit_packs")
+        .select("*")
+        .eq("user_id", user_id)
+        .gt("remaining", 0)
+        .order("created_at")
+        .execute()
+        .data or []
+    )
 
-    usage = usage_res[0] if usage_res else {"used_plan": 0, "used_extra": 0}
-
-    used_plan = int(usage.get("used_plan", 0))
-    used_extra = int(usage.get("used_extra", 0))
-
-    available_plan = max(monthly_limit - used_plan, 0)
-    from_plan = min(available_plan, units)
-    overflow = units - from_plan
-
-    packages = supabase.table("extra_packages") \
-        .select("*") \
-        .eq("user_id", user_id) \
-        .gt("remaining", 0) \
-        .order("created_at") \
-        .execute().data or []
-
-    total_remaining = sum(int(p["remaining"]) for p in packages)
-
-    if overflow > total_remaining:
-        raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
-
-    remaining = overflow
-    for p in packages:
-        if remaining <= 0:
+    for pack in packs:
+        take = min(pack["remaining"], needed)
+        needed -= take
+        supabase.table("credit_packs").update({
+            "remaining": pack["remaining"] - take
+        }).eq("id", pack["id"]).execute()
+        if needed <= 0:
             break
 
-        take = min(int(p["remaining"]), remaining)
+    if needed > 0:
+        raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
 
-        supabase.table("extra_packages") \
-            .update({"remaining": int(p["remaining"]) - take}) \
-            .eq("id", p["id"]) \
-            .execute()
-
-        remaining -= take
-
-    new_used_plan = used_plan + from_plan
-    new_used_extra = used_extra + overflow
-
-    supabase.table("usage_monthly").upsert({
+    supabase.table("usage").insert({
         "user_id": user_id,
-        "year": year,
-        "month": month,
-        "used_plan": new_used_plan,
-        "used_extra": new_used_extra,
-        "limit_snapshot": monthly_limit,
-    }, on_conflict="user_id,year,month").execute()
+        "kind": "print",
+        "amount": amount,
+        "created_at": now.isoformat(),
+    }).execute()
