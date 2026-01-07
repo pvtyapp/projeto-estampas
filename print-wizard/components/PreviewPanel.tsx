@@ -146,8 +146,8 @@ export default function PreviewPanel(props: Props) {
         }
 
         if (data.status === 'done') {
-          const f = await api(`/jobs/${jobId}/files`)
-          if (f.length > 0) setFiles(f)
+          const full: Job = await api(`/jobs/${jobId}`)
+          setJob(full)
           setProgress(100)
           clearInterval(interval)
           return
@@ -238,6 +238,17 @@ export default function PreviewPanel(props: Props) {
             </button>
           </div>
         </>
+      )}
+
+      {job?.status === 'done' && job.zip_url && (
+        <div className="pt-6 text-center">
+          <a
+            href={job.zip_url}
+            className="inline-block bg-black text-white px-6 py-3 rounded hover:opacity-90"
+          >
+            Baixar arquivos finais
+          </a>
+        </div>
       )}
     </div>
   )
