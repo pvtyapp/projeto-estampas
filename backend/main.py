@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.6")
+app = FastAPI(title="Projeto Estampas API", version="6.7")
 
 # =========================
 # CORS
@@ -250,7 +250,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
 
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job or job["status"] != "preview":
+    if not job or job["status"] not in ("preview", "preview_done"):
         raise HTTPException(status_code=400, detail="Job inválido")
 
     pieces = job["payload"].get("pieces") or []
@@ -296,7 +296,6 @@ def get_job_files(job_id: str, user=Depends(current_user)):
         .data
         or []
     )
-
 
 # =========================
 # ACCOUNT
