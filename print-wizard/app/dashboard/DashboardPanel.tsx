@@ -18,17 +18,23 @@ type Usage = {
 export default function DashboardPanel() {
   const { session, loading: sessionLoading } = useSession()
   const [usage, setUsage] = useState<Usage | null>(null)
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     if (sessionLoading || !session) return
+
     let cancelled = false
+    setError(false)
 
     api('/me/usage')
       .then(res => {
         if (!cancelled) setUsage(res)
       })
       .catch(() => {
-        if (!cancelled) setUsage(null)
+        if (!cancelled) {
+          setUsage(null)
+          setError(true)
+        }
       })
 
     return () => {
@@ -36,7 +42,9 @@ export default function DashboardPanel() {
     }
   }, [sessionLoading, session])
 
-  if (!usage) {
+  if (!session) return null
+
+  if (!usage && !error) {
     return (
       <div className="bg-white border rounded-xl shadow p-6 flex flex-col gap-4 opacity-30 animate-pulse">
         <div className="h-4 bg-gray-200 rounded w-1/3" />
@@ -46,8 +54,19 @@ export default function DashboardPanel() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="bg-white border rounded-xl shadow p-6 text-sm text-red-600">
+        Não foi possível carregar seu uso agora. Recarregue a página.
+      </div>
+    )
+  }
+
+  if (!usage) return null
+
   const isFree = usage.plan === 'free'
-  const percent = usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
+  const percent =
+    usage.limit > 0 ? Math.min(100, Math.round((usage.used / usage.limit) * 100)) : 0
 
   const planLabel: Record<Plan, string> = {
     free: 'Free',
@@ -108,7 +127,13 @@ export default function DashboardPanel() {
 
       <div className="flex justify-between items-center text-sm text-gray-600">
         <span>Créditos extras: {usage.credits}</span>
-        <button className="underline">
+        <button
+          className="underline"
+          onClick={() => {
+            if (isFree) alert('Upgrade em breve 😄')
+            else alert('Gerenciamento de plano em breve 😄')
+          }}
+        >
           {isFree ? 'Fazer upgrade' : 'Gerenciar plano'}
         </button>
       </div>

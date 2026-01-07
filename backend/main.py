@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="6.7")
+app = FastAPI(title="Projeto Estampas API", version="7.0")
 
 # =========================
 # CORS
@@ -212,8 +212,13 @@ def build_pieces(print_obj, qty: int):
     ]
 
 @app.get("/jobs/history")
-def list_job_history(user=Depends(current_user)):
-    return supabase.table("jobs").select("id,status,created_at").eq("user_id", user["sub"]).order("created_at", desc=True).limit(50).execute().data or []
+def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
+    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url").eq("user_id", user["sub"])
+    if from_:
+        q = q.gte("created_at", from_)
+    if to:
+        q = q.lte("created_at", to)
+    return q.order("created_at", desc=True).limit(50).execute().data or []
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
@@ -277,7 +282,6 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     return {"status": "confirmed", "total_units": total_units}
 
-
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
@@ -289,7 +293,6 @@ def get_job(job_id: str, user=Depends(current_user)):
 @app.get("/jobs/{job_id}/files")
 def get_job_files(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
-
     return (
         supabase
         .table("generated_files")
@@ -302,6 +305,54 @@ def get_job_files(job_id: str, user=Depends(current_user)):
     )
 
 # =========================
+# STATS
+# =========================
+
+@app.get("/stats/prints")
+def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
+    jobs_q = supabase.table("jobs").select("id").eq("user_id", user["sub"])
+    if from_:
+        jobs_q = jobs_q.gte("created_at", from_)
+    if to:
+        jobs_q = jobs_q.lte("created_at", to)
+
+    jobs = jobs_q.execute().data or []
+    job_ids = [j["id"] for j in jobs]
+
+    if not job_ids:
+        return {"top_used": [], "not_used": [], "costs": {"files": 0, "prints": 0, "total_cost": 0}}
+
+    files = supabase.table("generated_files").select("job_id").in_("job_id", job_ids).execute().data or []
+
+    usage = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute().data or []
+    total_prints = sum(u["amount"] or 0 for u in usage)
+
+    prints = supabase.table("prints").select("name,id").eq("user_id", user["sub"]).execute().data or []
+    slots = supabase.table("print_slots").select("print_id").execute().data or []
+
+    usage_map = {}
+    for s in slots:
+        usage_map[s["print_id"]] = usage_map.get(s["print_id"], 0) + 1
+
+    top_used = sorted(
+        [{"name": p["name"], "count": usage_map.get(p["id"], 0)} for p in prints],
+        key=lambda x: x["count"],
+        reverse=True,
+    )
+
+    not_used = [p for p in prints if usage_map.get(p["id"], 0) == 0]
+
+    return {
+        "top_used": top_used[:15],
+        "not_used": not_used[:15],
+        "costs": {
+            "files": len(files),
+            "prints": total_prints,
+            "total_cost": 0,
+        },
+    }
+
+# =========================
 # ACCOUNT
 # =========================
 
@@ -309,18 +360,28 @@ def get_job_files(job_id: str, user=Depends(current_user)):
 def get_my_usage(user=Depends(current_user)):
     rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute().data or []
     used = sum(r["amount"] or 0 for r in rows)
-    limit = 100
-    return {"used": used, "limit": limit, "remaining": max(limit - used, 0)}
 
-@app.get("/me/plan")
-def get_my_plan(user=Depends(current_user)):
-    profile = supabase.table("profiles").select("*").eq("id", user["sub"]).single().execute().data
-    if not profile:
-        return {"name": "Free", "limit": 100, "renews_at": None}
+    profile = supabase.table("profiles").select("*").eq("id", user["sub"]).execute().data
+    plan_id = profile[0]["plan_id"] if profile else "free"
 
-    plan = supabase.table("plans").select("*").eq("id", profile["plan_id"]).single().execute().data
+    plan = supabase.table("plans").select("*").eq("id", plan_id).execute().data
+    plan = plan[0] if plan else {"monthly_limit": 100}
+
+    credits = supabase.table("credit_packs").select("remaining").eq("user_id", user["sub"]).execute().data or []
+    total_credits = sum(c["remaining"] or 0 for c in credits)
+
+    limit = plan.get("monthly_limit") or 100
+    status = "ok"
+    if used > limit:
+        status = "using_credits" if total_credits > 0 else "blocked"
+    elif used > limit * 0.8:
+        status = "warning"
+
     return {
-        "name": plan["name"] if plan else "Free",
-        "limit": plan["monthly_limit"] if plan else 100,
-        "renews_at": profile.get("renews_at"),
+        "plan": plan_id,
+        "used": used,
+        "limit": limit,
+        "credits": total_credits,
+        "remaining_days": 30,
+        "status": status,
     }
