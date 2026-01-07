@@ -20,112 +20,158 @@ type Stats = {
   }
 }
 
-type Period = "7d" | "30d" | "90d" | "custom"
+type Period = "today" | "yesterday" | "7d" | "30d" | "60d"
 
-export default function JobHistory({ onSelect }: { onSelect?: (jobId: string) => void }) {
+type JobHistoryProps = {
+  onSelect?: (jobId: string) => void
+}
+
+export default function JobHistory({ onSelect }: JobHistoryProps) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(false)
   const [period, setPeriod] = useState<Period>("30d")
-  const [from, setFrom] = useState("")
-  const [to, setTo] = useState("")
+  const [price, setPrice] = useState(0)
 
   useEffect(() => {
     load()
-  }, [period, from, to])
+  }, [period])
 
   async function load() {
+    setLoading(true)
+
+    const now = new Date()
+    let from: Date | null = null
+    let to: Date | null = null
+
+    if (period === "today") {
+      from = new Date(now.setHours(0, 0, 0, 0))
+    } else if (period === "yesterday") {
+      const y = new Date()
+      y.setDate(y.getDate() - 1)
+      from = new Date(y.setHours(0, 0, 0, 0))
+      to = new Date(y.setHours(23, 59, 59, 999))
+    } else {
+      const days = { "7d": 7, "30d": 30, "60d": 60 }[period]
+      from = new Date(Date.now() - days * 86400000)
+    }
+
+    let params = ""
+    if (from) params += `?from=${from.toISOString()}`
+    if (to) params += `&to=${to.toISOString()}`
+
     try {
-      setLoading(true)
-
-      let params = ""
-      if (period !== "custom") {
-        const days = { "7d": 7, "30d": 30, "90d": 90 }[period]
-        const start = new Date(Date.now() - days * 86400000)
-        params = `?from=${start.toISOString()}`
-      } else if (from && to) {
-        params = `?from=${from}&to=${to}`
-      }
-
       const [jobsData, statsData] = await Promise.all([
         api(`/jobs/history${params}`),
         api(`/stats/prints${params}`),
       ])
-
-      setJobs(jobsData)
-      setStats(statsData)
+      setJobs(jobsData || [])
+      setStats(statsData || null)
     } finally {
       setLoading(false)
     }
   }
 
+  const recentJobs = jobs.filter(
+    j => Date.now() - new Date(j.created_at).getTime() < 48 * 60 * 60 * 1000
+  )
+
   return (
     <div className="space-y-4">
-      {/* FILTER */}
-      <div className="flex items-center gap-4 text-sm">
-        <select value={period} onChange={e => setPeriod(e.target.value as Period)} className="border rounded px-2 py-1">
+      {/* Period Filter */}
+      <div className="flex justify-between items-center">
+        <select
+          value={period}
+          onChange={e => setPeriod(e.target.value as Period)}
+          className="border rounded px-3 py-1 text-sm"
+        >
+          <option value="today">Hoje</option>
+          <option value="yesterday">Ontem</option>
           <option value="7d">Últimos 7 dias</option>
           <option value="30d">Últimos 30 dias</option>
-          <option value="90d">Últimos 90 dias</option>
-          <option value="custom">Período personalizado</option>
+          <option value="60d">Últimos 60 dias</option>
         </select>
-
-        {period === "custom" && (
-          <>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} className="border rounded px-2 py-1" />
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} className="border rounded px-2 py-1" />
-          </>
-        )}
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Carregando…</p>}
+      {loading && <p className="text-sm text-gray-500">Carregando dados…</p>}
 
       {!loading && stats && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <TopUsed data={stats.top_used} />
-          <NotUsed data={stats.not_used} />
-          <Costs data={stats.costs} />
-          <LastJobs jobs={jobs} onSelect={onSelect} />
+          <Panel title="Top mais utilizadas">
+            <ScrollableList items={stats.top_used?.map(p => `${p.name} (${p.count})`) || []} />
+          </Panel>
+
+          <Panel title="Top esquecidas">
+            <ScrollableList items={stats.not_used?.map(p => p.name) || []} />
+          </Panel>
+
+          <Panel title="Indicadores de custo">
+            <div className="space-y-2 text-sm text-gray-700">
+              <Row label="Preço do metro (R$)">
+                <input
+                  type="number"
+                  value={price}
+                  onChange={e => setPrice(Number(e.target.value))}
+                  className="border rounded px-2 py-1 w-24 text-right"
+                />
+              </Row>
+              <Row label="Arquivos gerados">{stats.costs.files}</Row>
+              <Row label="Estampas incluídas">{stats.costs.prints}</Row>
+              <Row label="Custo médio por estampa">
+                R$ {stats.costs.prints > 0 ? ((stats.costs.files * price) / stats.costs.prints).toFixed(2) : "0"}
+              </Row>
+            </div>
+          </Panel>
+
+          <Panel title="Downloads recentes (48h)">
+            {recentJobs.length === 0 && <p className="text-sm text-gray-500">Nenhum disponível.</p>}
+            {recentJobs.map((j: Job) => {
+              const d = new Date(j.created_at)
+              const label = `JOB ${d.toLocaleDateString()} ${d.toLocaleTimeString().slice(0, 5)}`
+              return (
+                <div key={j.id} className="flex justify-between text-sm">
+                  <span onClick={() => onSelect?.(j.id)} className="cursor-pointer hover:underline">
+                    {label}
+                  </span>
+                  {j.zip_url && (
+                    <a href={j.zip_url} className="text-blue-600 hover:underline">
+                      Download
+                    </a>
+                  )}
+                </div>
+              )
+            })}
+          </Panel>
         </div>
       )}
     </div>
   )
 }
 
-function Panel({ title, children }: any) {
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white border rounded-xl shadow p-4">
-      <h3 className="font-semibold mb-3">{title}</h3>
+    <div className="bg-white border rounded-xl shadow p-4 space-y-2">
+      <h3 className="font-semibold text-sm text-gray-800">{title}</h3>
       {children}
     </div>
   )
 }
 
-function TopUsed({ data }: any) {
-  return <Panel title="Top 15 mais usadas">{data.slice(0, 15).map((p: any, i: number) => <div key={i} className="text-sm">{p.name} ({p.count})</div>)}</Panel>
-}
-
-function NotUsed({ data }: any) {
-  return <Panel title="15 não usadas">{data.slice(0, 15).map((p: any, i: number) => <div key={i} className="text-sm">{p.name}</div>)}</Panel>
-}
-
-function Costs({ data }: any) {
-  if (!data) return <Panel title="Custos">Sem dados</Panel>
-  const avg = data.prints > 0 ? (data.total_cost / data.prints).toFixed(2) : "0"
-  return <Panel title="Custos">Arquivos: {data.files}<br />Estampas: {data.prints}<br />Média: R$ {avg}</Panel>
-}
-
-function LastJobs({ jobs, onSelect }: any) {
+function ScrollableList({ items }: { items: string[] }) {
   return (
-    <Panel title="Últimos jobs">
-      {jobs.slice(0, 15).map((j: any) => (
-        <div key={j.id} className="flex justify-between text-sm">
-          <span onClick={() => onSelect?.(j.id)} className="cursor-pointer hover:underline">
-            Job {j.id.slice(0, 8)}
-          </span>
-          {j.zip_url ? <a href={j.zip_url}>Download</a> : <span>{j.status}</span>}
-        </div>
+    <div className="max-h-[240px] overflow-y-auto space-y-1 text-sm text-gray-700">
+      {items.slice(0, 30).map((item, i) => (
+        <div key={i}>{item}</div>
       ))}
-    </Panel>
+    </div>
+  )
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span>{label}</span>
+      <span>{children}</span>
+    </div>
   )
 }
