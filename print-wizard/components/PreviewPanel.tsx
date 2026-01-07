@@ -129,12 +129,9 @@ export default function PreviewPanel(props: Props) {
     if (!jobId) return
 
     let stopped = false
-    setJob(null)
-    setFiles([])
-    setProgress(10)
-    setError(null)
+    let interval: any
 
-    const interval = setInterval(async () => {
+    async function poll() {
       try {
         const data: Job = await api(`/jobs/${jobId}`)
         if (stopped) return
@@ -143,29 +140,33 @@ export default function PreviewPanel(props: Props) {
 
         if (data.status === 'preview_done') {
           const f = await api(`/jobs/${jobId}/files`)
-          if (f.length === 0) return
-          setFiles(f)
+          if (f.length > 0) setFiles(f)
           setProgress(100)
-          clearInterval(interval)
+          return
         }
 
         if (data.status === 'done') {
+          const f = await api(`/jobs/${jobId}/files`)
+          if (f.length > 0) setFiles(f)
           setProgress(100)
           clearInterval(interval)
+          return
         }
 
         if (data.status === 'error') {
           clearInterval(interval)
+          return
         }
 
-        if (data.status !== 'preview_done' && data.status !== 'done') {
-          setProgress(p => Math.min(p + 8, 95))
-        }
+        setProgress(p => Math.min(p + 8, 95))
       } catch (e: any) {
         setError(e.message || 'Erro ao consultar status')
         clearInterval(interval)
       }
-    }, 1800)
+    }
+
+    poll()
+    interval = setInterval(poll, 1800)
 
     return () => {
       stopped = true
