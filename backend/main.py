@@ -15,7 +15,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="7.2")
+app = FastAPI(title="Projeto Estampas API", version="7.3")
 
 # =========================
 # CORS
@@ -36,7 +36,6 @@ app.add_middleware(
 async def preflight_handler(path: str, request: Request):
     return {}
 
-# Sempre devolver CORS mesmo em erro 500
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print("🔥 Unhandled exception:", exc)
@@ -132,7 +131,6 @@ def get_print(print_id: str, user=Depends(current_user)):
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(current_user)):
     validate_slots(payload.slots)
-
     print_id = str(uuid.uuid4())
 
     supabase.table("prints").insert({
@@ -237,12 +235,10 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
         q = q.lte("created_at", to)
 
     jobs = q.order("created_at", desc=True).limit(50).execute().data or []
-
     if not jobs:
         return []
 
     job_ids = [j["id"] for j in jobs]
-
     files = supabase.table("generated_files").select("job_id").in_("job_id", job_ids).execute().data or []
 
     file_count_map = {}
@@ -264,6 +260,25 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
 
     return result
 
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str, user=Depends(current_user)):
+    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+
+    pieces = (job.get("payload") or {}).get("pieces") or []
+    files = supabase.table("generated_files").select("id").eq("job_id", job_id).execute().data or []
+
+    return {
+        "id": job["id"],
+        "status": job["status"],
+        "created_at": job["created_at"],
+        "finished_at": job.get("finished_at"),
+        "zip_url": job.get("zip_url"),
+        "file_count": len(files),
+        "print_count": len(pieces),
+    }
+
 @app.get("/jobs/{job_id}/files")
 def get_job_files(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
@@ -272,19 +287,27 @@ def get_job_files(job_id: str, user=Depends(current_user)):
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
-    files = supabase.table("generated_files").select("*").eq("job_id", job_id).order("created_at").execute().data or []
+    files = (
+        supabase
+        .table("generated_files")
+        .select("id, public_url, page_index, created_at, preview")
+        .eq("job_id", job_id)
+        .order("page_index")
+        .execute()
+        .data
+        or []
+    )
 
     return [
         {
             "id": f["id"],
-            "url": f["url"],
-            "width": f.get("width"),
-            "height": f.get("height"),
+            "url": f["public_url"],
+            "page_index": f.get("page_index", 0),
             "created_at": f.get("created_at"),
+            "preview": f.get("preview", False),
         }
         for f in files
     ]
-
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
@@ -326,7 +349,6 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     pieces = job["payload"].get("pieces") or []
     total_units = len(pieces)
-
     if total_units <= 0:
         raise HTTPException(status_code=400, detail="Job vazio")
 
@@ -347,26 +369,6 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
     return {"status": "confirmed", "total_units": total_units}
-
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    pieces = (job.get("payload") or {}).get("pieces") or []
-
-    files = supabase.table("generated_files").select("id").eq("job_id", job_id).execute().data or []
-
-    return {
-        "id": job["id"],
-        "status": job["status"],
-        "created_at": job["created_at"],
-        "finished_at": job.get("finished_at"),
-        "zip_url": job.get("zip_url"),
-        "file_count": len(files),
-        "print_count": len(pieces),
-    }
 
 # =========================
 # STATS
