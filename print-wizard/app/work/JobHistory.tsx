@@ -1,7 +1,7 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import { api } from "@/lib/apiClient"
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/apiClient'
 
 type Job = {
   id: string
@@ -22,14 +22,18 @@ type Stats = {
   }
 }
 
-type Period = "today" | "yesterday" | "7d" | "30d" | "60d"
+type Period = 'today' | 'yesterday' | '7d' | '30d' | '60d'
 
-export default function JobHistory() {
+type Props = {
+  onSelect?: (jobId: string) => void
+}
+
+export default function JobHistory({ onSelect }: Props) {
   const [jobs, setJobs] = useState<Job[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(false)
-  const [period, setPeriod] = useState<Period>("7d")
-  const [price, setPrice] = useState("0")
+  const [period, setPeriod] = useState<Period>('7d')
+  const [price, setPrice] = useState('0')
   const [silenced, setSilenced] = useState<string[]>([])
 
   useEffect(() => {
@@ -42,18 +46,18 @@ export default function JobHistory() {
     const now = new Date()
     let from: Date | null = null
 
-    if (period === "today") {
+    if (period === 'today') {
       from = new Date(now.setHours(0, 0, 0, 0))
-    } else if (period === "yesterday") {
+    } else if (period === 'yesterday') {
       const y = new Date()
       y.setDate(y.getDate() - 1)
       from = new Date(y.setHours(0, 0, 0, 0))
     } else {
-      const days = { "7d": 7, "30d": 30, "60d": 60 }[period]
+      const days = { '7d': 7, '30d': 30, '60d': 60 }[period]
       from = new Date(Date.now() - days * 86400000)
     }
 
-    const params = from ? `?from=${from.toISOString()}` : ""
+    const params = from ? `?from=${from.toISOString()}` : ''
 
     try {
       const [jobsData, statsData] = await Promise.all([
@@ -67,11 +71,15 @@ export default function JobHistory() {
     }
   }
 
-  const numericPrice = Number(price.replace(",", ".")) || 0
+  const numericPrice = Number(price.replace(',', '.')) || 0
 
   const forgotten = stats?.not_used || []
   const activeForgotten = forgotten.filter(n => !silenced.includes(n.name))
   const silencedForgotten = forgotten.filter(n => silenced.includes(n.name))
+
+  const recentJobs = jobs.filter(
+    j => Date.now() - new Date(j.created_at).getTime() < 48 * 60 * 60 * 1000,
+  )
 
   return (
     <div className="space-y-4">
@@ -117,13 +125,11 @@ export default function JobHistory() {
               {silencedForgotten.length > 0 && (
                 <div className="mt-3 border-t pt-2 space-y-1">
                   <div className="text-xs text-gray-400">Silenciadas</div>
-                  {silencedForgotten.slice(0, 30).map(p => (
+                  {silencedForgotten.map(p => (
                     <div key={p.name} className="flex justify-between text-xs italic text-gray-400">
                       <span>{p.name}</span>
                       <button
-                        onClick={() =>
-                          setSilenced(s => s.filter(n => n !== p.name))
-                        }
+                        onClick={() => setSilenced(s => s.filter(n => n !== p.name))}
                         className="hover:text-black"
                       >
                         reativar
@@ -148,11 +154,47 @@ export default function JobHistory() {
                 <Row label="Arquivos gerados">{stats.costs.files}</Row>
                 <Row label="Estampas incluídas">{stats.costs.prints}</Row>
                 <Row label="Custo médio por estampa">
-                  R$ {stats.costs.prints > 0 ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2) : "0"}
+                  R${' '}
+                  {stats.costs.prints > 0
+                    ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2)
+                    : '0'}
                 </Row>
               </div>
             </Panel>
           </div>
+
+          <Panel title="Downloads recentes (48h)">
+            {recentJobs.length === 0 && (
+              <p className="text-sm text-gray-500">Nenhum disponível.</p>
+            )}
+
+            <div className="space-y-2">
+              {recentJobs.map(j => {
+                const d = new Date(j.created_at)
+                return (
+                  <div
+                    key={j.id}
+                    className="flex justify-between items-center text-sm border-b pb-1"
+                  >
+                    <span className="font-medium">
+                      JOB {d.toLocaleDateString()} {d.toLocaleTimeString().slice(0, 5)}
+                    </span>
+                    <span className="text-gray-500">
+                      {j.file_count ?? 0} arquivos • {j.print_count ?? 0} estampas
+                    </span>
+                    {j.zip_url && (
+                      <button
+                        onClick={() => onSelect?.(j.id)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        Abrir
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </Panel>
         </>
       )}
     </div>

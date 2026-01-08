@@ -26,10 +26,11 @@ export default function WorkPage() {
     }
   }, [loading, session, isLoggingOut, router])
 
-  if (loading) return <p className="p-6 text-gray-500">Carregando sessão...</p>
-  if (loading) return <p className="p-6 text-gray-500">Carregando sessão...</p>
-if (!session && !isLoggingOut) return null
-if (!session) return null
+  if (loading) {
+    return <p className="p-6 text-gray-500">Carregando sessão...</p>
+  }
+
+  if (!session && !isLoggingOut) return null
 
   async function logout() {
     if (isLoggingOut) return
@@ -43,7 +44,9 @@ if (!session) return null
       {/* HEADER */}
       <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <span className="text-sm text-gray-600">Olá, {session.user.email}</span>
+          <span className="text-sm text-gray-600">
+  Olá, {session?.user?.email ?? ''}
+</span>
           <div className="text-xl font-semibold tracking-widest">PVTY</div>
           <button onClick={logout} className="text-sm text-red-600">
             Sair
@@ -90,10 +93,12 @@ if (!session) return null
 
         {/* HISTÓRICO */}
         <section className="bg-white rounded-2xl shadow p-6">
-          <JobHistory onSelect={jobId => {
-            setSelectedJob(jobId)
-            setPreviewItems(null)
-          }} />
+          <JobHistory
+            onSelect={jobId => {
+              setSelectedJob(jobId)
+              setPreviewItems(null)
+            }}
+          />
         </section>
       </main>
     </div>
