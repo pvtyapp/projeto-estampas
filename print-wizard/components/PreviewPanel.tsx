@@ -30,16 +30,13 @@ type PreviewProps = {
 
 type JobProps = {
   jobId: string
+  onReset?: () => void
 }
 
 type Props = PreviewProps | JobProps
 
 function isPreviewProps(p: Props): p is PreviewProps {
   return Array.isArray((p as any)?.items)
-}
-
-function hasOnReset(p: Props): p is PreviewProps {
-  return typeof (p as any)?.onReset === 'function'
 }
 
 export default function PreviewPanel(props: Props) {
@@ -58,10 +55,7 @@ export default function PreviewPanel(props: Props) {
       const res: { job_id: string } = await api('/print-jobs', {
         method: 'POST',
         body: JSON.stringify({
-          items: items.map(i => ({
-            print_id: i.print_id,
-            qty: i.qty,
-          })),
+          items: items.map(i => ({ print_id: i.print_id, qty: i.qty })),
         }),
       })
       onJobCreated(res.job_id)
@@ -76,18 +70,22 @@ export default function PreviewPanel(props: Props) {
     try {
       await api(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
       setJob(j => (j ? { ...j, status: 'queued' } : j))
+      setSeconds(0)
     } finally {
       setConfirming(false)
     }
   }
 
+  // =======================
+  // POLLING
+  // =======================
   useEffect(() => {
     if (!('jobId' in props)) return
 
     let stop = false
+
     const interval = setInterval(async () => {
       if (stop) return
-
       try {
         const data: Job = await api(`/jobs/${props.jobId}`)
         setJob(data)
@@ -96,16 +94,23 @@ export default function PreviewPanel(props: Props) {
           const f: GeneratedFile[] = await api(`/jobs/${props.jobId}/files`)
           setFiles(f)
           setProgress(100)
-        } else if (data.status === 'done') {
-          setProgress(100)
-        } else {
-          setProgress(p => Math.min(p + 8, 95))
+          return
         }
 
+        if (data.status === 'done') {
+          setProgress(100)
+          return
+        }
+
+        if (data.status === 'error') {
+          setError(data.error || 'Erro no processamento')
+          return
+        }
+
+        setProgress(p => Math.min(p + 6, 95))
         setSeconds(s => s + 2)
       } catch (e: any) {
         setError(e.message || 'Erro ao consultar status')
-        clearInterval(interval)
       }
     }, 2000)
 
@@ -115,14 +120,18 @@ export default function PreviewPanel(props: Props) {
     }
   }, [props])
 
+  // =======================
+  // PREVIEW MODE
+  // =======================
   if (isPreviewProps(props)) {
     const total = props.items.reduce((s, i) => s + i.qty, 0)
 
     return (
-      <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between overflow-hidden">
-        <div className="space-y-3">
-          <h2 className="font-semibold text-lg">Pré-visualização</h2>
-          <div className="border rounded p-3 max-h-[260px] overflow-y-auto text-sm space-y-1">
+      <div className="border rounded-2xl p-8 bg-white min-h-[520px] flex flex-col justify-between">
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Pré-visualização</h2>
+
+          <div className="border rounded-lg p-4 max-h-[280px] overflow-y-auto text-sm space-y-2">
             {props.items.map(i => (
               <div key={i.print_id} className="flex justify-between">
                 <span>{i.name || i.print_id}</span>
@@ -130,20 +139,24 @@ export default function PreviewPanel(props: Props) {
               </div>
             ))}
           </div>
+
+          <p className="text-xs text-gray-500 leading-snug">
+            💡 Uma dica importante: veja seu último arquivo e certifique-se de que ele está completo na área de impressão — isso deixará os custos mais precisos.
+          </p>
         </div>
 
         <div className="flex justify-between items-center">
           <span className="text-sm text-gray-500">Total: {total}</span>
           <div className="flex gap-3">
-            <button onClick={props.onReset} className="border px-4 py-2 rounded">
+            <button onClick={props.onReset} className="border px-5 py-2 rounded-lg">
               Cancelar
             </button>
             <button
               onClick={() => preview(props.items, props.onJobCreated)}
               disabled={creating}
-              className="bg-black text-white px-5 py-2 rounded"
+              className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
             >
-              Gerar preview
+              {creating ? 'Gerando…' : 'Gerar preview'}
             </button>
           </div>
         </div>
@@ -151,33 +164,39 @@ export default function PreviewPanel(props: Props) {
     )
   }
 
+  // =======================
+  // JOB MODE
+  // =======================
   return (
-    <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between overflow-hidden">
-      <div className="space-y-3">
-        <h2 className="font-semibold text-lg">Processamento</h2>
+    <div className="border rounded-2xl p-8 bg-white min-h-[520px] flex flex-col justify-between">
+      <div className="space-y-4 text-center">
+        <h2 className="text-xl font-semibold">
+          {job?.status === 'done' ? 'Concluído' : 'Processando'}
+        </h2>
 
-        <div className="w-full bg-gray-200 rounded h-2">
-          <div className="bg-black h-full transition-all" style={{ width: `${progress}%` }} />
-        </div>
-
-        <p className="text-xs text-gray-400">Tempo decorrido: {seconds}s</p>
+        {job?.status !== 'done' && (
+          <>
+            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div className="bg-black h-full transition-all" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="text-xs text-gray-400">
+              Tempo estimado de processamento: ~{Math.max(10, 120 - seconds)} segundos
+            </p>
+          </>
+        )}
 
         {job?.status === 'preview_done' && (
           <>
             <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
 
-            <p className="text-xs text-gray-500 leading-snug">
-              Uma dica importante: veja seu último arquivo e certifique-se de que ele está completo na área de impressão — isso deixará os custos mais precisos.
-            </p>
-
-            <div className="grid grid-cols-3 gap-3 max-h-[180px] overflow-y-auto pr-1">
+            <div className="flex justify-center gap-4 flex-wrap max-h-[260px] overflow-y-auto">
               {files.map((f, i) => (
                 <button
                   key={f.id}
                   onClick={() => setZoom(f.url)}
-                  className="relative border rounded-lg overflow-hidden hover:ring-2 hover:ring-black transition"
+                  className="relative w-32 h-24 border rounded-lg overflow-hidden hover:ring-2 hover:ring-black"
                 >
-                  <img src={f.url} className="w-full h-24 object-cover opacity-90 blur-[0.5px]" />
+                  <img src={f.url} className="w-full h-full object-cover blur-[0.5px] opacity-90" />
                   <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
                     PRÉVIA
                   </div>
@@ -188,43 +207,50 @@ export default function PreviewPanel(props: Props) {
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              {hasOnReset(props) && (
-                <button onClick={props.onReset} className="border px-4 py-2 rounded text-sm">
+            <div className="flex justify-center gap-4 pt-4">
+              {props.onReset && (
+                <button onClick={props.onReset} className="border px-5 py-2 rounded-lg">
                   Cancelar
                 </button>
               )}
-
               <button
                 onClick={() => confirm(props.jobId)}
                 disabled={confirming}
-                className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
+                className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
               >
                 {confirming ? 'Concluindo…' : 'Concluir'}
               </button>
             </div>
           </>
         )}
+
+        {job?.status === 'done' && job.zip_url && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              Foram gerados {files.length} arquivos com sucesso.
+            </p>
+            <a href={job.zip_url} className="bg-black text-white px-8 py-3 rounded-lg inline-block">
+              Baixar arquivos finais
+            </a>
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
-      {job?.status === 'done' && job.zip_url && (
-        <div className="space-y-2 text-center w-full">
-          <p className="text-sm font-medium">Foram gerados {files.length} arquivos com sucesso.</p>
-          <a href={job.zip_url} className="bg-black text-white px-6 py-3 rounded inline-block">
-            Baixar arquivos finais
-          </a>
-        </div>
-      )}
-
       {zoom && (
-        <div onClick={() => setZoom(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl max-w-3xl max-h-[85vh] shadow-lg">
-            <img src={zoom} className="max-w-full max-h-[75vh] object-contain rounded" />
+        <div
+          onClick={() => setZoom(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        >
+          <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl shadow-lg">
+            <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white font-bold text-xl">
+              PRÉVIA
+            </div>
           </div>
         </div>
       )}
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   )
 }
