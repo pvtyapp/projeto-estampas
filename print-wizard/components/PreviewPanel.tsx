@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
+import MiniMapPreview from '@/components/MiniMapPreview'
 
 type PreviewItem = {
   print_id: string
@@ -73,7 +74,6 @@ export default function PreviewPanel(props: Props) {
 
   async function confirm(jobId: string) {
     if (!job || job.status !== 'preview_done') return
-
     setConfirming(true)
     try {
       await api(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
@@ -87,7 +87,7 @@ export default function PreviewPanel(props: Props) {
   }
 
   // ============================
-  // MODO PREVIEW (ANTES DE CRIAR JOB)
+  // MODO PREVIEW
   // ============================
   if (isPreviewProps(props)) {
     const totalUnits = props.items.reduce((s, i) => s + i.qty, 0)
@@ -99,7 +99,7 @@ export default function PreviewPanel(props: Props) {
 
           {props.items.length === 0 ? (
             <div className="h-[260px] flex items-center justify-center text-sm text-gray-400 border rounded">
-              Preencha as quantidades e clique em <b className="ml-1">Gerar folhas</b>.
+              Preencha as quantidades e clique em <b className="ml-1">Gerar preview</b>.
             </div>
           ) : (
             <div className="border rounded p-3 max-h-[260px] overflow-y-auto space-y-2 text-sm">
@@ -137,13 +137,12 @@ export default function PreviewPanel(props: Props) {
   }
 
   // ============================
-  // MODO JOB / PROCESSAMENTO
+  // MODO JOB
   // ============================
   const { jobId } = props as JobProps
 
   useEffect(() => {
     if (!jobId) return
-
     let stopped = false
     let interval: any
 
@@ -220,25 +219,7 @@ export default function PreviewPanel(props: Props) {
               {files.length} folhas geradas — isto é apenas uma prévia.
             </p>
 
-            <div className="flex gap-3 overflow-x-auto pb-2">
-              {files.map((f, i) => (
-                <div key={f.id} className="min-w-[110px] relative border rounded overflow-hidden text-xs">
-                  <img
-                    src={f.public_url}
-                    className="w-full blur-[1px] opacity-80 select-none pointer-events-none"
-                    alt="preview"
-                  />
-
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <img src="/logo-watermark.png" className="w-10 opacity-60" alt="marca dagua" />
-                  </div>
-
-                  <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1 rounded text-[10px]">
-                    {i + 1}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <MiniMapPreview previews={files} />
           </>
         )}
       </div>
