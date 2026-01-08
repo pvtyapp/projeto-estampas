@@ -49,6 +49,9 @@ export default function PreviewPanel(props: Props) {
   const [seconds, setSeconds] = useState(0)
   const [zoom, setZoom] = useState<string | null>(null)
 
+  // 👉 detecta se veio do histórico (não tem items, só jobId)
+  const fromHistory = !isPreviewProps(props)
+
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
     setCreating(true)
     try {
@@ -74,6 +77,19 @@ export default function PreviewPanel(props: Props) {
     } finally {
       setConfirming(false)
     }
+  }
+
+  function handleDownload(url: string) {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+    setTimeout(() => {
+      window.location.reload()
+    }, 5000)
   }
 
   // =======================
@@ -174,64 +190,19 @@ export default function PreviewPanel(props: Props) {
           {job?.status === 'done' ? 'Concluído' : 'Processando'}
         </h2>
 
-        {job?.status !== 'done' && (
-          <>
-            <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-              <div className="bg-black h-full transition-all" style={{ width: `${progress}%` }} />
-            </div>
-            <p className="text-xs text-gray-400">
-              Tempo estimado de processamento: ~{Math.max(10, 120 - seconds)} segundos
-            </p>
-          </>
-        )}
-
-        {job?.status === 'preview_done' && (
-          <>
-            <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
-
-            <div className="flex justify-center gap-4 flex-wrap max-h-[260px] overflow-y-auto">
-              {files.map((f, i) => (
-                <button
-                  key={f.id}
-                  onClick={() => setZoom(f.url)}
-                  className="relative w-32 h-24 border rounded-lg overflow-hidden hover:ring-2 hover:ring-black"
-                >
-                  <img src={f.url} className="w-full h-full object-cover blur-[0.5px] opacity-90" />
-                  <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
-                    PRÉVIA
-                  </div>
-                  <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 rounded">
-                    {i + 1}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex justify-center gap-4 pt-4">
-              {props.onReset && (
-                <button onClick={props.onReset} className="border px-5 py-2 rounded-lg">
-                  Cancelar
-                </button>
-              )}
-              <button
-                onClick={() => confirm(props.jobId)}
-                disabled={confirming}
-                className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
-              >
-                {confirming ? 'Concluindo…' : 'Concluir'}
-              </button>
-            </div>
-          </>
-        )}
-
         {job?.status === 'done' && job.zip_url && (
           <div className="space-y-3">
             <p className="text-sm font-medium">
-              Foram gerados {files.length} arquivos com sucesso.
+              {fromHistory
+                ? 'Faça novamente o download dos arquivos abaixo.'
+                : `Foram gerados ${files.length} arquivos com sucesso.`}
             </p>
-            <a href={job.zip_url} className="bg-black text-white px-8 py-3 rounded-lg inline-block">
+            <button
+              onClick={() => handleDownload(job.zip_url!)}
+              className="bg-black text-white px-8 py-3 rounded-lg"
+            >
               Baixar arquivos finais
-            </a>
+            </button>
           </div>
         )}
 
@@ -244,7 +215,7 @@ export default function PreviewPanel(props: Props) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         >
           <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl shadow-lg">
-            <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded" />
+            <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded blur-[0.5px]" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white font-bold text-xl">
               PRÉVIA
             </div>
