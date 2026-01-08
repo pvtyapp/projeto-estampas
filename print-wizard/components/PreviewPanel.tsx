@@ -38,6 +38,10 @@ function isPreviewProps(p: Props): p is PreviewProps {
   return Array.isArray((p as any)?.items)
 }
 
+function hasOnReset(p: Props): p is PreviewProps {
+  return typeof (p as any)?.onReset === 'function'
+}
+
 export default function PreviewPanel(props: Props) {
   const [job, setJob] = useState<Job | null>(null)
   const [files, setFiles] = useState<GeneratedFile[]>([])
@@ -88,17 +92,17 @@ export default function PreviewPanel(props: Props) {
         const data: Job = await api(`/jobs/${props.jobId}`)
         setJob(data)
 
-        if (data.status === 'preview_done' || data.status === 'done') {
+        if (data.status === 'preview_done') {
           const f: GeneratedFile[] = await api(`/jobs/${props.jobId}/files`)
           setFiles(f)
+          setProgress(100)
+        } else if (data.status === 'done') {
           setProgress(100)
         } else {
           setProgress(p => Math.min(p + 8, 95))
         }
 
-        if (data.status !== 'done') {
-          setSeconds(s => s + 2)
-        }
+        setSeconds(s => s + 2)
       } catch (e: any) {
         setError(e.message || 'Erro ao consultar status')
         clearInterval(interval)
@@ -147,57 +151,80 @@ export default function PreviewPanel(props: Props) {
     )
   }
 
-  const isFinal = job?.status === 'done'
-
   return (
-    <div className={`border rounded-xl bg-white h-[420px] flex flex-col justify-center items-center overflow-hidden ${!isFinal ? 'p-6' : 'p-10 text-center'}`}>
-      {!isFinal && (
-        <>
-          <h2 className="font-semibold text-lg mb-2">Processando</h2>
+    <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between overflow-hidden">
+      <div className="space-y-3">
+        <h2 className="font-semibold text-lg">Processamento</h2>
 
-          <div className="w-64 bg-gray-200 rounded h-2 mb-2">
-            <div className="bg-black h-full transition-all" style={{ width: `${progress}%` }} />
-          </div>
+        <div className="w-full bg-gray-200 rounded h-2">
+          <div className="bg-black h-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
 
-          <p className="text-sm text-gray-500 mb-1">
-            Tempo estimado de processamento
-          </p>
+        <p className="text-xs text-gray-400">Tempo decorrido: {seconds}s</p>
 
-          <p className="text-xs text-gray-400">~{Math.max(10, 120 - seconds)} segundos</p>
-        </>
-      )}
+        {job?.status === 'preview_done' && (
+          <>
+            <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
 
-      {isFinal && job?.zip_url && (
-        <>
-          <h2 className="font-semibold text-xl mb-2">Processamento concluído</h2>
-          <p className="text-sm text-gray-600 mb-1">
-            Foram gerados <b>{files.length}</b> arquivos finais.
-          </p>
-          <p className="text-sm text-gray-600 mb-4">
-            Total de estampas: <b>{files.length}</b>
-          </p>
-          <a
-            href={job.zip_url}
-            className="bg-black text-white px-8 py-3 rounded-lg"
-          >
+            <p className="text-xs text-gray-500 leading-snug">
+              Uma dica importante: veja seu último arquivo e certifique-se de que ele está completo na área de impressão — isso deixará os custos mais precisos.
+            </p>
+
+            <div className="grid grid-cols-3 gap-3 max-h-[180px] overflow-y-auto pr-1">
+              {files.map((f, i) => (
+                <button
+                  key={f.id}
+                  onClick={() => setZoom(f.url)}
+                  className="relative border rounded-lg overflow-hidden hover:ring-2 hover:ring-black transition"
+                >
+                  <img src={f.url} className="w-full h-24 object-cover opacity-90 blur-[0.5px]" />
+                  <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
+                    PRÉVIA
+                  </div>
+                  <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 rounded">
+                    {i + 1}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              {hasOnReset(props) && (
+                <button onClick={props.onReset} className="border px-4 py-2 rounded text-sm">
+                  Cancelar
+                </button>
+              )}
+
+              <button
+                onClick={() => confirm(props.jobId)}
+                disabled={confirming}
+                className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
+              >
+                {confirming ? 'Concluindo…' : 'Concluir'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {job?.status === 'done' && job.zip_url && (
+        <div className="space-y-2 text-center w-full">
+          <p className="text-sm font-medium">Foram gerados {files.length} arquivos com sucesso.</p>
+          <a href={job.zip_url} className="bg-black text-white px-6 py-3 rounded inline-block">
             Baixar arquivos finais
           </a>
-        </>
+        </div>
       )}
 
       {zoom && (
-        <div
-          onClick={() => setZoom(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="bg-white p-4 rounded-xl max-w-3xl max-h-[85vh] shadow-lg"
-          >
+        <div onClick={() => setZoom(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl max-w-3xl max-h-[85vh] shadow-lg">
             <img src={zoom} className="max-w-full max-h-[75vh] object-contain rounded" />
           </div>
         </div>
       )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   )
 }
