@@ -1,5 +1,8 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/app/providers/SessionProvider'
@@ -65,7 +68,7 @@ export default function WorkPage() {
         <section className="bg-white rounded-2xl shadow p-6 min-h-[200px] flex items-center justify-center">
           {previewItems && previewItems.length > 0 && !selectedJob ? (
             <PreviewPanel
-              key="preview"
+              key={`preview-${previewItems.length}`}
               items={previewItems}
               onJobCreated={jobId => {
                 setSelectedJob(jobId)
@@ -74,7 +77,7 @@ export default function WorkPage() {
               onReset={() => setPreviewItems(null)}
             />
           ) : selectedJob ? (
-            <PreviewPanel key={selectedJob} jobId={selectedJob} />
+            <PreviewPanel key={`job-${selectedJob}`} jobId={selectedJob} />
           ) : (
             <div className="text-gray-400 text-sm text-center">
               Preencha as quantidades e clique em “Gerar folhas”.
