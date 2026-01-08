@@ -35,13 +35,19 @@ export default function JobHistory({ onSelect }: Props) {
   const [period, setPeriod] = useState<Period>('7d')
   const [price, setPrice] = useState('0')
   const [silenced, setSilenced] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    load(cancelled)
+    return () => {
+      cancelled = true
+    }
   }, [period])
 
-  async function load() {
+  async function load(cancelled: boolean) {
     setLoading(true)
+    setError(null)
 
     const now = new Date()
     let from: Date | null = null
@@ -64,10 +70,20 @@ export default function JobHistory({ onSelect }: Props) {
         api(`/jobs/history${params}`),
         api(`/stats/prints${params}`),
       ])
+
+      if (cancelled) return
+
       setJobs(jobsData || [])
       setStats(statsData || null)
+    } catch (err) {
+      console.error('JobHistory load failed:', err)
+      if (!cancelled) {
+        setError('Falha ao carregar histórico.')
+        setJobs([])
+        setStats(null)
+      }
     } finally {
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     }
   }
 
@@ -99,8 +115,9 @@ export default function JobHistory({ onSelect }: Props) {
       </div>
 
       {loading && <p className="text-sm text-gray-500">Carregando dados…</p>}
+      {error && <p className="text-sm text-red-500">{error}</p>}
 
-      {!loading && stats && (
+      {!loading && !error && stats && (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Panel title="Top mais utilizadas">

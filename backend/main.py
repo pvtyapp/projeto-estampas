@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
@@ -14,7 +15,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="7.1")
+app = FastAPI(title="Projeto Estampas API", version="7.2")
 
 # =========================
 # CORS
@@ -22,7 +23,10 @@ app = FastAPI(title="Projeto Estampas API", version="7.1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://pvty.vercel.app"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://pvty.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +35,19 @@ app.add_middleware(
 @app.options("/{path:path}")
 async def preflight_handler(path: str, request: Request):
     return {}
+
+# Sempre devolver CORS mesmo em erro 500
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print("🔥 Unhandled exception:", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error"},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
 
 # =========================
 # MODELOS
@@ -318,16 +335,8 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
     since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
 
     prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
-    usage = supabase.table("usage").select("created_at,amount").eq("user_id", user["sub"]).execute().data or []
-
     usage_map = {}
     last_used = {}
-
-    for u in usage:
-        last_used["*"] = u["created_at"]
-
-    for p in prints:
-        usage_map[p["id"]] = usage_map.get(p["id"], 0)
 
     jobs = supabase.table("jobs").select("payload,created_at").eq("user_id", user["sub"]).execute().data or []
     for j in jobs:
@@ -348,7 +357,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         if not last_used.get(p["id"]) or last_used[p["id"]] < since_45d
     ][:15]
 
-    files = supabase.table("generated_files").select("id").eq("job_id", None).execute().data or []
+    files = supabase.table("generated_files").select("id").execute().data or []
 
     return {
         "top_used": top_used,
@@ -384,7 +393,6 @@ def get_my_usage(user=Depends(current_user)):
         remaining_days = 30 - now.day
 
     rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).gte("created_at", start.isoformat()).execute().data or []
-
     used = sum(r["amount"] or 0 for r in rows)
 
     credits = supabase.table("credit_packs").select("remaining").eq("user_id", user["sub"]).execute().data or []
