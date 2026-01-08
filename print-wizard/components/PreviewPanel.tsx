@@ -49,9 +49,6 @@ export default function PreviewPanel(props: Props) {
   const [seconds, setSeconds] = useState(0)
   const [zoom, setZoom] = useState<string | null>(null)
 
-  // 👉 detecta se veio do histórico (não tem items, só jobId)
-  const fromHistory = !isPreviewProps(props)
-
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
     setCreating(true)
     try {
@@ -79,22 +76,6 @@ export default function PreviewPanel(props: Props) {
     }
   }
 
-  function handleDownload(url: string) {
-    const a = document.createElement('a')
-    a.href = url
-    a.download = ''
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-
-    setTimeout(() => {
-      window.location.reload()
-    }, 5000)
-  }
-
-  // =======================
-  // POLLING
-  // =======================
   useEffect(() => {
     if (!('jobId' in props)) return
 
@@ -136,9 +117,6 @@ export default function PreviewPanel(props: Props) {
     }
   }, [props])
 
-  // =======================
-  // PREVIEW MODE
-  // =======================
   if (isPreviewProps(props)) {
     const total = props.items.reduce((s, i) => s + i.qty, 0)
 
@@ -180,33 +158,77 @@ export default function PreviewPanel(props: Props) {
     )
   }
 
-  // =======================
-  // JOB MODE
-  // =======================
+  const remaining = Math.max(0, 120 - seconds)
+
   return (
-    <div className="border rounded-2xl p-8 bg-white min-h-[520px] flex flex-col justify-between">
-      <div className="space-y-4 text-center">
-        <h2 className="text-xl font-semibold">
+    <div className="border rounded-2xl p-10 bg-white min-h-[320px] flex flex-col justify-between">
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold text-center">
           {job?.status === 'done' ? 'Concluído' : 'Processando'}
         </h2>
 
-        {job?.status === 'done' && job.zip_url && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium">
-              {fromHistory
-                ? 'Faça novamente o download dos arquivos abaixo.'
-                : `Foram gerados ${files.length} arquivos com sucesso.`}
+        {job?.status !== 'done' && (
+          <>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-black h-full transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            <p className="text-xs text-gray-500 text-center">
+              ~ {remaining} segundos restantes
             </p>
+          </>
+        )}
+
+        {job?.status === 'preview_done' && (
+          <div className="space-y-4 text-center">
+            <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
+
+            <div className="flex justify-center gap-4 flex-wrap max-h-[220px] overflow-y-auto">
+              {files.map((f, i) => (
+                <button
+                  key={f.id}
+                  onClick={() => setZoom(f.url)}
+                  className="relative w-32 h-24 border rounded-lg overflow-hidden hover:ring-2 hover:ring-black"
+                >
+                  <img src={f.url} className="w-full h-full object-cover blur-[0.5px] opacity-90" />
+                  <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
+                    PRÉVIA
+                  </div>
+                </button>
+              ))}
+            </div>
+
             <button
-              onClick={() => handleDownload(job.zip_url!)}
-              className="bg-black text-white px-8 py-3 rounded-lg"
+              onClick={() => confirm(props.jobId)}
+              disabled={confirming}
+              className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
             >
-              Baixar arquivos finais
+              {confirming ? 'Concluindo…' : 'Concluir'}
             </button>
           </div>
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {job?.status === 'done' && job.zip_url && (
+          <div className="space-y-3 text-center">
+            <p className="text-sm font-medium">
+              Foram gerados {files.length} arquivos com sucesso.
+            </p>
+            <a href={job.zip_url} className="bg-black text-white px-8 py-3 rounded-lg inline-block">
+              Baixar arquivos finais
+            </a>
+          </div>
+        )}
+
+        {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+      </div>
+
+      <div className="flex justify-end">
+        <span className="text-xs text-gray-400 italic">
+          Aproveite esse tempo para beber água!!! 💧
+        </span>
       </div>
 
       {zoom && (
@@ -215,7 +237,7 @@ export default function PreviewPanel(props: Props) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         >
           <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl shadow-lg">
-            <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded blur-[0.5px]" />
+            <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white font-bold text-xl">
               PRÉVIA
             </div>
