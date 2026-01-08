@@ -264,6 +264,28 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
 
     return result
 
+@app.get("/jobs/{job_id}/files")
+def get_job_files(job_id: str, user=Depends(current_user)):
+    uuid.UUID(job_id)
+
+    job = supabase.table("jobs").select("id").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+
+    files = supabase.table("generated_files").select("*").eq("job_id", job_id).order("created_at").execute().data or []
+
+    return [
+        {
+            "id": f["id"],
+            "url": f["url"],
+            "width": f.get("width"),
+            "height": f.get("height"),
+            "created_at": f.get("created_at"),
+        }
+        for f in files
+    ]
+
+
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     if not payload.items:
