@@ -26,10 +26,7 @@ export default function WorkPage() {
     }
   }, [loading, session, isLoggingOut, router])
 
-  if (loading) {
-    return <p className="p-6 text-gray-500">Carregando sessão...</p>
-  }
-
+  if (loading) return <p className="p-6 text-gray-500">Carregando sessão...</p>
   if (!session && !isLoggingOut) return null
 
   async function logout() {
@@ -41,12 +38,9 @@ export default function WorkPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* HEADER */}
       <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <span className="text-sm text-gray-600">
-  Olá, {session?.user?.email ?? ''}
-</span>
+          <span className="text-sm text-gray-600">Olá, {session?.user?.email ?? ''}</span>
           <div className="text-xl font-semibold tracking-widest">PVTY</div>
           <button onClick={logout} className="text-sm text-red-600">
             Sair
@@ -55,10 +49,8 @@ export default function WorkPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-        {/* DASHBOARD */}
         <DashboardPanel />
 
-        {/* WIZARD + BIBLIOTECA */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
           <Library
@@ -70,7 +62,6 @@ export default function WorkPage() {
           />
         </section>
 
-        {/* PREVIEW / JOB */}
         <section className="bg-white rounded-2xl shadow p-6 min-h-[200px] flex items-center justify-center">
           {previewItems && previewItems.length > 0 && !selectedJob ? (
             <PreviewPanel
@@ -91,7 +82,6 @@ export default function WorkPage() {
           )}
         </section>
 
-        {/* HISTÓRICO */}
         <section className="bg-white rounded-2xl shadow p-6">
           <JobHistory
             onSelect={jobId => {
