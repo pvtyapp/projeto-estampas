@@ -201,24 +201,40 @@ export default function PreviewPanel(props: Props) {
               ))}
             </div>
 
-            <button
-              onClick={() => confirm(props.jobId)}
-              disabled={confirming}
-              className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
-            >
-              {confirming ? 'Concluindo…' : 'Concluir'}
-            </button>
+            <div className="flex justify-center gap-4 pt-4">
+              <button
+                onClick={() => window.location.reload()}
+                className="border px-6 py-2 rounded-lg"
+              >
+                Refazer
+              </button>
+
+              <button
+                onClick={() => confirm(props.jobId)}
+                disabled={confirming}
+                className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
+              >
+                {confirming ? 'Concluindo…' : 'Concluir'}
+              </button>
+            </div>
           </div>
         )}
 
         {job?.status === 'done' && job.zip_url && (
-          <div className="space-y-3 text-center">
+          <div className="space-y-4 text-center">
             <p className="text-sm font-medium">
               Foram gerados {files.length} arquivos com sucesso.
             </p>
             <a href={job.zip_url} className="bg-black text-white px-8 py-3 rounded-lg inline-block">
               Baixar arquivos finais
             </a>
+
+            <button
+              onClick={() => window.location.reload()}
+              className="text-sm text-gray-500 underline mt-2"
+            >
+              Fazer outro arquivo
+            </button>
           </div>
         )}
 
