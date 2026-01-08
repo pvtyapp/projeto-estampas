@@ -8,6 +8,8 @@ type Job = {
   status: string
   created_at: string
   zip_url?: string
+  file_count?: number
+  print_count?: number
 }
 
 type Stats = {
@@ -22,16 +24,13 @@ type Stats = {
 
 type Period = "today" | "yesterday" | "7d" | "30d" | "60d"
 
-type JobHistoryProps = {
-  onSelect?: (jobId: string) => void
-}
-
-export default function JobHistory({ onSelect }: JobHistoryProps) {
+export default function JobHistory() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(false)
-  const [period, setPeriod] = useState<Period>("30d")
-  const [price, setPrice] = useState(0)
+  const [period, setPeriod] = useState<Period>("7d")
+  const [price, setPrice] = useState("0")
+  const [silenced, setSilenced] = useState<string[]>([])
 
   useEffect(() => {
     load()
@@ -42,7 +41,6 @@ export default function JobHistory({ onSelect }: JobHistoryProps) {
 
     const now = new Date()
     let from: Date | null = null
-    let to: Date | null = null
 
     if (period === "today") {
       from = new Date(now.setHours(0, 0, 0, 0))
@@ -50,15 +48,12 @@ export default function JobHistory({ onSelect }: JobHistoryProps) {
       const y = new Date()
       y.setDate(y.getDate() - 1)
       from = new Date(y.setHours(0, 0, 0, 0))
-      to = new Date(y.setHours(23, 59, 59, 999))
     } else {
       const days = { "7d": 7, "30d": 30, "60d": 60 }[period]
       from = new Date(Date.now() - days * 86400000)
     }
 
-    let params = ""
-    if (from) params += `?from=${from.toISOString()}`
-    if (to) params += `&to=${to.toISOString()}`
+    const params = from ? `?from=${from.toISOString()}` : ""
 
     try {
       const [jobsData, statsData] = await Promise.all([
@@ -72,13 +67,15 @@ export default function JobHistory({ onSelect }: JobHistoryProps) {
     }
   }
 
-  const recentJobs = jobs.filter(
-    j => Date.now() - new Date(j.created_at).getTime() < 48 * 60 * 60 * 1000
-  )
+  const numericPrice = Number(price.replace(",", ".")) || 0
+
+  const forgotten = stats?.not_used || []
+  const activeForgotten = forgotten.filter(n => !silenced.includes(n.name))
+  const silencedForgotten = forgotten.filter(n => silenced.includes(n.name))
 
   return (
     <div className="space-y-4">
-      {/* Period Filter */}
+      {/* FILTRO */}
       <div className="flex justify-between items-center">
         <select
           value={period}
@@ -96,53 +93,67 @@ export default function JobHistory({ onSelect }: JobHistoryProps) {
       {loading && <p className="text-sm text-gray-500">Carregando dados…</p>}
 
       {!loading && stats && (
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <Panel title="Top mais utilizadas">
-            <ScrollableList items={stats.top_used?.map(p => `${p.name} (${p.count})`) || []} />
-          </Panel>
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Panel title="Top mais utilizadas">
+              <ScrollableList items={stats.top_used.map(p => `${p.name} (${p.count})`)} />
+            </Panel>
 
-          <Panel title="Top esquecidas">
-            <ScrollableList items={stats.not_used?.map(p => p.name) || []} />
-          </Panel>
+            <Panel title="Top esquecidas (≥ 45 dias sem uso)">
+              <div className="space-y-1">
+                {activeForgotten.slice(0, 30).map(p => (
+                  <div key={p.name} className="flex justify-between text-sm">
+                    <span>{p.name}</span>
+                    <button
+                      onClick={() => setSilenced(s => [...s, p.name])}
+                      className="text-xs text-gray-400 hover:text-black"
+                    >
+                      silenciar
+                    </button>
+                  </div>
+                ))}
+              </div>
 
-          <Panel title="Indicadores de custo">
-            <div className="space-y-2 text-sm text-gray-700">
-              <Row label="Preço do metro (R$)">
-                <input
-                  type="number"
-                  value={price}
-                  onChange={e => setPrice(Number(e.target.value))}
-                  className="border rounded px-2 py-1 w-24 text-right"
-                />
-              </Row>
-              <Row label="Arquivos gerados">{stats.costs.files}</Row>
-              <Row label="Estampas incluídas">{stats.costs.prints}</Row>
-              <Row label="Custo médio por estampa">
-                R$ {stats.costs.prints > 0 ? ((stats.costs.files * price) / stats.costs.prints).toFixed(2) : "0"}
-              </Row>
-            </div>
-          </Panel>
-
-          <Panel title="Downloads recentes (48h)">
-            {recentJobs.length === 0 && <p className="text-sm text-gray-500">Nenhum disponível.</p>}
-            {recentJobs.map((j: Job) => {
-              const d = new Date(j.created_at)
-              const label = `JOB ${d.toLocaleDateString()} ${d.toLocaleTimeString().slice(0, 5)}`
-              return (
-                <div key={j.id} className="flex justify-between text-sm">
-                  <span onClick={() => onSelect?.(j.id)} className="cursor-pointer hover:underline">
-                    {label}
-                  </span>
-                  {j.zip_url && (
-                    <a href={j.zip_url} className="text-blue-600 hover:underline">
-                      Download
-                    </a>
-                  )}
+              {silencedForgotten.length > 0 && (
+                <div className="mt-3 border-t pt-2 space-y-1">
+                  <div className="text-xs text-gray-400">Silenciadas</div>
+                  {silencedForgotten.slice(0, 30).map(p => (
+                    <div key={p.name} className="flex justify-between text-xs italic text-gray-400">
+                      <span>{p.name}</span>
+                      <button
+                        onClick={() =>
+                          setSilenced(s => s.filter(n => n !== p.name))
+                        }
+                        className="hover:text-black"
+                      >
+                        reativar
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              )
-            })}
-          </Panel>
-        </div>
+              )}
+            </Panel>
+
+            <Panel title="Indicadores de custo">
+              <div className="space-y-2 text-sm text-gray-700">
+                <Row label="Preço do metro (R$)">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={price}
+                    onChange={e => setPrice(e.target.value)}
+                    className="border rounded px-2 py-1 w-24 text-right"
+                  />
+                </Row>
+                <Row label="Arquivos gerados">{stats.costs.files}</Row>
+                <Row label="Estampas incluídas">{stats.costs.prints}</Row>
+                <Row label="Custo médio por estampa">
+                  R$ {stats.costs.prints > 0 ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2) : "0"}
+                </Row>
+              </div>
+            </Panel>
+          </div>
+        </>
       )}
     </div>
   )
@@ -159,8 +170,8 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function ScrollableList({ items }: { items: string[] }) {
   return (
-    <div className="max-h-[240px] overflow-y-auto space-y-1 text-sm text-gray-700">
-      {items.slice(0, 30).map((item, i) => (
+    <div className="max-h-[240px] overflow-y-auto space-y-1 text-sm text-gray-700 pr-1">
+      {items.map((item, i) => (
         <div key={i}>{item}</div>
       ))}
     </div>

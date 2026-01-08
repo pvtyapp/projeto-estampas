@@ -1,6 +1,6 @@
 import uuid
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="7.0")
+app = FastAPI(title="Projeto Estampas API", version="7.1")
 
 # =========================
 # CORS
@@ -213,12 +213,39 @@ def build_pieces(print_obj, qty: int):
 
 @app.get("/jobs/history")
 def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url").eq("user_id", user["sub"])
+    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url,payload").eq("user_id", user["sub"])
     if from_:
         q = q.gte("created_at", from_)
     if to:
         q = q.lte("created_at", to)
-    return q.order("created_at", desc=True).limit(50).execute().data or []
+
+    jobs = q.order("created_at", desc=True).limit(50).execute().data or []
+
+    if not jobs:
+        return []
+
+    job_ids = [j["id"] for j in jobs]
+
+    files = supabase.table("generated_files").select("job_id").in_("job_id", job_ids).execute().data or []
+
+    file_count_map = {}
+    for f in files:
+        file_count_map[f["job_id"]] = file_count_map.get(f["job_id"], 0) + 1
+
+    result = []
+    for j in jobs:
+        pieces = (j.get("payload") or {}).get("pieces") or []
+        result.append({
+            "id": j["id"],
+            "status": j["status"],
+            "created_at": j["created_at"],
+            "finished_at": j.get("finished_at"),
+            "zip_url": j.get("zip_url"),
+            "file_count": file_count_map.get(j["id"], 0),
+            "print_count": len(pieces),
+        })
+
+    return result
 
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
@@ -282,72 +309,53 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     return {"status": "confirmed", "total_units": total_units}
 
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, user=Depends(current_user)):
-    uuid.UUID(job_id)
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-    return job
-
-@app.get("/jobs/{job_id}/files")
-def get_job_files(job_id: str, user=Depends(current_user)):
-    uuid.UUID(job_id)
-    return (
-        supabase
-        .table("generated_files")
-        .select("id, public_url, page_index")
-        .eq("job_id", job_id)
-        .order("page_index")
-        .execute()
-        .data
-        or []
-    )
-
 # =========================
 # STATS
 # =========================
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    jobs_q = supabase.table("jobs").select("id").eq("user_id", user["sub"])
-    if from_:
-        jobs_q = jobs_q.gte("created_at", from_)
-    if to:
-        jobs_q = jobs_q.lte("created_at", to)
+    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
 
-    jobs = jobs_q.execute().data or []
-    job_ids = [j["id"] for j in jobs]
-
-    if not job_ids:
-        return {"top_used": [], "not_used": [], "costs": {"files": 0, "prints": 0, "total_cost": 0}}
-
-    files = supabase.table("generated_files").select("job_id").in_("job_id", job_ids).execute().data or []
-
-    usage = supabase.table("usage").select("amount").eq("user_id", user["sub"]).execute().data or []
-    total_prints = sum(u["amount"] or 0 for u in usage)
-
-    prints = supabase.table("prints").select("name,id").eq("user_id", user["sub"]).execute().data or []
-    slots = supabase.table("print_slots").select("print_id").execute().data or []
+    prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
+    usage = supabase.table("usage").select("created_at,amount").eq("user_id", user["sub"]).execute().data or []
 
     usage_map = {}
-    for s in slots:
-        usage_map[s["print_id"]] = usage_map.get(s["print_id"], 0) + 1
+    last_used = {}
+
+    for u in usage:
+        last_used["*"] = u["created_at"]
+
+    for p in prints:
+        usage_map[p["id"]] = usage_map.get(p["id"], 0)
+
+    jobs = supabase.table("jobs").select("payload,created_at").eq("user_id", user["sub"]).execute().data or []
+    for j in jobs:
+        for piece in (j.get("payload") or {}).get("pieces", []):
+            pid = piece["print_id"]
+            usage_map[pid] = usage_map.get(pid, 0) + 1
+            last_used[pid] = j["created_at"]
 
     top_used = sorted(
         [{"name": p["name"], "count": usage_map.get(p["id"], 0)} for p in prints],
         key=lambda x: x["count"],
         reverse=True,
-    )
+    )[:15]
 
-    not_used = [p for p in prints if usage_map.get(p["id"], 0) == 0]
+    not_used = [
+        {"name": p["name"]}
+        for p in prints
+        if not last_used.get(p["id"]) or last_used[p["id"]] < since_45d
+    ][:15]
+
+    files = supabase.table("generated_files").select("id").eq("job_id", None).execute().data or []
 
     return {
-        "top_used": top_used[:15],
-        "not_used": not_used[:15],
+        "top_used": top_used,
+        "not_used": not_used,
         "costs": {
             "files": len(files),
-            "prints": total_prints,
+            "prints": sum(usage_map.values()),
             "total_cost": 0,
         },
     }
@@ -366,7 +374,6 @@ def get_my_usage(user=Depends(current_user)):
 
     now = datetime.now(timezone.utc)
 
-    # Determine period
     if plan.get("daily_limit"):
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         limit = plan["daily_limit"]
@@ -376,15 +383,7 @@ def get_my_usage(user=Depends(current_user)):
         limit = plan.get("monthly_limit") or 100
         remaining_days = 30 - now.day
 
-    rows = (
-        supabase
-        .table("usage")
-        .select("amount")
-        .eq("user_id", user["sub"])
-        .gte("created_at", start.isoformat())
-        .execute()
-        .data or []
-    )
+    rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).gte("created_at", start.isoformat()).execute().data or []
 
     used = sum(r["amount"] or 0 for r in rows)
 
@@ -405,4 +404,3 @@ def get_my_usage(user=Depends(current_user)):
         "remaining_days": remaining_days,
         "status": status,
     }
-

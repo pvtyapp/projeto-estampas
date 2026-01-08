@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
 
-type Plan = 'free' | 'start' | 'profissional' | 'enterprise'
+type Plan = 'free' | 'start' | 'pro' | 'ent'
 
 type Usage = {
   plan: Plan
@@ -71,8 +71,8 @@ export default function DashboardPanel() {
   const planLabel: Record<Plan, string> = {
     free: 'Free',
     start: 'Start',
-    profissional: 'Profissional',
-    enterprise: 'Enterprise',
+    pro: 'Pro',
+    ent: 'Enterprise',
   }
 
   const statusLabel = {

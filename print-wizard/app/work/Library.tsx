@@ -26,6 +26,10 @@ type PreviewItem = {
   sku?: string
 }
 
+type Usage = {
+  library_limit: number | null
+}
+
 type Props = {
   onPreview: (items: PreviewItem[]) => void
   version: number
@@ -35,6 +39,7 @@ export default function Library({ onPreview, version }: Props) {
   const [prints, setPrints] = useState<Print[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [usage, setUsage] = useState<Usage | null>(null)
 
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [openNote, setOpenNote] = useState<string | null>(null)
@@ -48,8 +53,12 @@ export default function Library({ onPreview, version }: Props) {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const data = (await api('/prints')) as Print[]
-      setPrints(data)
+      const [printsData, usageData] = await Promise.all([
+        api('/prints'),
+        api('/me/usage'),
+      ])
+      setPrints(printsData)
+      setUsage(usageData)
     } catch (err) {
       console.error('Erro ao carregar biblioteca', err)
       alert('Erro ao carregar biblioteca. Veja o console.')
@@ -74,14 +83,40 @@ export default function Library({ onPreview, version }: Props) {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
-    return prints.filter(
-      p =>
-        String(p.name).toLowerCase().includes(q) ||
-        String(p.sku).toLowerCase().includes(q),
-    )
+    return prints
+      .filter(
+        p =>
+          String(p.name).toLowerCase().includes(q) ||
+          String(p.sku).toLowerCase().includes(q),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name))
   }, [prints, search])
 
+  const limit = usage?.library_limit || Infinity
+  const used = prints.length
+  const percent = (used / limit) * 100
+  const isBlocked = used >= limit
+
+  const counterColor =
+    percent >= 100
+      ? 'text-red-600'
+      : percent >= 70
+      ? 'text-yellow-600'
+      : 'text-gray-500'
+
+  const tooltip =
+    percent >= 100
+      ? 'Você atingiu o limite do seu plano. Faça upgrade para adicionar mais estampas.'
+      : percent >= 70
+      ? 'Você está se aproximando do limite do seu plano.'
+      : 'Quantidade de estampas usadas no seu plano.'
+
   function buildPreview() {
+    if (isBlocked) {
+      alert('Você atingiu o limite do seu plano. Faça upgrade para continuar.')
+      return
+    }
+
     const items: PreviewItem[] = Object.entries(qty)
       .filter(([, v]) => v > 0)
       .map(([id, v]) => {
@@ -123,7 +158,15 @@ export default function Library({ onPreview, version }: Props) {
         </div>
       )}
 
-      <h2 className="font-semibold text-lg">Biblioteca</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="font-semibold text-lg">Biblioteca</h2>
+        <span
+          className={`text-sm ${counterColor}`}
+          title={tooltip}
+        >
+          {used} / {limit}
+        </span>
+      </div>
 
       <input
         type="text"
@@ -153,15 +196,9 @@ export default function Library({ onPreview, version }: Props) {
                   </div>
 
                   <div className="text-xs text-gray-400 flex gap-3">
-                    {front && (
-                      <span>F: {front.width_cm}×{front.height_cm}</span>
-                    )}
-                    {back && (
-                      <span>C: {back.width_cm}×{back.height_cm}</span>
-                    )}
-                    {extra && (
-                      <span>E: {extra.width_cm}×{extra.height_cm}</span>
-                    )}
+                    {front && <span>F: {front.width_cm}×{front.height_cm}</span>}
+                    {back && <span>C: {back.width_cm}×{back.height_cm}</span>}
+                    {extra && <span>E: {extra.width_cm}×{extra.height_cm}</span>}
                   </div>
                 </div>
 
@@ -169,7 +206,8 @@ export default function Library({ onPreview, version }: Props) {
                   <input
                     type="number"
                     min={0}
-                    className="w-14 border rounded px-2 py-0.5 text-xs text-center"
+                    disabled={isBlocked}
+                    className="w-14 border rounded px-2 py-0.5 text-xs text-center disabled:opacity-40"
                     value={qty[p.id] ?? 0}
                     onChange={e =>
                       setQty(q => ({ ...q, [p.id]: Number(e.target.value) }))
@@ -179,50 +217,18 @@ export default function Library({ onPreview, version }: Props) {
                 </div>
 
                 <div className="flex gap-2">
-                  <div className="relative">
-                    <button
-                      onClick={() =>
-                        setOpenNote(openNote === p.id ? null : p.id)
-                      }
-                      className="text-gray-400 hover:text-black"
-                      type="button"
-                    >
-                      <StickyNote size={16} />
-                    </button>
-
-                    {notes[p.id] && openNote !== p.id && (
-                      <div className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-10">
-                        {notes[p.id]}
-                      </div>
-                    )}
-
-                    {openNote === p.id && (
-                      <div
-                        ref={noteRef}
-                        className="absolute right-0 top-6 bg-yellow-100 border rounded p-2 text-xs w-48 shadow z-20"
-                      >
-                        <textarea
-                          maxLength={500}
-                          placeholder="Anotação..."
-                          value={notes[p.id] || ''}
-                          onChange={e =>
-                            setNotes(n => ({ ...n, [p.id]: e.target.value }))
-                          }
-                          className="w-full h-24 bg-transparent outline-none resize-none"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => setOpenNote(openNote === p.id ? null : p.id)}
+                    className="text-gray-400 hover:text-black"
+                    type="button"
+                  >
+                    <StickyNote size={16} />
+                  </button>
 
                   <button
                     onClick={async () => {
-                      try {
-                        const full = await api(`/prints/${p.id}`)
-                        setEditing(full)
-                      } catch (err) {
-                        console.error('Erro ao abrir estampa', err)
-                        alert('Erro ao abrir estampa. Veja o console.')
-                      }
+                      const full = await api(`/prints/${p.id}`)
+                      setEditing(full)
                     }}
                     className="text-gray-400 hover:text-black"
                     type="button"
@@ -238,7 +244,8 @@ export default function Library({ onPreview, version }: Props) {
       <div className="pt-2">
         <button
           onClick={buildPreview}
-          className="bg-black text-white px-5 py-2 rounded"
+          disabled={isBlocked}
+          className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
           type="button"
         >
           Gerar folhas

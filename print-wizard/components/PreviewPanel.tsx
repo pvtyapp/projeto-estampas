@@ -86,43 +86,59 @@ export default function PreviewPanel(props: Props) {
     }
   }
 
+  // ============================
+  // MODO PREVIEW (ANTES DE CRIAR JOB)
+  // ============================
   if (isPreviewProps(props)) {
     const totalUnits = props.items.reduce((s, i) => s + i.qty, 0)
 
     return (
-      <div className="border rounded-lg p-6 bg-white space-y-4">
-        <h2 className="font-bold text-lg">Gerar preview</h2>
+      <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between">
+        <div className="space-y-3">
+          <h2 className="font-semibold text-lg">Pré-visualização</h2>
 
-        <div className="text-sm text-gray-600">
-          Total de artes: <b>{totalUnits}</b>
-        </div>
-
-        <div className="border rounded p-3 max-h-[240px] overflow-y-auto space-y-2">
-          {props.items.map(i => (
-            <div key={i.print_id} className="flex justify-between text-sm">
-              <span>{i.name ? `${i.name}${i.sku ? ` / ${i.sku}` : ''}` : i.print_id}</span>
-              <span className="font-medium">{i.qty}x</span>
+          {props.items.length === 0 ? (
+            <div className="h-[260px] flex items-center justify-center text-sm text-gray-400 border rounded">
+              Preencha as quantidades e clique em <b className="ml-1">Gerar folhas</b>.
             </div>
-          ))}
+          ) : (
+            <div className="border rounded p-3 max-h-[260px] overflow-y-auto space-y-2 text-sm">
+              {props.items.map(i => (
+                <div key={i.print_id} className="flex justify-between">
+                  <span>{i.name ? `${i.name}${i.sku ? ` / ${i.sku}` : ''}` : i.print_id}</span>
+                  <span className="font-medium">{i.qty}x</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="flex gap-3 pt-2">
-          <button onClick={props.onReset} className="border px-4 py-2 rounded">
-            Cancelar
-          </button>
+        <div className="flex justify-between items-center pt-4">
+          <span className="text-sm text-gray-500">
+            Total de artes: <b>{totalUnits}</b>
+          </span>
 
-          <button
-            onClick={() => preview(props.items, props.onJobCreated)}
-            disabled={creating}
-            className="bg-black text-white px-4 py-2 rounded"
-          >
-            {creating ? 'Gerando...' : 'Gerar preview'}
-          </button>
+          <div className="flex gap-3">
+            <button onClick={props.onReset} className="border px-4 py-2 rounded">
+              Cancelar
+            </button>
+
+            <button
+              onClick={() => preview(props.items, props.onJobCreated)}
+              disabled={creating}
+              className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
+            >
+              {creating ? 'Gerando…' : 'Gerar preview'}
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
+  // ============================
+  // MODO JOB / PROCESSAMENTO
+  // ============================
   const { jobId } = props as JobProps
 
   useEffect(() => {
@@ -146,8 +162,6 @@ export default function PreviewPanel(props: Props) {
         }
 
         if (data.status === 'done') {
-          const full: Job = await api(`/jobs/${jobId}`)
-          setJob(full)
           setProgress(100)
           clearInterval(interval)
           return
@@ -175,81 +189,80 @@ export default function PreviewPanel(props: Props) {
   }, [jobId])
 
   return (
-    <div className="border rounded-lg p-6 bg-white space-y-4">
-      <h2 className="font-bold text-lg">Processamento</h2>
+    <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between">
+      <div className="space-y-4">
+        <h2 className="font-semibold text-lg">Processamento</h2>
 
-      {toast && (
-        <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
-          {toast}
-        </div>
-      )}
-
-      {error && <p className="text-red-600 text-sm">{error}</p>}
-
-      {job && job.status !== 'preview_done' && job.status !== 'done' && (
-        <>
-          <div className="w-full bg-gray-200 rounded h-3 overflow-hidden">
-            <div className="h-full bg-black transition-all" style={{ width: `${progress}%` }} />
+        {toast && (
+          <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
+            {toast}
           </div>
-          <p className="text-sm text-gray-600">
-            {job.status === 'preview' && '🔍 Gerando preview…'}
-            {job.status === 'queued' && '⏳ Na fila de processamento'}
-            {job.status === 'processing' && '⚙️ Gerando arquivos finais…'}
-          </p>
-        </>
-      )}
+        )}
 
-      {job?.status === 'preview_done' && (
-        <>
-          <p className="text-sm text-gray-600">
-            {files.length} folhas geradas — isto é apenas uma prévia.
-          </p>
+        {error && <p className="text-red-600 text-sm">{error}</p>}
 
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 max-h-[240px] overflow-y-auto">
-            {files.map((f, i) => (
-              <div key={f.id} className="relative border rounded overflow-hidden text-xs">
-                <img
-                  src={f.public_url}
-                  className="w-full blur-[1px] opacity-80 select-none pointer-events-none"
-                  alt="preview"
-                />
+        {job && job.status !== 'preview_done' && job.status !== 'done' && (
+          <>
+            <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
+              <div className="h-full bg-black transition-all" style={{ width: `${progress}%` }} />
+            </div>
+            <p className="text-sm text-gray-600">
+              {job.status === 'preview' && '🔍 Gerando preview…'}
+              {job.status === 'queued' && '⏳ Na fila de processamento'}
+              {job.status === 'processing' && '⚙️ Gerando arquivos finais…'}
+            </p>
+          </>
+        )}
 
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <img src="/logo-watermark.png" className="w-12 opacity-60" alt="marca dagua" />
+        {job?.status === 'preview_done' && (
+          <>
+            <p className="text-sm text-gray-600">
+              {files.length} folhas geradas — isto é apenas uma prévia.
+            </p>
+
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {files.map((f, i) => (
+                <div key={f.id} className="min-w-[110px] relative border rounded overflow-hidden text-xs">
+                  <img
+                    src={f.public_url}
+                    className="w-full blur-[1px] opacity-80 select-none pointer-events-none"
+                    alt="preview"
+                  />
+
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <img src="/logo-watermark.png" className="w-10 opacity-60" alt="marca dagua" />
+                  </div>
+
+                  <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1 rounded text-[10px]">
+                    {i + 1}
+                  </div>
                 </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
-                <div className="absolute bottom-1 right-1 bg-black/70 text-white px-1 rounded text-[10px]">
-                  {i + 1}
-                </div>
-              </div>
-            ))}
-          </div>
+      <div className="pt-4 flex justify-between items-center">
+        {job?.status === 'preview_done' && (
+          <button
+            onClick={() => confirm(jobId)}
+            disabled={confirming}
+            className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
+          >
+            {confirming ? 'Confirmando…' : 'Confirmar e gerar'}
+          </button>
+        )}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              onClick={() => confirm(jobId)}
-              disabled={confirming}
-              className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
-            >
-              {confirming ? 'Confirmando…' : 'Confirmar e gerar'}
-            </button>
-            <button onClick={() => window.location.reload()} className="border px-4 py-2 rounded">
-              Cancelar
-            </button>
-          </div>
-        </>
-      )}
-
-      {job?.status === 'done' && job.zip_url && (
-        <div className="pt-6 text-center">
+        {job?.status === 'done' && job.zip_url && (
           <a
             href={job.zip_url}
-            className="inline-block bg-black text-white px-6 py-3 rounded hover:opacity-90"
+            className="bg-black text-white px-6 py-3 rounded hover:opacity-90"
           >
             Baixar arquivos finais
           </a>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
