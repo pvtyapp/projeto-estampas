@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
-import MiniMapPreview from '@/components/MiniMapPreview'
 
 type PreviewItem = {
   print_id: string
@@ -20,8 +19,7 @@ type Job = {
 
 type GeneratedFile = {
   id: string
-  public_url: string
-  page_index: number
+  url: string
 }
 
 type PreviewProps = {
@@ -47,11 +45,10 @@ export default function PreviewPanel(props: Props) {
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const [seconds, setSeconds] = useState(0)
 
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
     setCreating(true)
-    setProgress(5)
     try {
       const res: { job_id: string } = await api('/print-jobs', {
         method: 'POST',
@@ -63,10 +60,6 @@ export default function PreviewPanel(props: Props) {
         }),
       })
       onJobCreated(res.job_id)
-      setToast('🔍 Gerando preview — isto é apenas uma visualização.')
-      setTimeout(() => setToast(null), 4000)
-    } catch (e: any) {
-      alert(e.message || 'Erro ao gerar preview')
     } finally {
       setCreating(false)
     }
@@ -78,57 +71,80 @@ export default function PreviewPanel(props: Props) {
     try {
       await api(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
       setJob(j => (j ? { ...j, status: 'queued' } : j))
-      setProgress(5)
-    } catch (e: any) {
-      alert(e.message || 'Erro ao confirmar')
     } finally {
       setConfirming(false)
     }
   }
 
-  // ============================
-  // MODO PREVIEW
-  // ============================
+  // =======================
+  // POLLING
+  // =======================
+  useEffect(() => {
+    if (!('jobId' in props)) return
+
+    let stop = false
+    const interval = setInterval(async () => {
+      if (stop) return
+
+      try {
+        const data: Job = await api(`/jobs/${props.jobId}`)
+        setJob(data)
+
+        if (data.status === 'preview_done') {
+          const f: GeneratedFile[] = await api(`/jobs/${props.jobId}/files`)
+          setFiles(f)
+          setProgress(100)
+        } else if (data.status === 'done') {
+          setProgress(100)
+        } else {
+          setProgress(p => Math.min(p + 8, 95))
+        }
+
+        setSeconds(s => s + 2)
+      } catch (e: any) {
+        setError(e.message || 'Erro ao consultar status')
+        clearInterval(interval)
+      }
+    }, 2000)
+
+    return () => {
+      stop = true
+      clearInterval(interval)
+    }
+  }, [props])
+
+  // =======================
+  // PREVIEW MODE
+  // =======================
   if (isPreviewProps(props)) {
-    const totalUnits = props.items.reduce((s, i) => s + i.qty, 0)
+    const total = props.items.reduce((s, i) => s + i.qty, 0)
 
     return (
       <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between">
         <div className="space-y-3">
           <h2 className="font-semibold text-lg">Pré-visualização</h2>
-
-          {props.items.length === 0 ? (
-            <div className="h-[260px] flex items-center justify-center text-sm text-gray-400 border rounded">
-              Preencha as quantidades e clique em <b className="ml-1">Gerar preview</b>.
-            </div>
-          ) : (
-            <div className="border rounded p-3 max-h-[260px] overflow-y-auto space-y-2 text-sm">
-              {props.items.map(i => (
-                <div key={i.print_id} className="flex justify-between">
-                  <span>{i.name ? `${i.name}${i.sku ? ` / ${i.sku}` : ''}` : i.print_id}</span>
-                  <span className="font-medium">{i.qty}x</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="border rounded p-3 max-h-[260px] overflow-y-auto text-sm space-y-1">
+            {props.items.map(i => (
+              <div key={i.print_id} className="flex justify-between">
+                <span>{i.name || i.print_id}</span>
+                <span>{i.qty}x</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="flex justify-between items-center pt-4">
-          <span className="text-sm text-gray-500">
-            Total de artes: <b>{totalUnits}</b>
-          </span>
-
+        <div className="flex justify-between items-center">
+          <span className="text-sm text-gray-500">Total: {total}</span>
           <div className="flex gap-3">
             <button onClick={props.onReset} className="border px-4 py-2 rounded">
               Cancelar
             </button>
-
             <button
               onClick={() => preview(props.items, props.onJobCreated)}
               disabled={creating}
-              className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
+              className="bg-black text-white px-5 py-2 rounded"
             >
-              {creating ? 'Gerando…' : 'Gerar preview'}
+              Gerar preview
             </button>
           </div>
         </div>
@@ -136,112 +152,63 @@ export default function PreviewPanel(props: Props) {
     )
   }
 
-  // ============================
-  // MODO JOB
-  // ============================
-  const { jobId } = props as JobProps
-
-  useEffect(() => {
-    if (!jobId) return
-    let stopped = false
-    let interval: any
-
-    async function poll() {
-      try {
-        const data: Job = await api(`/jobs/${jobId}`)
-        if (stopped) return
-
-        setJob(data)
-
-        if (data.status === 'preview_done') {
-          const f = await api(`/jobs/${jobId}/files`)
-          if (f.length > 0) setFiles(f)
-          setProgress(100)
-          return
-        }
-
-        if (data.status === 'done') {
-          setProgress(100)
-          clearInterval(interval)
-          return
-        }
-
-        if (data.status === 'error') {
-          clearInterval(interval)
-          return
-        }
-
-        setProgress(p => Math.min(p + 8, 95))
-      } catch (e: any) {
-        setError(e.message || 'Erro ao consultar status')
-        clearInterval(interval)
-      }
-    }
-
-    poll()
-    interval = setInterval(poll, 1800)
-
-    return () => {
-      stopped = true
-      clearInterval(interval)
-    }
-  }, [jobId])
-
+  // =======================
+  // JOB MODE
+  // =======================
   return (
     <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between">
-      <div className="space-y-4">
+      <div className="space-y-3">
         <h2 className="font-semibold text-lg">Processamento</h2>
 
-        {toast && (
-          <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
-            {toast}
-          </div>
-        )}
+        <div className="w-full bg-gray-200 rounded h-2">
+          <div className="bg-black h-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        <p className="text-sm text-gray-600">
+          {job?.status === 'preview' && 'Gerando preview…'}
+          {job?.status === 'queued' && 'Na fila…'}
+          {job?.status === 'processing' && 'Processando…'}
+        </p>
 
-        {job && job.status !== 'preview_done' && job.status !== 'done' && (
-          <>
-            <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
-              <div className="h-full bg-black transition-all" style={{ width: `${progress}%` }} />
-            </div>
-            <p className="text-sm text-gray-600">
-              {job.status === 'preview' && '🔍 Gerando preview…'}
-              {job.status === 'queued' && '⏳ Na fila de processamento'}
-              {job.status === 'processing' && '⚙️ Gerando arquivos finais…'}
-            </p>
-          </>
-        )}
+        <p className="text-xs text-gray-400">Tempo decorrido: {seconds}s</p>
 
         {job?.status === 'preview_done' && (
           <>
-            <p className="text-sm text-gray-600">
-              {files.length} folhas geradas — isto é apenas uma prévia.
-            </p>
+            <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
 
-            <MiniMapPreview previews={files} />
+            <div className="flex gap-3 overflow-x-auto">
+              {files.map((f, i) => (
+                <div key={f.id} className="min-w-[110px] relative border rounded overflow-hidden">
+                  <img src={f.url} className="w-full opacity-90 blur-[1px]" />
+                  <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
+                    PRÉVIA
+                  </div>
+                  <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 rounded">
+                    {i + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         )}
       </div>
 
       <div className="pt-4 flex justify-between items-center">
         {job?.status === 'preview_done' && (
-          <button
-            onClick={() => confirm(jobId)}
-            disabled={confirming}
-            className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
-          >
-            {confirming ? 'Confirmando…' : 'Confirmar e gerar'}
+          <button onClick={() => confirm(props.jobId)} className="bg-black text-white px-5 py-2 rounded">
+            Confirmar e gerar
           </button>
         )}
 
         {job?.status === 'done' && job.zip_url && (
-          <a
-            href={job.zip_url}
-            className="bg-black text-white px-6 py-3 rounded hover:opacity-90"
-          >
-            Baixar arquivos finais
-          </a>
+          <div className="space-y-2 text-center w-full">
+            <p className="text-sm font-medium">
+              Foram gerados {files.length} arquivos com sucesso.
+            </p>
+            <a href={job.zip_url} className="bg-black text-white px-6 py-3 rounded inline-block">
+              Baixar arquivos finais
+            </a>
+          </div>
         )}
       </div>
     </div>
