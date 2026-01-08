@@ -326,6 +326,26 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     return {"status": "confirmed", "total_units": total_units}
 
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str, user=Depends(current_user)):
+    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+
+    pieces = (job.get("payload") or {}).get("pieces") or []
+
+    files = supabase.table("generated_files").select("id").eq("job_id", job_id).execute().data or []
+
+    return {
+        "id": job["id"],
+        "status": job["status"],
+        "created_at": job["created_at"],
+        "finished_at": job.get("finished_at"),
+        "zip_url": job.get("zip_url"),
+        "file_count": len(files),
+        "print_count": len(pieces),
+    }
+
 # =========================
 # STATS
 # =========================
