@@ -46,6 +46,7 @@ export default function PreviewPanel(props: Props) {
   const [creating, setCreating] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [seconds, setSeconds] = useState(0)
+  const [zoom, setZoom] = useState<string | null>(null)
 
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
     setCreating(true)
@@ -120,7 +121,7 @@ export default function PreviewPanel(props: Props) {
     const total = props.items.reduce((s, i) => s + i.qty, 0)
 
     return (
-      <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between">
+      <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between overflow-hidden">
         <div className="space-y-3">
           <h2 className="font-semibold text-lg">Pré-visualização</h2>
           <div className="border rounded p-3 max-h-[260px] overflow-y-auto text-sm space-y-1">
@@ -156,7 +157,7 @@ export default function PreviewPanel(props: Props) {
   // JOB MODE
   // =======================
   return (
-    <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between">
+    <div className="border rounded-xl p-6 bg-white h-[420px] flex flex-col justify-between overflow-hidden">
       <div className="space-y-3">
         <h2 className="font-semibold text-lg">Processamento</h2>
 
@@ -176,17 +177,23 @@ export default function PreviewPanel(props: Props) {
           <>
             <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
 
-            <div className="flex gap-3 overflow-x-auto">
+            <div className="grid grid-cols-3 gap-3 max-h-[220px] overflow-y-auto pr-1">
               {files.map((f, i) => (
-                <div key={f.id} className="min-w-[110px] relative border rounded overflow-hidden">
-                  <img src={f.url} className="w-full opacity-90 blur-[1px]" />
+                <button
+                  key={f.id}
+                  onClick={() => setZoom(f.url)}
+                  className="relative border rounded-lg overflow-hidden hover:ring-2 hover:ring-black transition"
+                >
+                  <img src={f.url} className="w-full h-24 object-cover opacity-90 blur-[0.5px]" />
+
                   <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
                     PRÉVIA
                   </div>
+
                   <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 rounded">
                     {i + 1}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </>
@@ -195,7 +202,11 @@ export default function PreviewPanel(props: Props) {
 
       <div className="pt-4 flex justify-between items-center">
         {job?.status === 'preview_done' && (
-          <button onClick={() => confirm(props.jobId)} className="bg-black text-white px-5 py-2 rounded">
+          <button
+            onClick={() => confirm(props.jobId)}
+            disabled={confirming}
+            className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
+          >
             Confirmar e gerar
           </button>
         )}
@@ -211,6 +222,20 @@ export default function PreviewPanel(props: Props) {
           </div>
         )}
       </div>
+
+      {zoom && (
+        <div
+          onClick={() => setZoom(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white p-4 rounded-xl max-w-3xl max-h-[85vh] shadow-lg"
+          >
+            <img src={zoom} className="max-w-full max-h-[75vh] object-contain rounded" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
