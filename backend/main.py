@@ -383,29 +383,19 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
 
-    files = supabase.table("print_files").select("id").eq("job_id", job_id).execute().data or []
-    amount = len(files)
-    if amount <= 0:
-        raise HTTPException(status_code=400, detail="Nenhum arquivo no job")
+    kits = (job.get("payload") or {}).get("kits") or 0
+    if kits <= 0:
+        raise HTTPException(status_code=400, detail="Nenhum kit no job")
 
     try:
-        check_and_consume_limits(supabase, user["sub"], amount)
+        check_and_consume_limits(supabase, user["sub"], kits)
     except LimitExceeded as e:
         raise HTTPException(status_code=402, detail=str(e))
-
-    supabase.table("usage").upsert({
-    "job_id": job_id,
-    "user_id": user["sub"],
-    "kind": "print",
-    "amount": amount,
-    "created_at": datetime.now(timezone.utc).isoformat(),
-}, on_conflict="job_id").execute()
-
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
-    return {"status": "confirmed", "total_files": amount}
+    return {"status": "confirmed", "total_kits": kits}
 
 # =========================
 # STATS
