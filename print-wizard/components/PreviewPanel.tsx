@@ -68,6 +68,7 @@ export default function PreviewPanel(props: Props) {
   }, [props])
 
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
+    if (creating) return
     setCreating(true)
     try {
       const grouped = groupByPrint(items)
