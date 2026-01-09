@@ -84,7 +84,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         form.append('height_cm', String(h))
 
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.access_token) throw new Error('Sessão expirada. Faça login novamente.')
+        if (!session?.access_token) throw new Error('Sessão expirada.')
 
         const API_URL = process.env.NEXT_PUBLIC_API_URL!
         const res = await fetch(`${API_URL}/prints/${print.id}/upload`, {
@@ -127,7 +127,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-6 space-y-6">
+    <div className="rounded-2xl border bg-white p-6 space-y-6 w-[420px]">
       <h2 className="text-xl font-semibold">Adicionar estampa</h2>
 
       <Slot title="Frente (principal)" onPick={() => frontInput.current?.click()} preview={preview(front)}>
@@ -139,21 +139,30 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
       <Slot title="Costas" onPick={() => hasBack && backInput.current?.click()} preview={preview(back)} disabled={!hasBack}>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={hasBack} onChange={e => setHasBack(e.target.checked)} />
-          Possui costas?
+          <input
+            type="checkbox"
+            checked={hasBack}
+            onChange={e => {
+              setHasBack(e.target.checked)
+              if (!e.target.checked) setHasExtra(false)
+            }}
+          />
+          Usar estampa nas costas
         </label>
         <input ref={backInput} type="file" className="hidden" onChange={e => setBack(e.target.files?.[0] || null)} />
         <TwoFields a={{ v: backW, p: 'Largura costas (cm)', s: setBackW, d: !hasBack }} b={{ v: backH, p: 'Altura costas (cm)', s: setBackH, d: !hasBack }} />
       </Slot>
 
-      <Slot title="Extra" onPick={() => hasExtra && extraInput.current?.click()} preview={preview(extra)} disabled={!hasExtra}>
-        <label className={`flex items-center gap-2 text-sm ${hasBack ? '' : 'opacity-30'}`}>
-          <input type="checkbox" checked={hasExtra} disabled={!hasBack} onChange={e => setHasExtra(e.target.checked)} />
-          Adicionar estampa extra?
-        </label>
-        <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
-        <TwoFields a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }} b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }} />
-      </Slot>
+      {hasBack && (
+        <Slot title="Extra" onPick={() => hasExtra && extraInput.current?.click()} preview={preview(extra)} disabled={!hasExtra}>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={hasExtra} onChange={e => setHasExtra(e.target.checked)} />
+            Adicionar estampa extra
+          </label>
+          <input ref={extraInput} type="file" className="hidden" onChange={e => setExtra(e.target.files?.[0] || null)} />
+          <TwoFields a={{ v: extraW, p: 'Largura extra (cm)', s: setExtraW, d: !hasExtra }} b={{ v: extraH, p: 'Altura extra (cm)', s: setExtraH, d: !hasExtra }} />
+        </Slot>
+      )}
 
       <button onClick={submit} disabled={loading} className="bg-black text-white px-5 py-2 rounded-lg">
         {loading ? 'Enviando...' : 'Adicionar à biblioteca'}
