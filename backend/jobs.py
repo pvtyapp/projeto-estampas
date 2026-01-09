@@ -51,7 +51,7 @@ def process_render(job_id: str, preview: bool = False):
             else:
                 raise Exception(f"Invalid file result at index {idx}: {f}")
 
-            supabase.table("generated_files").insert({
+            supabase.table("print_files").insert({
                 "id": str(uuid.uuid4()),
                 "job_id": job_id,
                 "file_path": file_path,

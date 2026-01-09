@@ -239,7 +239,7 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
         return []
 
     job_ids = [j["id"] for j in jobs]
-    files = supabase.table("generated_files").select("job_id").in_("job_id", job_ids).execute().data or []
+    files = supabase.table("print_files").select("job_id").in_("job_id", job_ids).execute().data or []
 
     file_count_map = {}
     for f in files:
@@ -267,7 +267,7 @@ def get_job(job_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
     pieces = (job.get("payload") or {}).get("pieces") or []
-    files = supabase.table("generated_files").select("id").eq("job_id", job_id).execute().data or []
+    files = supabase.table("print_files").select("id").eq("job_id", job_id).execute().data or []
 
     return {
         "id": job["id"],
@@ -289,7 +289,7 @@ def get_job_files(job_id: str, user=Depends(current_user)):
 
     files = (
         supabase
-        .table("generated_files")
+        .table("print_files")
         .select("id, public_url, page_index, created_at, preview")
         .eq("job_id", job_id)
         .order("page_index")
@@ -349,7 +349,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     files = (
         supabase
-        .table("generated_files")
+        .table("print_files")
         .select("id")
         .eq("job_id", job_id)
         .eq("preview", False)
@@ -411,7 +411,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         if not last_used.get(p["id"]) or last_used[p["id"]] < since_45d
     ][:15]
 
-    files = supabase.table("generated_files").select("id").execute().data or []
+    files = supabase.table("print_files").select("id").execute().data or []
 
     return {
         "top_used": top_used,
