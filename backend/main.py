@@ -393,13 +393,14 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     except LimitExceeded as e:
         raise HTTPException(status_code=402, detail=str(e))
 
-    supabase.table("usage").insert({
-        "id": str(uuid.uuid4()),
-        "user_id": user["sub"],
-        "kind": "print",
-        "amount": amount,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    supabase.table("usage").upsert({
+    "job_id": job_id,
+    "user_id": user["sub"],
+    "kind": "print",
+    "amount": amount,
+    "created_at": datetime.now(timezone.utc).isoformat(),
+}, on_conflict="job_id").execute()
+
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
