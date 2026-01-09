@@ -158,12 +158,12 @@ export default function PreviewPanel(props: Props) {
           </div>
 
           <p className="text-xs text-gray-500 leading-snug">
-            💡 Uma dica importante: veja seu último arquivo e certifique-se de que ele está completo na área de impressão — isso deixará os custos mais precisos.
+            💡 O custo final depende do número de folhas geradas após o preview.
           </p>
         </div>
 
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-500">Total: {total}</span>
+          <span className="text-sm text-gray-500">{total} kits selecionados</span>
           <div className="flex gap-3">
             <button onClick={props.onReset} className="border px-5 py-2 rounded-lg">
               Cancelar
@@ -207,7 +207,9 @@ export default function PreviewPanel(props: Props) {
 
         {job?.status === 'preview_done' && (
           <div className="space-y-4 text-center">
-            <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
+            <p className="text-sm text-gray-600">
+              {files.length} folhas geradas (prévia) — consumo estimado: {files.length} créditos
+            </p>
 
             <div className="flex justify-center gap-4 flex-wrap max-h-[220px] overflow-y-auto">
               {files.map(f => (
@@ -224,6 +226,10 @@ export default function PreviewPanel(props: Props) {
               ))}
             </div>
 
+            <p className="text-xs text-gray-500">
+              Ao concluir, {files.length} créditos serão consumidos.
+            </p>
+
             <div className="flex justify-center gap-4 pt-4">
               <button onClick={() => window.location.reload()} className="border px-6 py-2 rounded-lg">
                 Refazer
@@ -234,7 +240,7 @@ export default function PreviewPanel(props: Props) {
                 disabled={confirming}
                 className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
               >
-                {confirming ? 'Concluindo…' : 'Concluir'}
+                {confirming ? 'Concluindo…' : `Concluir (${files.length} créditos)`}
               </button>
             </div>
           </div>
@@ -276,9 +282,6 @@ export default function PreviewPanel(props: Props) {
         >
           <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl shadow-lg">
             <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded" />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white font-bold text-xl">
-              PRÉVIA
-            </div>
           </div>
         </div>
       )}
