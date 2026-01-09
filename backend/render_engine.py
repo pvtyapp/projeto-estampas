@@ -1,6 +1,5 @@
 import io
 import threading
-from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
@@ -8,17 +7,9 @@ from backend.print_utils import load_print_image, cm_to_px
 from backend.print_config import SHEET_WIDTH_CM, SHEET_HEIGHT_CM, SPACING_PX
 from backend.supabase_client import supabase
 
-# =========================
-# CACHE GLOBAL DE IMAGENS
-# =========================
-
 _IMAGE_CACHE: dict[str, Image.Image] = {}
 _CACHE_LOCK = threading.Lock()
 
-
-# =========================
-# MODELOS
-# =========================
 
 class Shelf:
     def __init__(self, y):
@@ -33,10 +24,6 @@ class Sheet:
         self.used_height = 0
         self.items = []
 
-
-# =========================
-# UTILIDADES
-# =========================
 
 def trim_transparency(img: Image.Image) -> Image.Image:
     bg = Image.new(img.mode, img.size, (0, 0, 0, 0))
@@ -68,10 +55,6 @@ def apply_watermark(img: Image.Image, text: str = "PRÉVIA • PVTY") -> Image.I
     return img
 
 
-# =========================
-# BIN PACKING HÍBRIDO
-# =========================
-
 def pack_items_hybrid(raw_items, sheet_width, sheet_height):
     items = [{**i} for i in raw_items]
     SHEET_AREA = sheet_width * sheet_height
@@ -87,72 +70,36 @@ def pack_items_hybrid(raw_items, sheet_width, sheet_height):
         else:
             small.append(i)
 
-    large.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
-    medium.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
-    small.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
+    for group in (large, medium, small):
+        group.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
 
-    sheets = []
+    sheets: list[Sheet] = []
 
-    # 1) Grandes
-    for item in large:
-        placed = False
-        for sheet in sheets:
-            for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
-                if sheet.used_height + h + SPACING_PX <= sheet_height:
-                    shelf = Shelf(sheet.used_height)
-                    shelf.used_width = w + SPACING_PX
-                    shelf.height = h + SPACING_PX
-                    item.update({"x": 0, "y": shelf.y, "rotated": rotated})
-                    sheet.shelves.append(shelf)
-                    sheet.used_height += shelf.height
-                    sheet.items.append(item)
-                    placed = True
-                    break
-            if placed:
-                break
-
-        if not placed:
-            sheet = Sheet()
-            for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
-                if h + SPACING_PX <= sheet_height:
-                    shelf = Shelf(0)
-                    shelf.used_width = w + SPACING_PX
-                    shelf.height = h + SPACING_PX
-                    item.update({"x": 0, "y": 0, "rotated": rotated})
-                    sheet.shelves.append(shelf)
-                    sheet.used_height = shelf.height
-                    sheet.items.append(item)
-                    sheets.append(sheet)
-                    placed = True
-                    break
-        if not placed:
-            raise ValueError(f"Item grande maior que a folha: {item}")
-
-    def place_in_sheets(item):
+    def place(item):
         for sheet in sheets:
             for shelf in sheet.shelves:
-                for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
+                for w, h, r in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                     if shelf.used_width + w + SPACING_PX <= sheet_width and shelf.y + h + SPACING_PX <= sheet_height:
-                        item.update({"x": shelf.used_width, "y": shelf.y, "rotated": rotated})
+                        item.update({"x": shelf.used_width, "y": shelf.y, "rotated": r})
                         shelf.used_width += w + SPACING_PX
                         shelf.height = max(shelf.height, h + SPACING_PX)
                         sheet.items.append(item)
                         return True
         return False
 
-    for group in (medium, small):
+    for group in (large, medium, small):
         for item in group:
-            if place_in_sheets(item):
+            if place(item):
                 continue
 
             placed = False
             for sheet in sheets:
-                for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
+                for w, h, r in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                     if sheet.used_height + h + SPACING_PX <= sheet_height:
                         shelf = Shelf(sheet.used_height)
                         shelf.used_width = w + SPACING_PX
                         shelf.height = h + SPACING_PX
-                        item.update({"x": 0, "y": shelf.y, "rotated": rotated})
+                        item.update({"x": 0, "y": shelf.y, "rotated": r})
                         sheet.shelves.append(shelf)
                         sheet.used_height += shelf.height
                         sheet.items.append(item)
@@ -165,12 +112,12 @@ def pack_items_hybrid(raw_items, sheet_width, sheet_height):
                 continue
 
             sheet = Sheet()
-            for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
+            for w, h, r in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                 if h + SPACING_PX <= sheet_height:
                     shelf = Shelf(0)
                     shelf.used_width = w + SPACING_PX
                     shelf.height = h + SPACING_PX
-                    item.update({"x": 0, "y": 0, "rotated": rotated})
+                    item.update({"x": 0, "y": 0, "rotated": r})
                     sheet.shelves.append(shelf)
                     sheet.used_height = shelf.height
                     sheet.items.append(item)
@@ -183,10 +130,6 @@ def pack_items_hybrid(raw_items, sheet_width, sheet_height):
 
     return sheets
 
-
-# =========================
-# CACHE DE IMAGENS
-# =========================
 
 def _load_cached_image(url: str) -> Image.Image:
     with _CACHE_LOCK:
@@ -201,35 +144,12 @@ def _load_cached_image(url: str) -> Image.Image:
     return img.copy()
 
 
-# =========================
-# PROCESSAMENTO PRINCIPAL
-# =========================
-
 def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
-    items = []
-
-    for p in pieces:
-        w = cm_to_px(p["width"])
-        h = cm_to_px(p["height"])
-
-        slot = (
-            supabase.table("print_slots")
-            .select("url")
-            .eq("print_id", p["print_id"])
-            .eq("type", p["type"])
-            .single()
-            .execute()
-            .data
-        )
-
-        if not slot or not slot.get("url"):
-            raise ValueError(f"Slot sem imagem: {p['print_id']} / {p['type']}")
-
-        items.append({
-            "print_url": slot["url"],
-            "w": w,
-            "h": h
-        })
+    items = [{
+        "print_url": p["url"],
+        "w": cm_to_px(p["width"]),
+        "h": cm_to_px(p["height"]),
+    } for p in pieces]
 
     sheet_w = cm_to_px(SHEET_WIDTH_CM)
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)
@@ -240,7 +160,7 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     with ThreadPoolExecutor(max_workers=8) as ex:
         list(ex.map(_load_cached_image, unique_urls))
 
-    def render_sheet(args):
+    def render_only(args):
         idx, sheet = args
         img = Image.new("RGBA", (sheet_w, sheet_h), (255, 255, 255, 0))
 
@@ -255,21 +175,24 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
         if preview:
             img = apply_watermark(img)
 
-        filename = f"jobs/{job_id}/{ 'preview' if preview else 'final' }/{idx}.png"
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return idx, buf.read()
 
-        buffer = io.BytesIO()
-        img.save(buffer, format="PNG")
-        buffer.seek(0)
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        rendered = list(ex.map(render_only, enumerate(sheets)))
+
+    results = []
+    for idx, data in rendered:
+        filename = f"jobs/{job_id}/{ 'preview' if preview else 'final' }/{idx}.png"
 
         supabase.storage.from_("jobs-output").upload(
             filename,
-            buffer.read(),
+            data,
             {"content-type": "image/png", "upsert": "true"}
         )
 
-        return supabase.storage.from_("jobs-output").get_public_url(filename)
-
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        results = list(ex.map(render_sheet, enumerate(sheets)))
+        results.append(supabase.storage.from_("jobs-output").get_public_url(filename))
 
     return results
