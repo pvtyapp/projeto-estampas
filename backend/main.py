@@ -455,20 +455,25 @@ def get_my_usage(user=Depends(current_user)):
         "credits": total_credits,
         "remaining_days": remaining_days,
         "status": status,
+        "library_limit": plan.get("library_limit"),
     }
 
-@app.get("/me/settings")
-async def get_settings(user=Depends(get_current_user)):
-    res = supabase.table("user_settings").select("*").eq("user_id", user["id"]).single().execute()
-    return res.data or {"price_per_meter": 0}
+# =========================
+# SETTINGS
+# =========================
 
 class SettingsIn(BaseModel):
     price_per_meter: float
 
+@app.get("/me/settings")
+def get_settings(user=Depends(current_user)):
+    res = supabase.table("user_settings").select("*").eq("user_id", user["sub"]).single().execute()
+    return res.data or {"price_per_meter": 0}
+
 @app.post("/me/settings")
-async def save_settings(data: SettingsIn, user=Depends(get_current_user)):
+def save_settings(data: SettingsIn, user=Depends(current_user)):
     supabase.table("user_settings").upsert({
-        "user_id": user["id"],
+        "user_id": user["sub"],
         "price_per_meter": data.price_per_meter,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }).execute()

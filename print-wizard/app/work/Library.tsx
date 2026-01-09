@@ -151,7 +151,7 @@ export default function Library({ onPreview, version }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 h-full min-h-[720px] flex flex-col">
       {toast && (
         <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
           {toast}
@@ -160,10 +160,7 @@ export default function Library({ onPreview, version }: Props) {
 
       <div className="flex justify-between items-center">
         <h2 className="font-semibold text-lg">Biblioteca</h2>
-        <span
-          className={`text-sm ${counterColor}`}
-          title={tooltip}
-        >
+        <span className={`text-sm ${counterColor}`} title={tooltip}>
           {used} / {limit}
         </span>
       </div>
@@ -176,7 +173,7 @@ export default function Library({ onPreview, version }: Props) {
         className="w-full border rounded px-3 py-1 text-sm"
       />
 
-      <div className="grid grid-cols-1 gap-2 max-h-[380px] overflow-y-auto pr-2">
+      <div className="grid grid-cols-1 gap-2 max-h-[420px] overflow-y-auto pr-2 flex-1">
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
         {!loading &&
@@ -184,11 +181,12 @@ export default function Library({ onPreview, version }: Props) {
             const front = getSlot(p, 'front')
             const back = getSlot(p, 'back')
             const extra = getSlot(p, 'extra')
+            const note = notes[p.id] || ''
 
             return (
               <div
                 key={p.id}
-                className="border rounded px-3 py-2 flex items-center justify-between gap-3"
+                className="border rounded px-3 py-2 flex items-center justify-between gap-3 relative"
               >
                 <div className="flex-1">
                   <div className="text-sm font-medium">
@@ -200,6 +198,12 @@ export default function Library({ onPreview, version }: Props) {
                     {back && <span>C: {back.width_cm}×{back.height_cm}</span>}
                     {extra && <span>E: {extra.width_cm}×{extra.height_cm}</span>}
                   </div>
+
+                  {note && openNote !== p.id && (
+                    <div className="text-[10px] text-yellow-600 italic mt-1 truncate max-w-[200px]">
+                      📝 {note.slice(0, 30)}…
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1">
@@ -236,6 +240,22 @@ export default function Library({ onPreview, version }: Props) {
                     <Pencil size={16} />
                   </button>
                 </div>
+
+                {openNote === p.id && (
+                  <div
+                    ref={noteRef}
+                    className="absolute top-full right-0 mt-1 bg-yellow-100 border border-yellow-300 rounded shadow p-2 w-64 z-50"
+                  >
+                    <textarea
+                      value={notes[p.id] || ''}
+                      onChange={e =>
+                        setNotes(n => ({ ...n, [p.id]: e.target.value }))
+                      }
+                      placeholder="Anotações sobre esta estampa..."
+                      className="w-full h-24 text-xs border rounded p-1 resize-none"
+                    />
+                  </div>
+                )}
               </div>
             )
           })}
