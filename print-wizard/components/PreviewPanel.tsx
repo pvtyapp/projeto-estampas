@@ -65,7 +65,7 @@ export default function PreviewPanel(props: Props) {
   }
 
   async function confirm(jobId: string) {
-    if (!job || job.status !== 'preview_done') return
+    if (!job || job.status !== 'preview_done' || confirming) return
     setConfirming(true)
     try {
       await api(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
@@ -83,6 +83,7 @@ export default function PreviewPanel(props: Props) {
 
     const interval = setInterval(async () => {
       if (stop) return
+
       try {
         const data: Job = await api(`/jobs/${props.jobId}`)
         setJob(data)
@@ -225,7 +226,11 @@ export default function PreviewPanel(props: Props) {
             <p className="text-sm font-medium">
               Foram gerados {files.length} arquivos com sucesso.
             </p>
-            <a href={job.zip_url} className="bg-black text-white px-8 py-3 rounded-lg inline-block">
+            <a
+              href={job.zip_url}
+              onClick={() => setTimeout(() => window.location.reload(), 5000)}
+              className="bg-black text-white px-8 py-3 rounded-lg inline-block"
+            >
               Baixar arquivos finais
             </a>
 
