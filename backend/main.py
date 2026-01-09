@@ -340,7 +340,7 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Nenhum item enviado")
 
-    total_kits = len({i.print_id for i in payload.items})
+    total_kits = sum(max(i.qty, 0) for i in payload.items)
 
     pieces = []
     for item in payload.items:
@@ -367,9 +367,11 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 def confirm_print_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
 
+    updated = supabase.table("jobs").update({"status": "confirming"}).eq("id", job_id).eq("status", "preview_done").execute()
+    if not updated.data:
+        raise HTTPException(status_code=409, detail="Job já foi confirmado ou está em processamento")
+
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job or job["status"] not in ("preview_done",):
-        raise HTTPException(status_code=400, detail="Job ainda não está pronto para confirmar")
 
     kits = (job.get("payload") or {}).get("kits") or 0
     if kits <= 0:
