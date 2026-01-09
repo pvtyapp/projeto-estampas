@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { api } from '@/lib/apiClient'
 
 type PreviewItem = {
@@ -39,6 +39,19 @@ function isPreviewProps(p: Props): p is PreviewProps {
   return Array.isArray((p as any)?.items)
 }
 
+function groupByPrint(items: PreviewItem[]): PreviewItem[] {
+  const map: Record<string, PreviewItem> = {}
+
+  for (const i of items) {
+    if (!map[i.print_id]) {
+      map[i.print_id] = { ...i, qty: 0 }
+    }
+    map[i.print_id].qty += i.qty || 1
+  }
+
+  return Object.values(map)
+}
+
 export default function PreviewPanel(props: Props) {
   const [job, setJob] = useState<Job | null>(null)
   const [files, setFiles] = useState<GeneratedFile[]>([])
@@ -49,15 +62,23 @@ export default function PreviewPanel(props: Props) {
   const [seconds, setSeconds] = useState(0)
   const [zoom, setZoom] = useState<string | null>(null)
 
+  const groupedItems = useMemo(() => {
+    if (!isPreviewProps(props)) return []
+    return groupByPrint(props.items)
+  }, [props])
+
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
     setCreating(true)
     try {
+      const grouped = groupByPrint(items)
+
       const res: { job_id: string } = await api('/print-jobs', {
         method: 'POST',
         body: JSON.stringify({
-          items: items.map(i => ({ print_id: i.print_id, qty: i.qty })),
+          items: grouped.map(i => ({ print_id: i.print_id, qty: i.qty })),
         }),
       })
+
       onJobCreated(res.job_id)
     } finally {
       setCreating(false)
@@ -119,7 +140,7 @@ export default function PreviewPanel(props: Props) {
   }, [props])
 
   if (isPreviewProps(props)) {
-    const total = props.items.reduce((s, i) => s + i.qty, 0)
+    const total = groupedItems.reduce((s, i) => s + i.qty, 0)
 
     return (
       <div className="border rounded-2xl p-8 bg-white min-h-[520px] flex flex-col justify-between">
@@ -127,7 +148,7 @@ export default function PreviewPanel(props: Props) {
           <h2 className="text-xl font-semibold">Pré-visualização</h2>
 
           <div className="border rounded-lg p-4 max-h-[280px] overflow-y-auto text-sm space-y-2">
-            {props.items.map(i => (
+            {groupedItems.map(i => (
               <div key={i.print_id} className="flex justify-between">
                 <span>{i.name || i.print_id}</span>
                 <span>{i.qty}x</span>
@@ -188,7 +209,7 @@ export default function PreviewPanel(props: Props) {
             <p className="text-sm text-gray-600">{files.length} folhas geradas (prévia)</p>
 
             <div className="flex justify-center gap-4 flex-wrap max-h-[220px] overflow-y-auto">
-              {files.map((f, i) => (
+              {files.map(f => (
                 <button
                   key={f.id}
                   onClick={() => setZoom(f.url)}
@@ -203,10 +224,7 @@ export default function PreviewPanel(props: Props) {
             </div>
 
             <div className="flex justify-center gap-4 pt-4">
-              <button
-                onClick={() => window.location.reload()}
-                className="border px-6 py-2 rounded-lg"
-              >
+              <button onClick={() => window.location.reload()} className="border px-6 py-2 rounded-lg">
                 Refazer
               </button>
 
@@ -223,9 +241,7 @@ export default function PreviewPanel(props: Props) {
 
         {job?.status === 'done' && job.zip_url && (
           <div className="space-y-4 text-center">
-            <p className="text-sm font-medium">
-              Foram gerados {files.length} arquivos com sucesso.
-            </p>
+            <p className="text-sm font-medium">Foram gerados {files.length} arquivos com sucesso.</p>
             <a
               href={job.zip_url}
               onClick={() => setTimeout(() => window.location.reload(), 5000)}
