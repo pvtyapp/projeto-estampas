@@ -107,11 +107,10 @@ export default function JobHistory({ onSelect }: Props) {
   async function savePrice(v: string) {
     setPrice(v)
     await api('/me/settings', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ price_per_meter: Number(v.replace(',', '.')) || 0 }),
-})
-
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price_per_meter: Number(v.replace(',', '.')) || 0 }),
+    })
   }
 
   const numericPrice = Number(price.replace(',', '.')) || 0
@@ -126,7 +125,6 @@ export default function JobHistory({ onSelect }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* FILTRO */}
       <div className="flex justify-between items-center">
         <select
           value={period}
@@ -141,12 +139,9 @@ export default function JobHistory({ onSelect }: Props) {
         </select>
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Carregando dados…</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
-
       {!loading && !error && stats && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Panel title="Top mais utilizadas">
               <ScrollableList items={stats.top_used.map(p => `${p.name} (${p.count})`)} />
             </Panel>
@@ -164,62 +159,53 @@ export default function JobHistory({ onSelect }: Props) {
                 </Row>
                 <Row label="Arquivos gerados">{stats.costs.files}</Row>
                 <Row label="Estampas incluídas">{stats.costs.prints}</Row>
-                <Row label="Custo médio por estampa">
-                  R${' '}
-                  {stats.costs.prints > 0
-                    ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2)
-                    : '0'}
-                </Row>
               </div>
             </Panel>
-          </div>
 
-          <Panel title="Top esquecidas (≥ 45 dias sem uso)">
-            <div className="space-y-1">
-              {activeForgotten.slice(0, 30).map(p => (
-                <div key={p.name} className="flex justify-between text-sm">
-                  <span>{p.name}</span>
-                  <button
-                    onClick={() => setSilenced(s => [...s, p.name])}
-                    className="text-xs text-gray-400 hover:text-black"
-                  >
-                    silenciar
-                  </button>
-                </div>
-              ))}
-            </div>
+            <Panel title="Top esquecidas (≥ 45 dias sem uso)">
+              <div className="text-xs text-gray-400 mb-1">
+                Independente do período selecionado acima
+              </div>
 
-            {silencedForgotten.length > 0 && (
-              <div className="mt-3 border-t pt-2 space-y-1">
-                <div className="text-xs text-gray-400">Silenciadas</div>
-                {silencedForgotten.map(p => (
-                  <div key={p.name} className="flex justify-between text-xs italic text-gray-400">
+              <div className="space-y-1">
+                {activeForgotten.slice(0, 30).map(p => (
+                  <div key={p.name} className="flex justify-between text-sm">
                     <span>{p.name}</span>
                     <button
-                      onClick={() => setSilenced(s => s.filter(n => n !== p.name))}
-                      className="hover:text-black"
+                      onClick={() => setSilenced(s => [...s, p.name])}
+                      className="text-xs text-gray-400 hover:text-black"
                     >
-                      reativar
+                      silenciar
                     </button>
                   </div>
                 ))}
               </div>
-            )}
-          </Panel>
+
+              {silencedForgotten.length > 0 && (
+                <div className="mt-3 border-t pt-2 space-y-1">
+                  <div className="text-xs text-gray-400">Silenciadas</div>
+                  {silencedForgotten.map(p => (
+                    <div key={p.name} className="flex justify-between text-xs italic text-gray-400">
+                      <span>{p.name}</span>
+                      <button
+                        onClick={() => setSilenced(s => s.filter(n => n !== p.name))}
+                        className="hover:text-black"
+                      >
+                        reativar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
 
           <Panel title="Downloads recentes (48h)">
-            {recentJobs.length === 0 && (
-              <p className="text-sm text-gray-500">Nenhum disponível.</p>
-            )}
-
             <div className="space-y-2">
               {recentJobs.map(j => {
                 const d = new Date(j.created_at)
                 return (
-                  <div
-                    key={j.id}
-                    className="flex justify-between items-center text-sm border-b pb-1"
-                  >
+                  <div key={j.id} className="flex justify-between items-center text-sm border-b pb-1">
                     <span className="font-medium">
                       JOB {d.toLocaleDateString()} {d.toLocaleTimeString().slice(0, 5)}
                     </span>

@@ -524,8 +524,16 @@ def get_my_usage(user=Depends(current_user)):
 
 @app.get("/me/settings")
 def get_settings(user=Depends(current_user)):
-    res = supabase.table("user_settings").select("*").eq("user_id", user["sub"]).single().execute()
+    res = (
+        supabase
+        .table("user_settings")
+        .select("*")
+        .eq("user_id", user["sub"])
+        .maybe_single()
+        .execute()
+    )
     return res.data or {"price_per_meter": 0}
+
 
 @app.post("/me/settings")
 def save_settings(data: SettingsIn, user=Depends(current_user)):
@@ -535,3 +543,4 @@ def save_settings(data: SettingsIn, user=Depends(current_user)):
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
     return {"ok": True}
+
