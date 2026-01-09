@@ -265,7 +265,17 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
         return []
 
     job_ids = [j["id"] for j in jobs]
-    files = supabase.table("print_files").select("job_id").in_("job_id", job_ids).execute().data or []
+
+    files = (
+    supabase
+    .table("print_files")
+    .select("job_id")
+    .eq("preview", False)
+    .in_("job_id", job_ids)
+    .execute()
+    .data
+    or []
+)
 
     file_count_map = {}
     for f in files:
@@ -404,11 +414,28 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
     since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
 
-    prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
-    usage_map = {}
-    last_used = {}
+    prints = (
+        supabase
+        .table("prints")
+        .select("id,name")
+        .eq("user_id", user["sub"])
+        .execute()
+        .data
+        or []
+    )
 
-    jobs = supabase.table("jobs").select("payload,created_at").eq("user_id", user["sub"]).execute().data or []
+    usage_map = {}
+
+    jobs = (
+        supabase
+        .table("jobs")
+        .select("payload,created_at")
+        .eq("user_id", user["sub"])
+        .execute()
+        .data
+        or []
+    )
+
     for j in jobs:
         kits = (j.get("payload") or {}).get("kits") or 0
         usage_map["kits"] = usage_map.get("kits", 0) + kits
@@ -419,12 +446,17 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         reverse=True,
     )[:15]
 
-    not_used = [
-        {"name": p["name"]}
-        for p in prints
-    ][:15]
+    not_used = [{"name": p["name"]} for p in prints][:15]
 
-    files = supabase.table("print_files").select("id").execute().data or []
+    files = (
+        supabase
+        .table("print_files")
+        .select("id")
+        .eq("preview", False)
+        .execute()
+        .data
+        or []
+    )
 
     return {
         "top_used": top_used,
@@ -435,6 +467,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
             "total_cost": 0,
         },
     }
+
 
 # =========================
 # ACCOUNT
