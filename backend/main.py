@@ -529,18 +529,12 @@ def get_settings(user=Depends(current_user)):
         .table("user_settings")
         .select("*")
         .eq("user_id", user["sub"])
-        .maybe_single()
         .execute()
     )
-    return res.data or {"price_per_meter": 0}
 
+    data = res.data if res and hasattr(res, "data") else None
 
-@app.post("/me/settings")
-def save_settings(data: SettingsIn, user=Depends(current_user)):
-    supabase.table("user_settings").upsert({
-        "user_id": user["sub"],
-        "price_per_meter": data.price_per_meter,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
-    return {"ok": True}
+    if not data:
+        return {"price_per_meter": 0}
 
+    return data[0]
