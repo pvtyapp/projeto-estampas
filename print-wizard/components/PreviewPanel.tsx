@@ -12,7 +12,7 @@ type PreviewItem = {
 
 type Job = {
   id: string
-  status: 'preview' | 'preview_done' | 'queued' | 'processing' | 'done' | 'error'
+  status: 'preview' | 'preview_done' | 'confirming' | 'queued' | 'processing' | 'done' | 'error'
   zip_url?: string
   error?: string
 }
@@ -118,6 +118,8 @@ export default function PreviewPanel(props: Props) {
         }
 
         if (data.status === 'done') {
+          const f: GeneratedFile[] = await api(`/jobs/${props.jobId}/files`)
+          setFiles(f)
           setProgress(100)
           return
         }
@@ -187,7 +189,7 @@ export default function PreviewPanel(props: Props) {
     <div className="border rounded-2xl p-10 bg-white min-h-[320px] flex flex-col justify-between">
       <div className="space-y-6">
         <h2 className="text-xl font-semibold text-center">
-          {job?.status === 'done' ? 'Concluído' : 'Processando'}
+          {job?.status === 'done' ? 'Concluído' : job?.status === 'confirming' ? 'Confirmando' : 'Processando'}
         </h2>
 
         {job?.status !== 'done' && (
