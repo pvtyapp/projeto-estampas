@@ -456,3 +456,20 @@ def get_my_usage(user=Depends(current_user)):
         "remaining_days": remaining_days,
         "status": status,
     }
+
+@app.get("/me/settings")
+async def get_settings(user=Depends(get_current_user)):
+    res = supabase.table("user_settings").select("*").eq("user_id", user["id"]).single().execute()
+    return res.data or {"price_per_meter": 0}
+
+class SettingsIn(BaseModel):
+    price_per_meter: float
+
+@app.post("/me/settings")
+async def save_settings(data: SettingsIn, user=Depends(get_current_user)):
+    supabase.table("user_settings").upsert({
+        "user_id": user["id"],
+        "price_per_meter": data.price_per_meter,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return {"ok": True}
