@@ -187,7 +187,8 @@ export default function Library({ onPreview, version }: Props) {
   }
 
   return (
-    <div className="w-[420px] min-h-[280px] rounded-2xl border bg-white p-6 space-y-4 flex flex-col">
+    <div className="mx-auto min-h-[280px] rounded-2xl border p-6 space-y-4 flex flex-col">
+
       {toast && (
         <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
           {toast}
