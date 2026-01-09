@@ -22,6 +22,12 @@ def process_render(job_id: str, preview: bool = False):
 
     print(f"📦 Job {job_id} has {len(pieces)} pieces")
 
+    # Limpeza preventiva
+    if preview:
+        supabase.table("generated_files").delete().eq("job_id", job_id).eq("preview", True).execute()
+    else:
+        supabase.table("generated_files").delete().eq("job_id", job_id).execute()
+
     supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
 
     try:
@@ -64,13 +70,10 @@ def process_render(job_id: str, preview: bool = False):
             zip_local = f"/tmp/{zip_name}"
 
             with zipfile.ZipFile(zip_local, "w", zipfile.ZIP_DEFLATED) as z:
-                # Prioriza paths locais
                 if file_paths:
                     for i, path in enumerate(file_paths):
                         if os.path.exists(path):
-                            arc = f"PVTY_PAGE_{i+1}.png"
-                            z.write(path, arcname=arc)
-                # Fallback: baixa pelas URLs
+                            z.write(path, arcname=f"PVTY_PAGE_{i+1}.png")
                 else:
                     for i, url in enumerate(file_urls):
                         r = requests.get(url)

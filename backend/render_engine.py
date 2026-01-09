@@ -31,7 +31,7 @@ def resize_to_slot(img: Image.Image, w: int, h: int) -> Image.Image:
     return img.resize((w, h), Image.LANCZOS)
 
 
-def apply_watermark(img: Image.Image, text: str = "PREVIEW • PrintWizard") -> Image.Image:
+def apply_watermark(img: Image.Image, text: str = "PRÉVIA • PVTY") -> Image.Image:
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
@@ -46,12 +46,15 @@ def apply_watermark(img: Image.Image, text: str = "PREVIEW • PrintWizard") -> 
     draw.text(((w - text_w) / 2, (h - text_h) / 2), text, fill=(0, 0, 0, 80))
 
     img = Image.alpha_composite(img, overlay)
-    img = img.filter(ImageFilter.GaussianBlur(radius=1.1))
+    img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
     return img
 
 
-def pack_items(items, sheet_width, sheet_height):
+def pack_items(raw_items, sheet_width, sheet_height):
+    # Trabalha com cópias para não mutar entrada
+    items = [{**i} for i in raw_items]
     items = sorted(items, key=lambda i: max(i["w"], i["h"]), reverse=True)
+
     sheets = [Sheet()]
 
     for item in items:
@@ -115,12 +118,15 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
         w = cm_to_px(p["width"])
         h = cm_to_px(p["height"])
 
-        slot = supabase.table("print_slots") \
-            .select("url") \
-            .eq("print_id", p["print_id"]) \
-            .eq("type", p["type"]) \
-            .single() \
-            .execute().data
+        slot = (
+            supabase.table("print_slots")
+            .select("url")
+            .eq("print_id", p["print_id"])
+            .eq("type", p["type"])
+            .single()
+            .execute()
+            .data
+        )
 
         if not slot or not slot.get("url"):
             raise ValueError(f"Slot sem imagem: {p['print_id']} / {p['type']}")
