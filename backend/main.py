@@ -257,7 +257,13 @@ def build_pieces(print_obj, qty: int):
 
 @app.get("/jobs/history")
 def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url,payload").eq("user_id", user["sub"])
+    q = (
+        supabase
+        .table("jobs")
+        .select("id,status,created_at,finished_at,zip_url,payload")
+        .eq("user_id", user["sub"])
+    )
+
     if from_:
         q = q.gte("created_at", from_)
     if to:
@@ -267,39 +273,24 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
     if not jobs:
         return []
 
-    job_ids = [j["id"] for j in jobs]
-
-    files = (
-    supabase
-    .table("print_files")
-    .select("job_id")
-    .eq("preview", False)
-    .in_("job_id", job_ids)
-    .execute()
-    .data
-    or []
-)
-
-    file_count_map = {}
-    for f in files:
-        file_count_map[f["job_id"]] = file_count_map.get(f["job_id"], 0) + 1
-
     result = []
+
     for j in jobs:
         payload = j.get("payload") or {}
         kits = payload.get("kits") or 0
-        sheets = payload.get("sheets") or 0
+
         result.append({
             "id": j["id"],
             "status": j["status"],
             "created_at": j["created_at"],
             "finished_at": j.get("finished_at"),
             "zip_url": j.get("zip_url"),
-            "file_count": file_count_map.get(j["id"], 0),
-            "print_count": sheets or kits,
+            "file_count": 1 if j.get("zip_url") else 0,
+            "print_count": kits,
         })
 
     return result
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
