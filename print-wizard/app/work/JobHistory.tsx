@@ -83,15 +83,19 @@ export default function JobHistory({ onSelect }: Props) {
     const params = from ? `?from=${from.toISOString()}` : ''
 
     try {
-      const [jobsData, statsData] = await Promise.all([
+      const [jobsData, statsData, forgottenData] = await Promise.all([
         api(`/jobs/history${params}`),
         api(`/stats/prints${params}`),
+        api(`/stats/prints`),
       ])
 
       if (cancelled) return
 
       setJobs(jobsData || [])
-      setStats(statsData || null)
+      setStats({
+        ...statsData,
+        not_used: forgottenData?.not_used || [],
+      })
     } catch (err) {
       console.error('JobHistory load failed:', err)
       if (!cancelled) {
