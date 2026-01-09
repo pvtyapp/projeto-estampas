@@ -38,10 +38,10 @@ async def preflight_handler(path: str, request: Request):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print("🔥 Unhandled exception:", exc)
+    print("🔥 Unhandled exception:", repr(exc))
     return JSONResponse(
         status_code=500,
-        content={"error": "internal_server_error"},
+        content={"error": "internal_server_error","detail": str(exc)},
         headers={
             "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
             "Access-Control-Allow-Credentials": "true",
@@ -97,13 +97,16 @@ def current_user(user=Depends(get_current_user)):
 
 def validate_slots(slots: List[Slot]):
     types = [s.type for s in slots]
+
     if "front" not in types:
-        raise ValueError("Slot 'front' é obrigatório")
+        raise HTTPException(status_code=400, detail="Slot 'front' é obrigatório")
+
     if "extra" in types and "back" not in types:
-        raise ValueError("Slot 'extra' só pode existir se 'back' existir")
+        raise HTTPException(status_code=400, detail="Slot 'extra' só pode existir se 'back' existir")
+
     invalid = set(types) - {"front", "back", "extra"}
     if invalid:
-        raise ValueError(f"Tipos inválidos: {invalid}")
+        raise HTTPException(status_code=400, detail=f"Tipos inválidos: {invalid}")
 
 def load_slots(print_id: str):
     return supabase.table("print_slots").select("*").eq("print_id", print_id).execute().data or []
@@ -283,7 +286,9 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
 
     result = []
     for j in jobs:
-        kits = (j.get("payload") or {}).get("kits") or 0
+        payload = j.get("payload") or {}
+        kits = payload.get("kits") or 0
+        sheets = payload.get("sheets") or 0
         result.append({
             "id": j["id"],
             "status": j["status"],
@@ -291,7 +296,7 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
             "finished_at": j.get("finished_at"),
             "zip_url": j.get("zip_url"),
             "file_count": file_count_map.get(j["id"], 0),
-            "print_count": kits,
+            "print_count": sheets or kits,
         })
 
     return result
@@ -302,7 +307,10 @@ def get_job(job_id: str, user=Depends(current_user)):
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
 
-    kits = (job.get("payload") or {}).get("kits") or 0
+    payload = job.get("payload") or {}
+    sheets = payload.get("sheets") or 0
+    kits = payload.get("kits") or 0
+
     files = supabase.table("print_files").select("id").eq("job_id", job_id).execute().data or []
 
     return {
@@ -312,7 +320,7 @@ def get_job(job_id: str, user=Depends(current_user)):
         "finished_at": job.get("finished_at"),
         "zip_url": job.get("zip_url"),
         "file_count": len(files),
-        "print_count": kits,
+        "print_count": sheets or kits,
     }
 
 @app.get("/jobs/{job_id}/files")
@@ -366,7 +374,7 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         "id": job_id,
         "user_id": user["sub"],
         "status": "preview",
-        "payload": {"pieces": pieces, "kits": total_kits},
+        "payload": {"pieces": pieces, "kits": total_kits, "sheets": None},
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
@@ -383,19 +391,19 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
 
-    kits = (job.get("payload") or {}).get("kits") or 0
-    if kits <= 0:
+    sheets = (job.get("payload") or {}).get("sheets") or 0
+    if sheets <= 0:
         raise HTTPException(status_code=400, detail="Nenhum kit no job")
 
     try:
-        check_and_consume_limits(supabase, user["sub"], kits)
+        check_and_consume_limits(supabase, user["sub"], sheets)
     except LimitExceeded as e:
         raise HTTPException(status_code=402, detail=str(e))
 
     supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
-    return {"status": "confirmed", "total_kits": kits}
+    return {"status": "confirmed", "sheets": sheets}
 
 # =========================
 # STATS
@@ -428,7 +436,9 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
     )
 
     for j in jobs:
-        kits = (j.get("payload") or {}).get("kits") or 0
+        payload = j.get("payload") or {}
+        kits = payload.get("kits") or 0
+        sheets = payload.get("sheets") or 0
         usage_map["kits"] = usage_map.get("kits", 0) + kits
 
     top_used = sorted(
@@ -481,7 +491,9 @@ def get_my_usage(user=Depends(current_user)):
     else:
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         limit = plan.get("monthly_limit") or 100
-        remaining_days = 30 - now.day
+        import calendar
+        days_in_month = calendar.monthrange(now.year, now.month)[1]
+        remaining_days = days_in_month - now.day
 
     rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).gte("created_at", start.isoformat()).execute().data or []
     used = sum(r["amount"] or 0 for r in rows)

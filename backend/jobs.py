@@ -14,6 +14,12 @@ def process_render(job_id: str, preview: bool = False):
     if not job:
         raise Exception(f"Job {job_id} not found")
 
+    # Blindagem contra concorrência
+    expected_status = "preview" if preview else "queued"
+    if job["status"] != expected_status:
+        print(f"⚠️ Job {job_id} status is {job['status']}, expected {expected_status}. Skipping.")
+        return
+
     payload = job.get("payload") or {}
     pieces = payload.get("pieces") or []
 
@@ -29,7 +35,7 @@ def process_render(job_id: str, preview: bool = False):
         supabase.table("print_files").delete().eq("job_id", job_id).execute()
 
     supabase.table("jobs").update({
-        "status": "preview" if preview else "queued"
+        "status": "processing_preview" if preview else "processing"
     }).eq("id", job_id).execute()
 
     try:
@@ -67,6 +73,17 @@ def process_render(job_id: str, preview: bool = False):
             if public_url:
                 file_urls.append(public_url)
 
+        # Contagem de folhas físicas
+        sheets = len(result_files)
+
+        # Atualiza sheets no payload
+        new_payload = dict(payload)
+        new_payload["sheets"] = sheets
+
+        supabase.table("jobs").update({
+            "payload": new_payload
+        }).eq("id", job_id).execute()
+
         if not preview:
             zip_name = "PVTYARQUIVOS.zip"
             zip_local = f"/tmp/{zip_name}"
@@ -102,7 +119,7 @@ def process_render(job_id: str, preview: bool = False):
         else:
             supabase.table("jobs").update({"status": "preview_done"}).eq("id", job_id).execute()
 
-        print(f"✅ Job {job_id} finished")
+        print(f"✅ Job {job_id} finished with {sheets} sheets")
 
     except Exception as e:
         print(f"❌ Job {job_id} failed: {e}")
