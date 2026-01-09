@@ -1,9 +1,18 @@
 import io
+import threading
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from backend.print_utils import load_print_image, cm_to_px
 from backend.print_config import SHEET_WIDTH_CM, SHEET_HEIGHT_CM, SPACING_PX
 from backend.supabase_client import supabase
+
+# =========================
+# CACHE GLOBAL DE IMAGENS
+# =========================
+
+_IMAGE_CACHE: dict[str, Image.Image] = {}
+_CACHE_LOCK = threading.Lock()
 
 
 class Shelf:
@@ -51,7 +60,6 @@ def apply_watermark(img: Image.Image, text: str = "PRÉVIA • PVTY") -> Image.I
 
 
 def pack_items(raw_items, sheet_width, sheet_height):
-    # Trabalha com cópias para não mutar entrada
     items = [{**i} for i in raw_items]
     items = sorted(items, key=lambda i: max(i["w"], i["h"]), reverse=True)
 
@@ -111,6 +119,19 @@ def pack_items(raw_items, sheet_width, sheet_height):
     return sheets
 
 
+def _load_cached_image(url: str) -> Image.Image:
+    with _CACHE_LOCK:
+        if url in _IMAGE_CACHE:
+            return _IMAGE_CACHE[url].copy()
+
+    img = load_print_image(url)
+
+    with _CACHE_LOCK:
+        _IMAGE_CACHE[url] = img
+
+    return img.copy()
+
+
 def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     items = []
 
@@ -139,15 +160,20 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
 
     sheet_w = cm_to_px(SHEET_WIDTH_CM)
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)
+
     sheets = pack_items(items, sheet_w, sheet_h)
 
-    results = []
+    unique_urls = list({i["print_url"] for i in items})
 
-    for idx, sheet in enumerate(sheets):
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        list(ex.map(_load_cached_image, unique_urls))
+
+    def render_sheet(args):
+        idx, sheet = args
         img = Image.new("RGBA", (sheet_w, sheet_h), (255, 255, 255, 0))
 
         for item in sheet.items:
-            art = load_print_image(item["print_url"])
+            art = _load_cached_image(item["print_url"])
             art = trim_transparency(art)
             art = resize_to_slot(art, item["w"], item["h"])
             if item.get("rotated"):
@@ -169,7 +195,9 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
             {"content-type": "image/png", "upsert": "true"}
         )
 
-        public_url = supabase.storage.from_("jobs-output").get_public_url(filename)
-        results.append(public_url)
+        return supabase.storage.from_("jobs-output").get_public_url(filename)
+
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        results = list(ex.map(render_sheet, enumerate(sheets)))
 
     return results

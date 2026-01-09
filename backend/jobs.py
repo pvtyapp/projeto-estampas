@@ -3,6 +3,8 @@ import os
 import zipfile
 import requests
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+
 from backend.supabase_client import supabase
 from backend.render_engine import process_print_job
 
@@ -14,7 +16,6 @@ def process_render(job_id: str, preview: bool = False):
     if not job:
         raise Exception(f"Job {job_id} not found")
 
-    # Blindagem contra concorrência
     expected_status = "preview" if preview else "queued"
     if job["status"] != expected_status:
         print(f"⚠️ Job {job_id} status is {job['status']}, expected {expected_status}. Skipping.")
@@ -29,10 +30,10 @@ def process_render(job_id: str, preview: bool = False):
     print(f"📦 Job {job_id} has {len(pieces)} pieces")
 
     # Limpeza preventiva
+    q = supabase.table("print_files").delete().eq("job_id", job_id)
     if preview:
-        supabase.table("print_files").delete().eq("job_id", job_id).eq("preview", True).execute()
-    else:
-        supabase.table("print_files").delete().eq("job_id", job_id).execute()
+        q = q.eq("preview", True)
+    q.execute()
 
     supabase.table("jobs").update({
         "status": "processing_preview" if preview else "processing"
@@ -44,6 +45,7 @@ def process_render(job_id: str, preview: bool = False):
         if not isinstance(result_files, list):
             raise Exception("process_print_job did not return a list")
 
+        rows = []
         file_paths = []
         file_urls = []
 
@@ -59,24 +61,25 @@ def process_render(job_id: str, preview: bool = False):
             else:
                 raise Exception(f"Invalid file result at index {idx}: {f}")
 
-            supabase.table("print_files").insert({
+            rows.append({
                 "id": str(uuid.uuid4()),
                 "job_id": job_id,
                 "file_path": file_path,
                 "public_url": public_url,
                 "page_index": page_index,
                 "preview": preview,
-            }).execute()
+            })
 
             if file_path:
                 file_paths.append(file_path)
             if public_url:
                 file_urls.append(public_url)
 
-        # Contagem de folhas físicas
+        if rows:
+            supabase.table("print_files").insert(rows).execute()
+
         sheets = len(result_files)
 
-        # Atualiza sheets no payload
         new_payload = dict(payload)
         new_payload["sheets"] = sheets
 
@@ -88,18 +91,26 @@ def process_render(job_id: str, preview: bool = False):
             zip_name = "PVTYARQUIVOS.zip"
             zip_local = f"/tmp/{zip_name}"
 
+            def download(args):
+                i, url = args
+                r = requests.get(url, timeout=20)
+                r.raise_for_status()
+                tmp = f"/tmp/PVTY_PAGE_{i+1}.png"
+                with open(tmp, "wb") as f:
+                    f.write(r.content)
+                return tmp
+
             with zipfile.ZipFile(zip_local, "w", zipfile.ZIP_DEFLATED) as z:
                 if file_paths:
                     for i, path in enumerate(file_paths):
                         if os.path.exists(path):
                             z.write(path, arcname=f"PVTY_PAGE_{i+1}.png")
                 else:
-                    for i, url in enumerate(file_urls):
-                        r = requests.get(url)
-                        if r.status_code == 200:
-                            tmp = f"/tmp/PVTY_PAGE_{i+1}.png"
-                            with open(tmp, "wb") as f:
-                                f.write(r.content)
+                    with ThreadPoolExecutor(max_workers=4) as ex:
+                        downloaded = list(ex.map(download, enumerate(file_urls)))
+
+                    for i, tmp in enumerate(downloaded):
+                        if tmp and os.path.exists(tmp):
                             z.write(tmp, arcname=f"PVTY_PAGE_{i+1}.png")
 
             storage_path = f"{job['user_id']}/{job_id}/{zip_name}"
