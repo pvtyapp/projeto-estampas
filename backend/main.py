@@ -538,3 +538,13 @@ def get_settings(user=Depends(current_user)):
         return {"price_per_meter": 0}
 
     return data[0]
+
+@app.post("/me/settings")
+def save_settings(data: SettingsIn, user=Depends(current_user)):
+    supabase.table("user_settings").upsert({
+        "user_id": user["sub"],
+        "price_per_meter": data.price_per_meter,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return {"ok": True}
+
