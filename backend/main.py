@@ -257,13 +257,7 @@ def build_pieces(print_obj, qty: int):
 
 @app.get("/jobs/history")
 def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    q = (
-        supabase
-        .table("jobs")
-        .select("id,status,created_at,finished_at,zip_url,payload")
-        .eq("user_id", user["sub"])
-    )
-
+    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url,payload").eq("user_id", user["sub"])
     if from_:
         q = q.gte("created_at", from_)
     if to:
@@ -274,10 +268,10 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
         return []
 
     result = []
-
     for j in jobs:
         payload = j.get("payload") or {}
         kits = payload.get("kits") or 0
+        sheets = payload.get("sheets") or 0
 
         result.append({
             "id": j["id"],
@@ -285,12 +279,11 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
             "created_at": j["created_at"],
             "finished_at": j.get("finished_at"),
             "zip_url": j.get("zip_url"),
-            "file_count": 1 if j.get("zip_url") else 0,
-            "print_count": kits,
+            "file_count": sheets,        # 👈 agora vem do payload
+            "print_count": kits,         # 👈 kits = estampas
         })
 
     return result
-
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, user=Depends(current_user)):
