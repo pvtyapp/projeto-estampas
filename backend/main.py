@@ -412,43 +412,64 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-
     prints = (
         supabase
         .table("prints")
         .select("id,name")
         .eq("user_id", user["sub"])
         .execute()
-        .data
-        or []
+        .data or []
     )
 
-    usage_map = {}
+    q = supabase.table("jobs").select("payload,created_at").eq("user_id", user["sub"])
+    if from_:
+        q = q.gte("created_at", from_)
+    if to:
+        q = q.lte("created_at", to)
 
-    jobs = (
-        supabase
-        .table("jobs")
-        .select("payload,created_at")
-        .eq("user_id", user["sub"])
-        .execute()
-        .data
-        or []
-    )
+    jobs = q.execute().data or []
+
+    counts = {}
+    total_sheets = 0
 
     for j in jobs:
-        payload = j.get("payload") or {}
-        kits = payload.get("kits") or 0
-        sheets = payload.get("sheets") or 0
-        usage_map["kits"] = usage_map.get("kits", 0) + kits
+        pieces = (j.get("payload") or {}).get("pieces", [])
+        total_sheets += (j.get("payload") or {}).get("sheets") or 0
+        for p in pieces:
+            pid = p.get("print_id")
+            if pid:
+                counts[pid] = counts.get(pid, 0) + 1
 
-    top_used = sorted(
-        [{"name": p["name"], "count": usage_map.get("kits", 0)} for p in prints],
-        key=lambda x: x["count"],
-        reverse=True,
-    )[:15]
+    top_used = []
+    for p in prints:
+        c = counts.get(p["id"], 0)
+        if c > 0:
+            top_used.append({"name": p["name"], "count": c})
 
-    not_used = [{"name": p["name"]} for p in prints][:15]
+    top_used.sort(key=lambda x: x["count"], reverse=True)
+
+    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+
+    usage = (
+        supabase
+        .table("usage")
+        .select("print_id,created_at")
+        .eq("user_id", user["sub"])
+        .execute()
+        .data or []
+    )
+
+    last_used = {}
+    for u in usage:
+        pid = u.get("print_id")
+        if pid:
+            last_used[pid] = max(last_used.get(pid, u["created_at"]), u["created_at"])
+
+    forgotten = []
+    for p in prints:
+        last = last_used.get(p["id"])
+        if not last or last < since_45d:
+            forgotten.append({"name": p["name"]})
 
     files = (
         supabase
@@ -456,16 +477,15 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         .select("id")
         .eq("preview", False)
         .execute()
-        .data
-        or []
+        .data or []
     )
 
     return {
-        "top_used": top_used,
-        "not_used": not_used,
+        "top_used": top_used[:15],
+        "not_used": forgotten[:15],
         "costs": {
             "files": len(files),
-            "prints": usage_map.get("kits", 0),
+            "prints": total_sheets,
             "total_cost": 0,
         },
     }
