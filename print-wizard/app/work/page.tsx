@@ -53,6 +53,7 @@ export default function WorkPage() {
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
+
           <Library
             version={libraryVersion}
             onPreview={items => {
