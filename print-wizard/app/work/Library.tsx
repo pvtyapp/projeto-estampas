@@ -132,7 +132,7 @@ export default function Library({ onPreview, version }: Props) {
       return
     }
 
-    if (totalSelected > 100) {
+    if (overLimit) {
       alert('O limite máximo por job é 100 estampas.')
       return
     }
@@ -219,6 +219,8 @@ export default function Library({ onPreview, version }: Props) {
             const extra = getSlot(p, 'extra')
             const note = notes[p.id] || ''
 
+            const current = qty[p.id] || 0
+
             return (
               <div
                 key={p.id}
@@ -246,12 +248,14 @@ export default function Library({ onPreview, version }: Props) {
                   <input
                     type="number"
                     min={0}
-                    disabled={isBlocked || overLimit}
-                    className="w-14 border rounded px-2 py-0.5 text-xs text-center disabled:opacity-40"
-                    value={qty[p.id] ?? 0}
-                    onChange={e =>
-                      setQty(q => ({ ...q, [p.id]: Number(e.target.value) }))
-                    }
+                    className="w-14 border rounded px-2 py-0.5 text-xs text-center"
+                    value={current}
+                    onChange={e => {
+                      const value = Number(e.target.value) || 0
+                      const nextTotal = totalSelected - current + value
+                      if (nextTotal > 100) return
+                      setQty(q => ({ ...q, [p.id]: value }))
+                    }}
                   />
                   <span className="text-xs text-gray-400">QTY</span>
                 </div>
