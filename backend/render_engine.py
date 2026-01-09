@@ -3,6 +3,7 @@ import threading
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
+
 from backend.print_utils import load_print_image, cm_to_px
 from backend.print_config import SHEET_WIDTH_CM, SHEET_HEIGHT_CM, SPACING_PX
 from backend.supabase_client import supabase
@@ -14,6 +15,10 @@ from backend.supabase_client import supabase
 _IMAGE_CACHE: dict[str, Image.Image] = {}
 _CACHE_LOCK = threading.Lock()
 
+
+# =========================
+# MODELOS
+# =========================
 
 class Shelf:
     def __init__(self, y):
@@ -28,6 +33,10 @@ class Sheet:
         self.used_height = 0
         self.items = []
 
+
+# =========================
+# UTILIDADES
+# =========================
 
 def trim_transparency(img: Image.Image) -> Image.Image:
     bg = Image.new(img.mode, img.size, (0, 0, 0, 0))
@@ -59,30 +68,35 @@ def apply_watermark(img: Image.Image, text: str = "PRÉVIA • PVTY") -> Image.I
     return img
 
 
-def pack_items(raw_items, sheet_width, sheet_height):
+# =========================
+# BIN PACKING HÍBRIDO
+# =========================
+
+def pack_items_hybrid(raw_items, sheet_width, sheet_height):
     items = [{**i} for i in raw_items]
-    items = sorted(items, key=lambda i: max(i["w"], i["h"]), reverse=True)
+    SHEET_AREA = sheet_width * sheet_height
 
-    sheets = [Sheet()]
+    large, medium, small = [], [], []
 
-    for item in items:
+    for i in items:
+        area = i["w"] * i["h"]
+        if area >= 0.25 * SHEET_AREA:
+            large.append(i)
+        elif area >= 0.05 * SHEET_AREA:
+            medium.append(i)
+        else:
+            small.append(i)
+
+    large.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
+    medium.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
+    small.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
+
+    sheets = []
+
+    # 1) Grandes
+    for item in large:
         placed = False
-
         for sheet in sheets:
-            for shelf in sheet.shelves:
-                for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
-                    if shelf.used_width + w + SPACING_PX <= sheet_width and shelf.y + h + SPACING_PX <= sheet_height:
-                        item.update({"x": shelf.used_width, "y": shelf.y, "rotated": rotated})
-                        shelf.used_width += w + SPACING_PX
-                        shelf.height = max(shelf.height, h + SPACING_PX)
-                        sheet.items.append(item)
-                        placed = True
-                        break
-                if placed:
-                    break
-            if placed:
-                break
-
             for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
                 if sheet.used_height + h + SPACING_PX <= sheet_height:
                     shelf = Shelf(sheet.used_height)
@@ -94,7 +108,6 @@ def pack_items(raw_items, sheet_width, sheet_height):
                     sheet.items.append(item)
                     placed = True
                     break
-
             if placed:
                 break
 
@@ -112,12 +125,68 @@ def pack_items(raw_items, sheet_width, sheet_height):
                     sheets.append(sheet)
                     placed = True
                     break
-
         if not placed:
-            raise ValueError(f"Item maior que a folha: {item}")
+            raise ValueError(f"Item grande maior que a folha: {item}")
+
+    def place_in_sheets(item):
+        for sheet in sheets:
+            for shelf in sheet.shelves:
+                for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
+                    if shelf.used_width + w + SPACING_PX <= sheet_width and shelf.y + h + SPACING_PX <= sheet_height:
+                        item.update({"x": shelf.used_width, "y": shelf.y, "rotated": rotated})
+                        shelf.used_width += w + SPACING_PX
+                        shelf.height = max(shelf.height, h + SPACING_PX)
+                        sheet.items.append(item)
+                        return True
+        return False
+
+    for group in (medium, small):
+        for item in group:
+            if place_in_sheets(item):
+                continue
+
+            placed = False
+            for sheet in sheets:
+                for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
+                    if sheet.used_height + h + SPACING_PX <= sheet_height:
+                        shelf = Shelf(sheet.used_height)
+                        shelf.used_width = w + SPACING_PX
+                        shelf.height = h + SPACING_PX
+                        item.update({"x": 0, "y": shelf.y, "rotated": rotated})
+                        sheet.shelves.append(shelf)
+                        sheet.used_height += shelf.height
+                        sheet.items.append(item)
+                        placed = True
+                        break
+                if placed:
+                    break
+
+            if placed:
+                continue
+
+            sheet = Sheet()
+            for w, h, rotated in [(item["w"], item["h"], False), (item["h"], item["w"], True)]:
+                if h + SPACING_PX <= sheet_height:
+                    shelf = Shelf(0)
+                    shelf.used_width = w + SPACING_PX
+                    shelf.height = h + SPACING_PX
+                    item.update({"x": 0, "y": 0, "rotated": rotated})
+                    sheet.shelves.append(shelf)
+                    sheet.used_height = shelf.height
+                    sheet.items.append(item)
+                    sheets.append(sheet)
+                    placed = True
+                    break
+
+            if not placed:
+                raise ValueError(f"Item não coube: {item}")
 
     return sheets
 
+
+# =========================
+# CACHE DE IMAGENS
+# =========================
 
 def _load_cached_image(url: str) -> Image.Image:
     with _CACHE_LOCK:
@@ -131,6 +200,10 @@ def _load_cached_image(url: str) -> Image.Image:
 
     return img.copy()
 
+
+# =========================
+# PROCESSAMENTO PRINCIPAL
+# =========================
 
 def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     items = []
@@ -161,10 +234,9 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     sheet_w = cm_to_px(SHEET_WIDTH_CM)
     sheet_h = cm_to_px(SHEET_HEIGHT_CM)
 
-    sheets = pack_items(items, sheet_w, sheet_h)
+    sheets = pack_items_hybrid(items, sheet_w, sheet_h)
 
     unique_urls = list({i["print_url"] for i in items})
-
     with ThreadPoolExecutor(max_workers=8) as ex:
         list(ex.map(_load_cached_image, unique_urls))
 
