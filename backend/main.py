@@ -15,7 +15,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="7.6")
+app = FastAPI(title="Projeto Estampas API", version="7.7")
 
 # =========================
 # CORS
@@ -252,95 +252,12 @@ def build_pieces(print_obj, qty: int):
         for s in print_obj["slots"]
     ]
 
-@app.get("/jobs/history")
-def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url,payload").eq("user_id", user["sub"])
-    if from_:
-        q = q.gte("created_at", from_)
-    if to:
-        q = q.lte("created_at", to)
-
-    jobs = q.order("created_at", desc=True).limit(50).execute().data or []
-    if not jobs:
-        return []
-
-    job_ids = [j["id"] for j in jobs]
-    files = supabase.table("print_files").select("job_id").in_("job_id", job_ids).execute().data or []
-
-    file_count_map = {}
-    for f in files:
-        file_count_map[f["job_id"]] = file_count_map.get(f["job_id"], 0) + 1
-
-    result = []
-    for j in jobs:
-        kits = (j.get("payload") or {}).get("kits") or 0
-        result.append({
-            "id": j["id"],
-            "status": j["status"],
-            "created_at": j["created_at"],
-            "finished_at": j.get("finished_at"),
-            "zip_url": j.get("zip_url"),
-            "file_count": file_count_map.get(j["id"], 0),
-            "print_count": kits,
-        })
-
-    return result
-
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    kits = (job.get("payload") or {}).get("kits") or 0
-    files = supabase.table("print_files").select("id").eq("job_id", job_id).execute().data or []
-
-    return {
-        "id": job["id"],
-        "status": job["status"],
-        "created_at": job["created_at"],
-        "finished_at": job.get("finished_at"),
-        "zip_url": job.get("zip_url"),
-        "file_count": len(files),
-        "print_count": kits,
-    }
-
-@app.get("/jobs/{job_id}/files")
-def get_job_files(job_id: str, user=Depends(current_user)):
-    uuid.UUID(job_id)
-
-    job = supabase.table("jobs").select("id").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    files = (
-        supabase
-        .table("print_files")
-        .select("id, public_url, page_index, created_at, preview")
-        .eq("job_id", job_id)
-        .order("page_index")
-        .execute()
-        .data
-        or []
-    )
-
-    return [
-        {
-            "id": f["id"],
-            "url": f["public_url"],
-            "page_index": f.get("page_index", 0),
-            "created_at": f.get("created_at"),
-            "preview": f.get("preview", False),
-        }
-        for f in files
-    ]
-
 @app.post("/print-jobs")
 def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Nenhum item enviado")
 
-    total_kits = len({i.print_id for i in payload.items})
+    total_kits = sum(max(i.qty, 0) for i in payload.items)
 
     pieces = []
     for item in payload.items:
@@ -367,9 +284,16 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 def confirm_print_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
 
+    updated = supabase.table("jobs") \
+        .update({"status": "confirming"}) \
+        .eq("id", job_id) \
+        .eq("status", "preview_done") \
+        .execute()
+
+    if not updated.data:
+        raise HTTPException(status_code=409, detail="Job já foi confirmado ou está em processamento")
+
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job or job["status"] not in ("preview_done",):
-        raise HTTPException(status_code=400, detail="Job ainda não está pronto para confirmar")
 
     kits = (job.get("payload") or {}).get("kits") or 0
     if kits <= 0:
@@ -399,33 +323,19 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-
     prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
-    usage_map = {}
-    last_used = {}
 
-    jobs = supabase.table("jobs").select("payload,created_at").eq("user_id", user["sub"]).execute().data or []
+    usage_map = {}
+    jobs = supabase.table("jobs").select("payload").eq("user_id", user["sub"]).execute().data or []
     for j in jobs:
         kits = (j.get("payload") or {}).get("kits") or 0
         usage_map["kits"] = usage_map.get("kits", 0) + kits
 
-    top_used = sorted(
-        [{"name": p["name"], "count": usage_map.get("kits", 0)} for p in prints],
-        key=lambda x: x["count"],
-        reverse=True,
-    )[:15]
-
-    not_used = [
-        {"name": p["name"]}
-        for p in prints
-    ][:15]
-
     files = supabase.table("print_files").select("id").execute().data or []
 
     return {
-        "top_used": top_used,
-        "not_used": not_used,
+        "top_used": [{"name": p["name"], "count": usage_map.get("kits", 0)} for p in prints][:15],
+        "not_used": [],
         "costs": {
             "files": len(files),
             "prints": usage_map.get("kits", 0),
