@@ -4,7 +4,7 @@ class LimitExceeded(Exception):
     pass
 
 
-def check_and_consume_limits(supabase, user_id: str, amount: int):
+def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = None):
     # =========================
     # Get or create profile
     # =========================
@@ -43,6 +43,18 @@ def check_and_consume_limits(supabase, user_id: str, amount: int):
 
     now = datetime.now(timezone.utc)
 
+    def insert_usage(amount):
+        row = {
+            "user_id": user_id,
+            "kind": "print",
+            "amount": amount,
+            "created_at": now.isoformat(),
+        }
+        if job_id:
+            row["job_id"] = job_id
+
+        supabase.table("usage").insert(row).execute()
+
     # =========================
     # DAILY limit
     # =========================
@@ -65,12 +77,7 @@ def check_and_consume_limits(supabase, user_id: str, amount: int):
         if total_today + amount > plan["daily_limit"]:
             raise LimitExceeded("Limite diário atingido.")
 
-        supabase.table("usage").insert({
-            "user_id": user_id,
-            "kind": "print",
-            "amount": amount,
-            "created_at": now.isoformat(),
-        }).execute()
+        insert_usage(amount)
         return
 
     # =========================
@@ -92,12 +99,7 @@ def check_and_consume_limits(supabase, user_id: str, amount: int):
     total_month = sum(r.get("amount") or 0 for r in used_month)
 
     if total_month + amount <= plan["monthly_limit"]:
-        supabase.table("usage").insert({
-            "user_id": user_id,
-            "kind": "print",
-            "amount": amount,
-            "created_at": now.isoformat(),
-        }).execute()
+        insert_usage(amount)
         return
 
     # =========================
@@ -131,9 +133,4 @@ def check_and_consume_limits(supabase, user_id: str, amount: int):
     if needed > 0:
         raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
 
-    supabase.table("usage").insert({
-        "user_id": user_id,
-        "kind": "print",
-        "amount": amount,
-        "created_at": now.isoformat(),
-    }).execute()
+    insert_usage(amount)

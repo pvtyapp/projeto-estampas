@@ -396,7 +396,8 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
         raise HTTPException(status_code=400, detail="Nenhum kit no job")
 
     try:
-        check_and_consume_limits(supabase, user["sub"], sheets)
+        check_and_consume_limits(supabase, user["sub"], sheets, job_id=job_id)
+
     except LimitExceeded as e:
         raise HTTPException(status_code=402, detail=str(e))
 
