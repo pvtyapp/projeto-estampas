@@ -51,6 +51,13 @@ export default function Library({ onPreview, version }: Props) {
   const noteRef = useRef<HTMLDivElement>(null)
   const saveTimers = useRef<Record<string, any>>({})
 
+  const totalSelected = useMemo(
+    () => Object.values(qty).reduce((sum, v) => sum + (v || 0), 0),
+    [qty],
+  )
+
+  const overLimit = totalSelected > 100
+
   const load = useCallback(async () => {
     try {
       setLoading(true)
@@ -122,6 +129,11 @@ export default function Library({ onPreview, version }: Props) {
   function buildPreview() {
     if (isBlocked) {
       alert('Você atingiu o limite do seu plano. Faça upgrade para continuar.')
+      return
+    }
+
+    if (totalSelected > 100) {
+      alert('O limite máximo por job é 100 estampas.')
       return
     }
 
@@ -234,7 +246,7 @@ export default function Library({ onPreview, version }: Props) {
                   <input
                     type="number"
                     min={0}
-                    disabled={isBlocked}
+                    disabled={isBlocked || overLimit}
                     className="w-14 border rounded px-2 py-0.5 text-xs text-center disabled:opacity-40"
                     value={qty[p.id] ?? 0}
                     onChange={e =>
@@ -283,15 +295,25 @@ export default function Library({ onPreview, version }: Props) {
           })}
       </div>
 
-      <div className="pt-2 flex justify-center">
+      <div className="pt-2 flex flex-col items-center gap-1">
         <button
           onClick={buildPreview}
-          disabled={isBlocked}
+          disabled={isBlocked || overLimit || totalSelected === 0}
           className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
           type="button"
         >
           Gerar folhas
         </button>
+
+        <span className={`text-xs ${overLimit ? 'text-red-600' : 'text-gray-500'}`}>
+          Total selecionado: {totalSelected} / 100
+        </span>
+
+        {overLimit && (
+          <span className="text-[10px] text-red-600">
+            Limite máximo por job é 100 estampas
+          </span>
+        )}
       </div>
 
       {editing && (
