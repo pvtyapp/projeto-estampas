@@ -347,20 +347,10 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     if not job or job["status"] not in ("preview_done",):
         raise HTTPException(status_code=400, detail="Job ainda não está pronto para confirmar")
 
-    files = (
-        supabase
-        .table("print_files")
-        .select("id")
-        .eq("job_id", job_id)
-        .eq("preview", False)
-        .execute()
-        .data
-        or []
-    )
-
-    total_units = len(files)
+    pieces = (job.get("payload") or {}).get("pieces") or []
+    total_units = len(pieces)
     if total_units <= 0:
-        raise HTTPException(status_code=400, detail="Nenhum arquivo gerado")
+        raise HTTPException(status_code=400, detail="Nenhuma peça no job")
 
     try:
         check_and_consume_limits(supabase, user["sub"], total_units)
