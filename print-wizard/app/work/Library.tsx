@@ -49,16 +49,24 @@ export default function Library({ onPreview, version }: Props) {
   const [qty, setQty] = useState<Record<string, number>>({})
 
   const noteRef = useRef<HTMLDivElement>(null)
+  const saveTimers = useRef<Record<string, any>>({})
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const [printsData, usageData] = await Promise.all([
+      const [printsData, usageData, notesData] = await Promise.all([
         api('/prints'),
         api('/me/usage'),
+        api('/print-notes'),
       ])
       setPrints(printsData)
       setUsage(usageData)
+
+      const map: Record<string, string> = {}
+      for (const n of notesData || []) {
+        map[n.print_id] = n.note || ''
+      }
+      setNotes(map)
     } catch (err) {
       console.error('Erro ao carregar biblioteca', err)
       alert('Erro ao carregar biblioteca. Veja o console.')
@@ -148,6 +156,22 @@ export default function Library({ onPreview, version }: Props) {
 
   function getSlot(p: Print, type: Slot['type']) {
     return p.slots.find(s => s.type === type)
+  }
+
+  function updateNote(printId: string, value: string) {
+    setNotes(n => ({ ...n, [printId]: value }))
+
+    clearTimeout(saveTimers.current[printId])
+    saveTimers.current[printId] = setTimeout(async () => {
+      try {
+        await api('/print-notes', {
+          method: 'POST',
+          body: JSON.stringify({ print_id: printId, note: value }),
+        })
+      } catch (e) {
+        console.error('Erro ao salvar nota', e)
+      }
+    }, 600)
   }
 
   return (
@@ -248,9 +272,7 @@ export default function Library({ onPreview, version }: Props) {
                   >
                     <textarea
                       value={notes[p.id] || ''}
-                      onChange={e =>
-                        setNotes(n => ({ ...n, [p.id]: e.target.value }))
-                      }
+                      onChange={e => updateNote(p.id, e.target.value)}
                       placeholder="Anotações sobre esta estampa..."
                       className="w-full h-24 text-xs border rounded p-1 resize-none"
                     />
@@ -261,7 +283,7 @@ export default function Library({ onPreview, version }: Props) {
           })}
       </div>
 
-      <div className="pt-2">
+      <div className="pt-2 flex justify-center">
         <button
           onClick={buildPreview}
           disabled={isBlocked}

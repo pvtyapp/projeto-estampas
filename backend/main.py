@@ -15,7 +15,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="7.4")
+app = FastAPI(title="Projeto Estampas API", version="7.5")
 
 # =========================
 # CORS
@@ -70,6 +70,13 @@ class PrintJobItem(BaseModel):
 class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
 
+class PrintNoteIn(BaseModel):
+    print_id: str
+    note: str
+
+class SettingsIn(BaseModel):
+    price_per_meter: float
+
 # =========================
 # AUTH
 # =========================
@@ -108,6 +115,25 @@ def load_slots(print_id: str):
 @app.get("/")
 def root():
     return {"status": "ok"}
+
+# =========================
+# PRINT NOTES
+# =========================
+
+@app.get("/print-notes")
+def list_print_notes(user=Depends(current_user)):
+    return supabase.table("print_notes").select("print_id,note").eq("user_id", user["sub"]).execute().data or []
+
+@app.post("/print-notes")
+def save_print_note(data: PrintNoteIn, user=Depends(current_user)):
+    supabase.table("print_notes").upsert({
+        "id": str(uuid.uuid4()),
+        "user_id": user["sub"],
+        "print_id": data.print_id,
+        "note": data.note,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }, on_conflict="user_id,print_id").execute()
+    return {"ok": True}
 
 # =========================
 # PRINTS
@@ -461,9 +487,6 @@ def get_my_usage(user=Depends(current_user)):
 # =========================
 # SETTINGS
 # =========================
-
-class SettingsIn(BaseModel):
-    price_per_meter: float
 
 @app.get("/me/settings")
 def get_settings(user=Depends(current_user)):
