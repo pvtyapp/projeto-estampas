@@ -412,6 +412,8 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
+    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+
     prints = (
         supabase
         .table("prints")
@@ -429,17 +431,24 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
     jobs = q.execute().data or []
 
+    # Contar uso por estampa no período
     counts = {}
+    used_recently = set()
     total_sheets = 0
 
     for j in jobs:
-        pieces = (j.get("payload") or {}).get("pieces", [])
-        total_sheets += (j.get("payload") or {}).get("sheets") or 0
+        payload = j.get("payload") or {}
+        pieces = payload.get("pieces") or []
+        sheets = payload.get("sheets") or 0
+        total_sheets += sheets
+
         for p in pieces:
             pid = p.get("print_id")
             if pid:
                 counts[pid] = counts.get(pid, 0) + 1
+                used_recently.add(pid)
 
+    # Top usadas no período
     top_used = []
     for p in prints:
         c = counts.get(p["id"], 0)
@@ -448,28 +457,29 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
     top_used.sort(key=lambda x: x["count"], reverse=True)
 
-    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-
-    usage = (
-        supabase
-        .table("usage")
-        .select("print_id,created_at")
-        .eq("user_id", user["sub"])
-        .execute()
-        .data or []
-    )
-
-    last_used = {}
-    for u in usage:
-        pid = u.get("print_id")
-        if pid:
-            last_used[pid] = max(last_used.get(pid, u["created_at"]), u["created_at"])
-
+    # Esquecidas = não usadas nos últimos 45 dias
     forgotten = []
-    for p in prints:
-        last = last_used.get(p["id"])
-        if not last or last < since_45d:
-            forgotten.append({"name": p["name"]})
+    if since_45d:
+        q45 = (
+            supabase
+            .table("jobs")
+            .select("payload")
+            .eq("user_id", user["sub"])
+            .gte("created_at", since_45d)
+            .execute()
+            .data or []
+        )
+
+        used_45 = set()
+        for j in q45:
+            for p in (j.get("payload") or {}).get("pieces", []):
+                pid = p.get("print_id")
+                if pid:
+                    used_45.add(pid)
+
+        for p in prints:
+            if p["id"] not in used_45:
+                forgotten.append({"name": p["name"]})
 
     files = (
         supabase
