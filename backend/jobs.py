@@ -24,11 +24,13 @@ def process_render(job_id: str, preview: bool = False):
 
     # Limpeza preventiva
     if preview:
-        supabase.table("generated_files").delete().eq("job_id", job_id).eq("preview", True).execute()
+        supabase.table("print_files").delete().eq("job_id", job_id).eq("preview", True).execute()
     else:
-        supabase.table("generated_files").delete().eq("job_id", job_id).execute()
+        supabase.table("print_files").delete().eq("job_id", job_id).execute()
 
-    supabase.table("jobs").update({"status": "processing"}).eq("id", job_id).execute()
+    supabase.table("jobs").update({
+        "status": "preview" if preview else "queued"
+    }).eq("id", job_id).execute()
 
     try:
         result_files = process_print_job(job_id, pieces, preview=preview)
