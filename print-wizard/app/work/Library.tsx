@@ -211,13 +211,12 @@ export default function Library({ onPreview, version }: Props) {
             const back = getSlot(p, 'back')
             const extra = getSlot(p, 'extra')
             const note = notes[p.id] || ''
-
             const current = qty[p.id] || 0
 
             return (
               <div
                 key={p.id}
-                className="border rounded-md px-3 h-[56px] flex items-center justify-between gap-2 relative overflow-hidden bg-white/60 hover:bg-white transition"
+                className="border rounded-md px-3 h-[56px] flex items-center justify-between gap-2 relative bg-white/60 hover:bg-white transition"
               >
                 <div className="flex-1 overflow-hidden">
                   <div className="text-sm font-medium truncate">
@@ -238,7 +237,6 @@ export default function Library({ onPreview, version }: Props) {
                         setOpenNote(p.id)
                       }}
                       className="text-[10px] text-yellow-700 italic mt-0.5 truncate max-w-[200px] text-left hover:underline"
-                      title="Clique para editar anotação"
                     >
                       📝 {note.split('\n')[0]}
                     </button>
@@ -263,23 +261,24 @@ export default function Library({ onPreview, version }: Props) {
 
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={e => {
                       e.stopPropagation()
                       setOpenNote(openNote === p.id ? null : p.id)
                     }}
                     className="text-gray-400 hover:text-black"
-                    type="button"
                   >
                     <StickyNote size={16} />
                   </button>
 
                   <button
-                    onClick={async () => {
+                    type="button"
+                    onClick={async e => {
+                      e.stopPropagation()
                       const full = await api(`/prints/${p.id}`)
                       setEditing(full)
                     }}
                     className="text-gray-400 hover:text-black"
-                    type="button"
                   >
                     <Pencil size={16} />
                   </button>
