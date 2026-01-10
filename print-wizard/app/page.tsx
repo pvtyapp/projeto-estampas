@@ -100,7 +100,7 @@ export default function Home() {
       {/* HERO */}
       <section className="relative z-10 flex flex-col items-center justify-center text-center px-6 min-h-[70vh] pb-24">
         <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight max-w-4xl">
-          Economize até 80% do tempo, Automatize a montagem direto para impressão...
+          Economize até 80% do tempo, Automatize a montagem do metro de DTF direto para impressão...
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mb-10">
           Elimine o processo manual, evite erros de tamanho e ganhe escala SEM AUMENTAR A EQUIPE.
@@ -129,7 +129,7 @@ export default function Home() {
             <h2 className="text-2xl font-bold mb-4">Pare de arrastar arquivo por arquivo no Photoshop.</h2>
             <p className="text-gray-300 mb-6">Aqui você gera produção real com um clique.</p>
             <ul className="space-y-2 text-gray-200">
-              <li className="flex gap-2"><Layers className="w-5 h-5" /> Gere centenas de folhas por clique</li>
+              <li className="flex gap-2"><Layers className="w-5 h-5" /> Gere centenas de estampas por clique</li>
               <li className="flex gap-2"><Layers className="w-5 h-5" /> Monte metros lineares automaticamente</li>
               <li className="flex gap-2"><Layers className="w-5 h-5" /> Pronto para qualquer escala</li>
             </ul>
@@ -138,8 +138,9 @@ export default function Home() {
             <h3 className="font-semibold mb-3">Infraestrutura</h3>
             <ul className="space-y-2 text-gray-200">
               <li className="flex gap-2"><Cpu className="w-5 h-5" /> Processamento em nuvem paralelo</li>
-              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Alta performance por job</li>
-              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Independente do seu computador</li>
+              <li className="flex gap-2"><Cpu className="w-5 h-5" /> 8 vCPU disponiveis</li>
+              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Alta performance em DPI alto</li>
+              <li className="flex gap-2"><Cpu className="w-5 h-5" /> Melhor aproveitamento no encaixe</li>            
             </ul>
           </div>
         </div>
@@ -151,15 +152,15 @@ export default function Home() {
           {[{
             icon: <Users className="w-8 h-8 mb-3" />,
             title: 'Menos estresse operacional',
-            items: ['Menos retrabalho', 'Menos erros', 'Mais previsibilidade']
+            items: ['Menos retrabalho', 'Menos erros', 'Menos responsabilidade']
           },{
             icon: <BarChart3 className="w-8 h-8 mb-3" />,
             title: 'Mais controle e margem',
-            items: ['Custo visível', 'Processo padronizado', 'Escala previsível']
+            items: ['Custo visível', 'Processo padronizado', 'Encaixe Inteligente']
           },{
             icon: <Zap className="w-8 h-8 mb-3" />,
             title: 'Vantagem competitiva',
-            items: ['Entrega mais rápida', 'Menos responsabilidade', 'Mais lucro']
+            items: ['Entrega mais rápida', 'Mais tempo para gestão', 'Mais lucro']
           }].map((b,i)=>(
             <div key={i} className="bg-white rounded-2xl shadow p-8">
               {b.icon}
