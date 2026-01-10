@@ -115,15 +115,14 @@ export default function WorkPage() {
           className="mt-20 border-t pt-10 grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-gray-600"
         >
           <div>
-            <h3 className="font-semibold mb-2 text-gray-800">Como usar</h3>
+            <h3 className="font-semibold mb-2 text-gray-800">Como usar!</h3>
             <ul className="space-y-1 list-disc pl-4">
               <li>Envie suas estampas no painel da esquerda.</li>
               <li>Informe corretamente os tamanhos e salva na biblioteca.</li>
               <li>Defina as quantidades que precisa na biblioteca.</li>
               <li>Clique em “Gerar folhas” para montar o layout.</li>
-              <li>Dica Importante: Abra a ultima folha do preview.</li>
-              <li>quando gerar e veja se cabe mais estampas, nisso o custo fica preciso.</li>
-              <li>Use as anotações para marcar devoluções ou camisetas prontas.</li>
+              <li>Dica Importante: Abra a ultima folha do preview quando gerar e veja se cabe mais estampas, nisso o custo fica preciso.</li>              
+              <li>Use as anotações para marcar as devoluções ou camisetas prontas.</li>
               <li>Baixe o arquivo final e envie para impressão.</li>
             </ul>
           </div>
