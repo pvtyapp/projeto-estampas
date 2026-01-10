@@ -300,7 +300,7 @@ export default function Library({ onPreview, version }: Props) {
           })}
       </div>
 
-      <div className="pt-2 flex flex-col items-center gap-1">
+      <div className="pt-2 mt-auto flex flex-col items-center gap-1">
         <button
           onClick={buildPreview}
           disabled={isBlocked || overLimit || totalSelected === 0}
