@@ -20,6 +20,7 @@ export default function PlansPage() {
 
   const [plans, setPlans] = useState<Plan[]>([])
   const [currentPlan, setCurrentPlan] = useState<string | null>(null)
+  const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null)
 
   useEffect(() => {
     if (!loading && !session) {
@@ -36,6 +37,19 @@ export default function PlansPage() {
     }
     load()
   }, [])
+
+  async function checkout(planId: string) {
+    try {
+      setLoadingCheckout(planId)
+      const res = await api(`/stripe/checkout?plan=${planId}`, { method: 'POST' })
+      window.location.href = res.url
+    } catch (e) {
+      console.error(e)
+      alert('Erro ao iniciar pagamento')
+    } finally {
+      setLoadingCheckout(null)
+    }
+  }
 
   if (!session) return null
 
@@ -111,14 +125,15 @@ export default function PlansPage() {
                     </button>
                   ) : isFree ? null : (
                     <button
-                      onClick={() =>
-                        plan.id === 'ent'
-                          ? alert('Em breve: contato comercial 😄')
-                          : alert('Stripe entra aqui depois')
-                      }
-                      className="w-full py-2 rounded bg-black text-white hover:opacity-90 transition"
+                      onClick={() => checkout(plan.id)}
+                      disabled={loadingCheckout === plan.id}
+                      className="w-full py-2 rounded bg-black text-white hover:opacity-90 transition disabled:opacity-50"
                     >
-                      {plan.id === 'ent' ? 'Falar com vendas' : 'Escolher este plano'}
+                      {loadingCheckout === plan.id
+                        ? 'Redirecionando...'
+                        : plan.id === 'ent'
+                        ? 'Falar com vendas'
+                        : 'Escolher este plano'}
                     </button>
                   )}
                 </div>
@@ -136,8 +151,12 @@ export default function PlansPage() {
             </p>
             <div className="flex justify-between items-center">
               <span className="text-xl font-bold">R$ 20,00</span>
-              <button className="bg-black text-white px-4 py-2 rounded">
-                Comprar pacote
+              <button
+                onClick={() => checkout('extra20')}
+                disabled={loadingCheckout === 'extra20'}
+                className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                {loadingCheckout === 'extra20' ? 'Redirecionando...' : 'Comprar pacote'}
               </button>
             </div>
           </div>
@@ -149,14 +168,19 @@ export default function PlansPage() {
             </p>
             <div className="flex justify-between items-center">
               <span className="text-xl font-bold">R$ 35,00</span>
-              <button className="bg-black text-white px-4 py-2 rounded">
-                Comprar pacote
+              <button
+                onClick={() => checkout('extra50')}
+                disabled={loadingCheckout === 'extra50'}
+                className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                {loadingCheckout === 'extra50' ? 'Redirecionando...' : 'Comprar pacote'}
               </button>
             </div>
           </div>
         </div>
       </div>
 
+    
       {/* Marketing */}
       <section className="space-y-20">
         <div className="text-center max-w-3xl mx-auto">
