@@ -209,7 +209,8 @@ export default function Library({ onPreview, version }: Props) {
         className="w-full border rounded px-3 py-1 text-sm"
       />
 
-      <div className="grid grid-cols-1 gap-2 max-h-[420px] overflow-y-auto pr-2 flex-1">
+      <div className="grid grid-cols-1 gap-0 max-h-[420px] overflow-y-auto pr-2 flex-1">
+
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
         {!loading &&
