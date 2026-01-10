@@ -112,6 +112,7 @@ export default function WorkPage() {
           />
         </section>
 
+        {/* Footer */}
         <section
           id="footer-help"
           className="mt-20 border-t pt-10 grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-gray-600"
@@ -123,7 +124,7 @@ export default function WorkPage() {
               <li>Informe corretamente os tamanhos e salve na biblioteca.</li>
               <li>Defina as quantidades que precisa na biblioteca.</li>
               <li>Clique em “Gerar folhas” para montar o layout.</li>
-              <li>Dica importante: Abra a última folha do preview e veja se ainda cabe mais estampas — assim o custo fica mais preciso.</li>
+              <li>Abra a última folha do preview e veja se cabe mais estampas.</li>
               <li>Use as anotações para marcar devoluções ou camisetas prontas.</li>
               <li>Baixe o arquivo final e envie para impressão.</li>
             </ul>
@@ -133,18 +134,20 @@ export default function WorkPage() {
             <h3 className="font-semibold mb-2 text-gray-800">Sobre o PVTY</h3>
             <p>
               O PVTY é uma plataforma criada para automatizar a montagem de folhas de impressão
-              para DTF. Nosso objetivo é reduzir desperdício,
-              economizar tempo e padronizar o seu fluxo de produção.
+              para DTF. Nosso objetivo é reduzir desperdício, economizar tempo e padronizar
+              o seu fluxo de produção.
             </p>
           </div>
 
-          <div>
-            <h3 className="font-semibold mb-2 text-gray-800">Suporte</h3>
-            <p className="mb-2">Precisa de ajuda ou encontrou algum problema?</p>
+          <div className="flex flex-col gap-2">
+            <h3 className="font-semibold mb-2 text-gray-800">Institucional & Suporte</h3>
+            <a href="/termos" className="hover:underline">Termos de Uso</a>
+            <a href="/privacidade" className="hover:underline">Política de Privacidade</a>
+            <a href="/seguranca" className="hover:underline">Segurança</a>
             <a
               href="https://wa.me/5516999653885"
               target="_blank"
-              className="text-green-600 hover:underline"
+              className="text-green-600 hover:underline mt-2"
             >
               Falar com suporte no WhatsApp
             </a>
