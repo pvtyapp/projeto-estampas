@@ -568,3 +568,29 @@ def save_settings(data: SettingsIn, user=Depends(current_user)):
     }).execute()
     return {"ok": True}
 
+# =========================
+# Planos
+# =========================
+
+
+@app.get("/plans")
+def get_plans(user=Depends(current_user)):
+    # Buscar todos os planos
+    plans = supabase.table("plans").select("*").execute().data or []
+
+    # Buscar plano atual do usuário
+    profile = (
+        supabase.table("profiles")
+        .select("plan_id")
+        .eq("id", user["sub"])
+        .limit(1)
+        .execute()
+        .data
+    )
+
+    current_plan = profile[0]["plan_id"] if profile else "free"
+
+    return {
+        "plans": plans,
+        "current_plan": current_plan,
+    }
