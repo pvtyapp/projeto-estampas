@@ -39,48 +39,62 @@ export default function PlansPage() {
   if (!session) return null
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-20">
+    <div className="max-w-6xl mx-auto px-6 py-12 space-y-24">
+      {/* Plans */}
       <div>
-        <h1 className="text-2xl font-semibold mb-8">Planos</h1>
+        <h1 className="text-3xl font-semibold mb-10 text-center">Escolha o plano ideal para sua operação</h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map(plan => {
             const isCurrent = plan.id === currentPlan
+            const isPopular = plan.id === 'pro'
 
             return (
               <div
                 key={plan.id}
-                className={`border rounded-2xl p-6 shadow-sm bg-white flex flex-col ${
-                  isCurrent ? 'ring-2 ring-blue-500' : ''
-                }`}
+                className={`relative border rounded-2xl p-6 shadow-sm bg-white flex flex-col ${
+                  isCurrent ? 'ring-2 ring-black' : ''
+                } ${isPopular ? 'border-black' : 'border-gray-200'}`}
               >
+                {isPopular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black text-white text-xs px-3 py-1 rounded-full">
+                    Mais escolhido
+                  </div>
+                )}
+
                 <h2 className="text-lg font-semibold mb-1">{plan.name}</h2>
 
-                <div className="text-2xl font-bold mb-4">
+                <div className="text-3xl font-bold mb-4">
                   {plan.price > 0 ? `R$ ${plan.price.toFixed(2)}` : 'Grátis'}
-                  <span className="text-sm text-gray-500"> / mês</span>
+                  <span className="text-sm text-gray-500 font-normal"> / mês</span>
                 </div>
 
                 <ul className="text-sm text-gray-600 space-y-1 mb-6">
-                  {plan.monthly_limit && <li>• {plan.monthly_limit} arquivos/mês</li>}
-                  {plan.daily_limit && <li>• {plan.daily_limit} arquivos/dia</li>}
+                  {plan.monthly_limit && <li>• {plan.monthly_limit} arquivos / mês</li>}
+                  {plan.daily_limit && <li>• {plan.daily_limit} arquivos / dia</li>}
                   {plan.library_limit && <li>• {plan.library_limit} na biblioteca</li>}
+                  <li>• Geração automática de folhas</li>
+                  <li>• Organização e padronização</li>
                 </ul>
 
                 <div className="mt-auto">
                   {isCurrent ? (
                     <button
                       disabled
-                      className="w-full py-2 rounded bg-gray-200 text-gray-600 cursor-default"
+                      className="w-full py-2 rounded bg-gray-100 text-gray-500 cursor-default"
                     >
                       Plano atual
                     </button>
                   ) : (
                     <button
-                      onClick={() => alert('Stripe entra aqui depois')}
-                      className="w-full py-2 rounded bg-black text-white hover:opacity-90"
+                      onClick={() =>
+                        plan.id === 'ent'
+                          ? alert('Em breve: contato comercial 😄')
+                          : alert('Stripe entra aqui depois')
+                      }
+                      className="w-full py-2 rounded bg-black text-white hover:opacity-90 transition"
                     >
-                      Trocar para este plano
+                      {plan.id === 'ent' ? 'Falar com vendas' : 'Escolher este plano'}
                     </button>
                   )}
                 </div>
@@ -91,9 +105,9 @@ export default function PlansPage() {
       </div>
 
       {/* Marketing */}
-      <section className="space-y-16">
+      <section className="space-y-20">
         <div className="text-center max-w-3xl mx-auto">
-          <h2 className="text-3xl font-semibold mb-4">
+          <h2 className="text-4xl font-semibold mb-4">
             O PVTY não é só um software — é um operador digital de produção.
           </h2>
           <p className="text-gray-600 text-lg">
@@ -104,23 +118,23 @@ export default function PlansPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10 text-center">
           <div className="space-y-2">
-            <div className="text-4xl font-bold text-black">−37%</div>
+            <div className="text-5xl font-bold">−80%</div>
             <p className="text-sm text-gray-600">
-              redução média no desperdício de mídia de impressão nas primeiras semanas de uso.
+              redução média no desperdício do seu tempo operacional.
             </p>
           </div>
 
           <div className="space-y-2">
-            <div className="text-4xl font-bold text-black">3x</div>
+            <div className="text-5xl font-bold">13x</div>
             <p className="text-sm text-gray-600">
               mais velocidade na criação de arquivos comparado ao processo manual.
             </p>
           </div>
 
           <div className="space-y-2">
-            <div className="text-4xl font-bold text-black">0</div>
+            <div className="text-5xl font-bold">0</div>
             <p className="text-sm text-gray-600">
-              necessidade de alguém dedicado só para montar layouts e arquivos.
+              necessidade de alguém dedicado só para montar layouts.
             </p>
           </div>
         </div>
@@ -131,7 +145,7 @@ export default function PlansPage() {
             <ul className="space-y-2 text-gray-700 text-sm">
               <li>• Geração automática de folhas de impressão.</li>
               <li>• Organização centralizada de estampas e tamanhos.</li>
-              <li>• Padronização do processo, independentemente de quem esteja operando.</li>
+              <li>• Padronização do processo, independente do operador.</li>
               <li>• Redução de erros humanos e arquivos errados.</li>
               <li>• Previsibilidade de custo por pedido.</li>
             </ul>
@@ -140,8 +154,8 @@ export default function PlansPage() {
           <div className="bg-white border rounded-2xl p-8 shadow-sm">
             <h3 className="text-xl font-semibold mb-3">Benefícios emocionais</h3>
             <ul className="space-y-2 text-gray-700 text-sm">
-              <li>• Você não depende mais de uma pessoa específica para “saber montar”.</li>
-              <li>• Você ganha tempo para focar em vendas, clientes e crescimento.</li>
+              <li>• Você não depende mais de alguém que “sabe montar”.</li>
+              <li>• Você ganha tempo para focar em vendas e crescimento.</li>
               <li>• Sua operação fica mais profissional e previsível.</li>
               <li>• Menos estresse, menos urgência, menos retrabalho.</li>
               <li>• Mais controle sobre seu negócio.</li>
