@@ -51,16 +51,20 @@ export default function WorkPage() {
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <DashboardPanel />
 
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[720px] items-stretch">
-          <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="h-[720px]">
+            <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
+          </div>
 
-          <Library
-            version={libraryVersion}
-            onPreview={items => {
-              setPreviewItems(items)
-              setSelectedJob(null)
-            }}
-          />
+          <div className="h-[720px]">
+            <Library
+              version={libraryVersion}
+              onPreview={items => {
+                setPreviewItems(items)
+                setSelectedJob(null)
+              }}
+            />
+          </div>
         </section>
 
         <section className="bg-white rounded-2xl shadow p-6 min-h-[200px] flex items-center justify-center">
@@ -78,7 +82,7 @@ export default function WorkPage() {
             <PreviewPanel key={`job-${selectedJob}`} jobId={selectedJob} />
           ) : (
             <div className="text-gray-400 text-sm text-center">
-              Preencha as quantidades e clique em “Gerar folhas”.
+              Preencha as quantidades na biblioteca e clique em “Gerar folhas”.
             </div>
           )}
         </section>
