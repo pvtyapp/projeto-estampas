@@ -13,12 +13,16 @@ from backend.supabase_client import supabase
 from backend.limits import check_and_consume_limits, LimitExceeded
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
+from backend.stripe_routes import router as stripe_router
+
 
 LOCAL_TZ = timezone(timedelta(hours=-3))
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
 app = FastAPI(title="Projeto Estampas API", version="7.6")
+
+app.include_router(stripe_router)
 
 # =========================
 # CORS
