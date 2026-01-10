@@ -127,43 +127,21 @@ export default function Library({ onPreview, version }: Props) {
       : 'Quantidade de estampas usadas no seu plano.'
 
   function buildPreview() {
-    if (isBlocked) {
-      alert('Você atingiu o limite do seu plano. Faça upgrade para continuar.')
-      return
-    }
-
-    if (overLimit) {
-      alert('O limite máximo por job é 100 estampas.')
-      return
-    }
+    if (isBlocked) return alert('Você atingiu o limite do seu plano.')
+    if (overLimit) return alert('O limite máximo por job é 100 estampas.')
 
     const items: PreviewItem[] = Object.entries(qty)
       .filter(([, v]) => v > 0)
       .map(([id, v]) => {
         const p = prints.find(p => p.id === id)
-        return {
-          print_id: id,
-          qty: v,
-          name: p?.name,
-          sku: p?.sku,
-        }
+        return { print_id: id, qty: v, name: p?.name, sku: p?.sku }
       })
 
-    if (!items.length) {
-      alert('Informe ao menos um QTY maior que zero.')
-      return
-    }
+    if (!items.length) return alert('Informe ao menos um QTY maior que zero.')
 
     onPreview(items)
     setToast('Preview gerado 👇')
     setTimeout(() => setToast(null), 2000)
-
-    setTimeout(() => {
-      document.getElementById('preview-anchor')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      })
-    }, 200)
   }
 
   function getSlot(p: Print, type: Slot['type']) {
@@ -172,29 +150,24 @@ export default function Library({ onPreview, version }: Props) {
 
   function updateNote(printId: string, value: string) {
     setNotes(n => ({ ...n, [printId]: value }))
-
     clearTimeout(saveTimers.current[printId])
-    saveTimers.current[printId] = setTimeout(async () => {
-      try {
-        await api('/print-notes', {
-          method: 'POST',
-          body: JSON.stringify({ print_id: printId, note: value }),
-        })
-      } catch (e) {
-        console.error('Erro ao salvar nota', e)
-      }
+    saveTimers.current[printId] = setTimeout(() => {
+      api('/print-notes', {
+        method: 'POST',
+        body: JSON.stringify({ print_id: printId, note: value }),
+      }).catch(console.error)
     }, 600)
   }
 
   return (
-    <div className="h-[720px] flex flex-col gap-4">
+    <div className="h-[720px] flex flex-col">
       {toast && (
         <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
           {toast}
         </div>
       )}
 
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center mb-3">
         <h2 className="font-semibold text-lg">Biblioteca</h2>
         <span className={`text-sm ${counterColor}`} title={tooltip}>
           {used} / {limit}
@@ -206,7 +179,7 @@ export default function Library({ onPreview, version }: Props) {
         placeholder="Buscar por nome ou SKU..."
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="w-full border rounded px-3 py-1 text-sm"
+        className="w-full border rounded px-3 py-1 text-sm mb-3"
       />
 
       <div className="flex flex-col gap-1 overflow-y-auto flex-1 pr-2">
@@ -223,7 +196,7 @@ export default function Library({ onPreview, version }: Props) {
             return (
               <div
                 key={p.id}
-                className="border rounded-md px-3 h-[56px] flex items-center justify-between gap-2 relative overflow-hidden bg-white/60 hover:bg-white transition"
+                className="border rounded-md px-3 h-[56px] flex items-center justify-between gap-2 relative bg-white/60 hover:bg-white transition"
               >
                 <div className="flex-1 overflow-hidden">
                   <div className="text-sm font-medium truncate">
@@ -244,7 +217,6 @@ export default function Library({ onPreview, version }: Props) {
                         setOpenNote(p.id)
                       }}
                       className="text-[10px] text-yellow-700 italic mt-0.5 truncate max-w-[200px] text-left hover:underline"
-                      title="Clique para editar anotação"
                     >
                       📝 {note.split('\n')[0]}
                     </button>
@@ -258,10 +230,9 @@ export default function Library({ onPreview, version }: Props) {
                     className="w-14 border rounded px-2 py-0.5 text-xs text-center"
                     value={current}
                     onChange={e => {
-                      const value = Number(e.target.value) || 0
-                      const nextTotal = totalSelected - current + value
-                      if (nextTotal > 100) return
-                      setQty(q => ({ ...q, [p.id]: value }))
+                      const v = Number(e.target.value) || 0
+                      if (totalSelected - current + v > 100) return
+                      setQty(q => ({ ...q, [p.id]: v }))
                     }}
                   />
                   <span className="text-xs text-gray-400">QTY</span>
@@ -269,23 +240,20 @@ export default function Library({ onPreview, version }: Props) {
 
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={e => {
                       e.stopPropagation()
                       setOpenNote(openNote === p.id ? null : p.id)
                     }}
                     className="text-gray-400 hover:text-black"
-                    type="button"
                   >
                     <StickyNote size={16} />
                   </button>
 
                   <button
-                    onClick={async () => {
-                      const full = await api(`/prints/${p.id}`)
-                      setEditing(full)
-                    }}
-                    className="text-gray-400 hover:text-black"
                     type="button"
+                    onClick={async () => setEditing(await api(`/prints/${p.id}`))}
+                    className="text-gray-400 hover:text-black"
                   >
                     <Pencil size={16} />
                   </button>
@@ -300,8 +268,8 @@ export default function Library({ onPreview, version }: Props) {
                       value={notes[p.id] || ''}
                       onChange={e => updateNote(p.id, e.target.value)}
                       onClick={e => e.stopPropagation()}
-                      placeholder="Anotações sobre esta estampa..."
                       className="w-full h-24 text-xs border rounded p-1 resize-none"
+                      placeholder="Anotações sobre esta estampa..."
                     />
                   </div>
                 )}
@@ -315,7 +283,6 @@ export default function Library({ onPreview, version }: Props) {
           onClick={buildPreview}
           disabled={isBlocked || overLimit || totalSelected === 0}
           className="bg-black text-white px-5 py-2 rounded disabled:opacity-50"
-          type="button"
         >
           Gerar folhas
         </button>
@@ -323,12 +290,6 @@ export default function Library({ onPreview, version }: Props) {
         <span className={`text-xs ${overLimit ? 'text-red-600' : 'text-gray-500'}`}>
           Total selecionado: {totalSelected} / 100
         </span>
-
-        {overLimit && (
-          <span className="text-[10px] text-red-600">
-            Limite máximo por job é 100 estampas
-          </span>
-        )}
       </div>
 
       {editing && (
