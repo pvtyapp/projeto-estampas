@@ -51,7 +51,7 @@ export default function WorkPage() {
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
         <DashboardPanel />
 
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-[720px] items-stretch">
           <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
 
           <Library
