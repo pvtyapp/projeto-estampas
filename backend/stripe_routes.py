@@ -1,4 +1,5 @@
 import stripe
+import uuid
 import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -73,12 +74,28 @@ async def stripe_webhook(request: Request):
         plan = session.get("metadata", {}).get("plan")
 
         if user_id and plan:
-            print(f"✅ Ativando plano '{plan}' para usuário {user_id}")
 
-            supabase.table("profiles").update({
-                "plan_id": plan,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", user_id).execute()
+            # === PLANOS (recorrentes) ===
+            if plan in {"start", "pro", "ent"}:
+                print(f"✅ Ativando plano '{plan}' para usuário {user_id}")
+
+                supabase.table("profiles").update({
+                    "plan_id": plan,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", user_id).execute()
+
+            # === PACOTES AVULSOS ===
+            elif plan in {"extra20", "extra50"}:
+                amount = 20 if plan == "extra20" else 50
+
+                print(f"➕ Adicionando pacote {amount} créditos para usuário {user_id}")
+
+                supabase.table("credit_packs").insert({
+                    "id": str(uuid.uuid4()),
+                    "user_id": user_id,
+                    "remaining": amount,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }).execute()
 
     # Assinatura cancelada
     if event["type"] == "customer.subscription.deleted":
