@@ -30,7 +30,8 @@ export default function PlansPage() {
   useEffect(() => {
     async function load() {
       const res = await api('/plans')
-      setPlans(res.plans || [])
+      const sorted = (res.plans || []).sort((a: Plan, b: Plan) => a.price - b.price)
+      setPlans(sorted)
       setCurrentPlan(res.current_plan || null)
     }
     load()
@@ -40,14 +41,16 @@ export default function PlansPage() {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 space-y-24">
-      {/* Plans */}
       <div>
-        <h1 className="text-3xl font-semibold mb-10 text-center">Escolha o plano ideal para sua operação</h1>
+        <h1 className="text-3xl font-semibold mb-10 text-center">
+          Escolha o plano ideal para sua operação
+        </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map(plan => {
             const isCurrent = plan.id === currentPlan
             const isPopular = plan.id === 'pro'
+            const isFree = plan.id === 'free'
 
             return (
               <div
@@ -75,6 +78,13 @@ export default function PlansPage() {
                   {plan.library_limit && <li>• {plan.library_limit} na biblioteca</li>}
                   <li>• Geração automática de folhas</li>
                   <li>• Organização e padronização</li>
+
+                  {plan.id === 'pro' && (
+                    <li className="font-medium text-black">• Prioridade na fila</li>
+                  )}
+                  {plan.id === 'ent' && (
+                    <li className="font-medium text-black">• Prioridade máxima na fila</li>
+                  )}
                 </ul>
 
                 <div className="mt-auto">
@@ -85,7 +95,7 @@ export default function PlansPage() {
                     >
                       Plano atual
                     </button>
-                  ) : (
+                  ) : isFree ? null : (
                     <button
                       onClick={() =>
                         plan.id === 'ent'
