@@ -92,8 +92,8 @@ export default function Library({ onPreview, version }: Props) {
         setOpenNote(null)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
   const filtered = useMemo(() => {
@@ -187,7 +187,7 @@ export default function Library({ onPreview, version }: Props) {
   }
 
   return (
-    <div className="space-y-4 h-[720px] flex flex-col">
+    <div className="h-[720px] flex flex-col gap-4">
       {toast && (
         <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
           {toast}
