@@ -522,22 +522,28 @@ def get_my_usage(user=Depends(current_user)):
         .eq("user_id", user["sub"])
         .gte("created_at", start.isoformat())
         .execute()
-        .data
-        or []
+        .data or []
     )
 
     used = sum(r["amount"] or 0 for r in rows)
 
-    credit_row = (
-        supabase.table("user_credits")
-        .select("balance")
+    purchased = (
+        supabase.table("credit_transactions")
+        .select("amount")
         .eq("user_id", user["sub"])
-        .limit(1)
         .execute()
-        .data
+        .data or []
     )
 
-    total_credits = credit_row[0]["balance"] if credit_row else 0
+    used_credits = (
+        supabase.table("credit_usage")
+        .select("amount")
+        .eq("user_id", user["sub"])
+        .execute()
+        .data or []
+    )
+
+    total_credits = sum(p["amount"] or 0 for p in purchased) - sum(u["amount"] or 0 for u in used_credits)
 
     status = "ok"
     if used > limit:
@@ -554,6 +560,7 @@ def get_my_usage(user=Depends(current_user)):
         "status": status,
         "library_limit": plan.get("library_limit"),
     }
+
 
 
 # =========================
