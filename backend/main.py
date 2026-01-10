@@ -30,6 +30,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://pvty.vercel.app",
         "https://pvty.com.br",
+        "https://www.pvty.com.br",
     ],
     allow_credentials=True,
     allow_methods=["*"],
