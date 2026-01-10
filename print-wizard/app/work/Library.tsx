@@ -187,7 +187,7 @@ export default function Library({ onPreview, version }: Props) {
   }
 
   return (
-    <div className="space-y-4 h-full min-h-[720px] flex flex-col">
+    <div className="space-y-4 h-[720px] flex flex-col">
       {toast && (
         <div className="fixed top-4 right-4 bg-black text-white px-4 py-2 rounded shadow z-50">
           {toast}
@@ -209,7 +209,7 @@ export default function Library({ onPreview, version }: Props) {
         className="w-full border rounded px-3 py-1 text-sm"
       />
 
-      <div className="grid grid-cols-1 gap-1 max-h-[420px] overflow-y-auto pr-2 flex-1">
+      <div className="flex flex-col gap-1 overflow-y-auto flex-1 pr-2">
 
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
@@ -270,7 +270,10 @@ export default function Library({ onPreview, version }: Props) {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setOpenNote(openNote === p.id ? null : p.id)}
+                    onClick={e => {
+                    e.stopPropagation()
+                    setOpenNote(openNote === p.id ? null : p.id)
+                    }}
                     className="text-gray-400 hover:text-black"
                     type="button"
                   >
