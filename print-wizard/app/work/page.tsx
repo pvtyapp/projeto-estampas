@@ -43,6 +43,10 @@ export default function WorkPage() {
     }
   }
 
+  function goToPlans() {
+    router.push('/plans')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
@@ -54,7 +58,16 @@ export default function WorkPage() {
           </div>
 
           <div className="flex justify-end items-center gap-4">
-            <button onClick={scrollToHelp} className="text-sm text-gray-600 hover:underline">
+            <button
+              onClick={goToPlans}
+              className="text-sm text-gray-600 hover:underline"
+            >
+              Planos
+            </button>
+            <button
+              onClick={scrollToHelp}
+              className="text-sm text-gray-600 hover:underline"
+            >
               Como usar?
             </button>
             <button onClick={logout} className="text-sm text-red-600">
@@ -112,7 +125,6 @@ export default function WorkPage() {
           />
         </section>
 
-        {/* Footer */}
         <section
           id="footer-help"
           className="mt-20 border-t pt-10 grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-gray-600"

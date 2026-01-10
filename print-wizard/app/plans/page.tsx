@@ -130,12 +130,12 @@ export default function PlansPage() {
         {/* Extra Packs */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="border rounded-2xl p-6 bg-white shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Pacote Extra — 100 arquivos</h3>
+            <h3 className="text-lg font-semibold mb-2">Pacote Extra — 20 arquivos</h3>
             <p className="text-gray-600 text-sm mb-4">
               Para quando você precisa produzir mais em um período específico.
             </p>
             <div className="flex justify-between items-center">
-              <span className="text-xl font-bold">R$ 29,90</span>
+              <span className="text-xl font-bold">R$ 20,00</span>
               <button className="bg-black text-white px-4 py-2 rounded">
                 Comprar pacote
               </button>
@@ -143,12 +143,12 @@ export default function PlansPage() {
           </div>
 
           <div className="border rounded-2xl p-6 bg-white shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Pacote Extra — 300 arquivos</h3>
+            <h3 className="text-lg font-semibold mb-2">Pacote Extra — 50 arquivos</h3>
             <p className="text-gray-600 text-sm mb-4">
               Ideal para picos de produção, datas sazonais ou grandes pedidos.
             </p>
             <div className="flex justify-between items-center">
-              <span className="text-xl font-bold">R$ 69,90</span>
+              <span className="text-xl font-bold">R$ 35,00</span>
               <button className="bg-black text-white px-4 py-2 rounded">
                 Comprar pacote
               </button>
