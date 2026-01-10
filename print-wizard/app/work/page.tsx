@@ -52,11 +52,11 @@ export default function WorkPage() {
         <DashboardPanel />
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="h-[720px]">
+          <div className="h-[8400px]">
             <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
           </div>
 
-          <div className="h-[720px]">
+          <div className="h-[840px]">
             <Library
               version={libraryVersion}
               onPreview={items => {
