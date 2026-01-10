@@ -224,7 +224,8 @@ export default function Library({ onPreview, version }: Props) {
             return (
               <div
                 key={p.id}
-                className="border rounded px-3 py-2 flex items-center justify-between gap-3 relative"
+                className="border rounded-md px-3 h-[56px] flex items-center justify-between gap-2 relative overflow-hidden bg-white/60 hover:bg-white transition"
+
               >
                 <div className="flex-1">
                   <div className="text-sm font-medium">
