@@ -6,12 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-
 from backend.job_queue import queue
 from backend.jobs import process_render
 from backend.auth import get_current_user
 from backend.supabase_client import supabase
 from backend.limits import check_and_consume_limits, LimitExceeded
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Dict
+
+LOCAL_TZ = timezone(timedelta(hours=-3))
 
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
@@ -403,6 +406,22 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
+    # === AJUSTE DE PERÍODO (NÃO REMOVE NADA EXISTENTE) ===
+    if from_ or to:
+        def parse_date(d: str, start: bool):
+            dt = datetime.strptime(d, "%Y-%m-%d")
+            if start:
+                dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            else:
+                dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            return dt.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc).isoformat()
+
+        if from_:
+            from_ = parse_date(from_, start=True)
+        if to:
+            to = parse_date(to, start=False)
+    # === FIM DO AJUSTE ===
+
     since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
 
     prints = (
@@ -439,7 +458,6 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
                 total_sheets += qty
                 used_recently.add(pid)
 
-    # Top usadas no período
     top_used = []
     for p in prints:
         c = counts.get(p["id"], 0)
@@ -448,7 +466,6 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
     top_used.sort(key=lambda x: x["count"], reverse=True)
 
-    # Esquecidas = não usadas nos últimos 45 dias
     forgotten = []
     q45 = (
         supabase
