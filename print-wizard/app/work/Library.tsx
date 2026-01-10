@@ -210,7 +210,6 @@ export default function Library({ onPreview, version }: Props) {
       />
 
       <div className="flex flex-col gap-1 overflow-y-auto flex-1 pr-2">
-
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
         {!loading &&
@@ -219,37 +218,37 @@ export default function Library({ onPreview, version }: Props) {
             const back = getSlot(p, 'back')
             const extra = getSlot(p, 'extra')
             const note = notes[p.id] || ''
-
             const current = qty[p.id] || 0
 
             return (
               <div
                 key={p.id}
                 className="border rounded-md px-3 h-[56px] flex items-center justify-between gap-2 relative overflow-hidden bg-white/60 hover:bg-white transition"
-
               >
-                <div className="flex-1">
-                  <div className="text-sm font-medium">
+                <div className="flex-1 overflow-hidden">
+                  <div className="text-sm font-medium truncate">
                     {p.name} / {p.sku}
                   </div>
 
-                  <div className="text-xs text-gray-400 flex gap-3">
+                  <div className="text-xs text-gray-400 flex gap-3 truncate">
                     {front && <span>F: {front.width_cm}×{front.height_cm}</span>}
                     {back && <span>C: {back.width_cm}×{back.height_cm}</span>}
                     {extra && <span>E: {extra.width_cm}×{extra.height_cm}</span>}
                   </div>
 
                   {note && openNote !== p.id && (
-                  <button
-                  type="button"
-                  onClick={() => setOpenNote(p.id)}
-                  className="text-[10px] text-yellow-700 italic mt-0.5 truncate max-w-[200px] text-left hover:underline"
-                  title="Clique para editar anotação"
-                  >
-                    📝 {note.split('\n')[0]}
-                </button>
-                )}
-
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation()
+                        setOpenNote(p.id)
+                      }}
+                      className="text-[10px] text-yellow-700 italic mt-0.5 truncate max-w-[200px] text-left hover:underline"
+                      title="Clique para editar anotação"
+                    >
+                      📝 {note.split('\n')[0]}
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1">
@@ -271,8 +270,8 @@ export default function Library({ onPreview, version }: Props) {
                 <div className="flex gap-2">
                   <button
                     onClick={e => {
-                    e.stopPropagation()
-                    setOpenNote(openNote === p.id ? null : p.id)
+                      e.stopPropagation()
+                      setOpenNote(openNote === p.id ? null : p.id)
                     }}
                     className="text-gray-400 hover:text-black"
                     type="button"
@@ -300,6 +299,7 @@ export default function Library({ onPreview, version }: Props) {
                     <textarea
                       value={notes[p.id] || ''}
                       onChange={e => updateNote(p.id, e.target.value)}
+                      onClick={e => e.stopPropagation()}
                       placeholder="Anotações sobre esta estampa..."
                       className="w-full h-24 text-xs border rounded p-1 resize-none"
                     />
@@ -310,7 +310,7 @@ export default function Library({ onPreview, version }: Props) {
           })}
       </div>
 
-      <div className="pt-2 mt-auto flex flex-col items-center gap-1">
+      <div className="mt-auto flex flex-col items-center gap-1">
         <button
           onClick={buildPreview}
           disabled={isBlocked || overLimit || totalSelected === 0}
