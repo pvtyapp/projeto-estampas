@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
+import { useRouter } from 'next/navigation'
 
 type Plan = 'free' | 'start' | 'pro' | 'ent'
 
@@ -19,6 +20,7 @@ export default function DashboardPanel() {
   const { session, loading: sessionLoading } = useSession()
   const [usage, setUsage] = useState<Usage | null>(null)
   const [error, setError] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     if (sessionLoading || !session) return
@@ -129,12 +131,9 @@ export default function DashboardPanel() {
         <span>Créditos extras: {usage.credits}</span>
         <button
           className="underline"
-          onClick={() => {
-            if (isFree) alert('Upgrade em breve 😄')
-            else alert('Gerenciamento de plano em breve 😄')
-          }}
+          onClick={() => router.push('/plans')}
         >
-          {isFree ? 'Fazer upgrade' : 'Gerenciar plano'}
+          {isFree ? 'Ver planos e preços' : 'Ver detalhes do plano'}
         </button>
       </div>
     </div>

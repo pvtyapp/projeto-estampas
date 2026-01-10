@@ -516,11 +516,28 @@ def get_my_usage(user=Depends(current_user)):
         days_in_month = calendar.monthrange(now.year, now.month)[1]
         remaining_days = days_in_month - now.day
 
-    rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).gte("created_at", start.isoformat()).execute().data or []
+    rows = (
+        supabase.table("usage")
+        .select("amount")
+        .eq("user_id", user["sub"])
+        .gte("created_at", start.isoformat())
+        .execute()
+        .data
+        or []
+    )
+
     used = sum(r["amount"] or 0 for r in rows)
 
-    credits = supabase.table("credit_packs").select("remaining").eq("user_id", user["sub"]).execute().data or []
-    total_credits = sum(c["remaining"] or 0 for c in credits)
+    credit_row = (
+        supabase.table("user_credits")
+        .select("balance")
+        .eq("user_id", user["sub"])
+        .limit(1)
+        .execute()
+        .data
+    )
+
+    total_credits = credit_row[0]["balance"] if credit_row else 0
 
     status = "ok"
     if used > limit:
@@ -537,6 +554,7 @@ def get_my_usage(user=Depends(current_user)):
         "status": status,
         "library_limit": plan.get("library_limit"),
     }
+
 
 # =========================
 # SETTINGS
