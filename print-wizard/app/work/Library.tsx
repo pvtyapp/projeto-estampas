@@ -209,7 +209,7 @@ export default function Library({ onPreview, version }: Props) {
         className="w-full border rounded px-3 py-1 text-sm"
       />
 
-      <div className="grid grid-cols-1 gap-0 max-h-[420px] overflow-y-auto pr-2 flex-1">
+      <div className="grid grid-cols-1 gap-1 max-h-[420px] overflow-y-auto pr-2 flex-1">
 
         {loading && <p className="text-sm text-gray-400">Carregando...</p>}
 
@@ -240,10 +240,16 @@ export default function Library({ onPreview, version }: Props) {
                   </div>
 
                   {note && openNote !== p.id && (
-                    <div className="text-[10px] text-yellow-600 italic mt-1 truncate max-w-[200px]">
-                      📝 {note.slice(0, 30)}…
-                    </div>
-                  )}
+                  <button
+                  type="button"
+                  onClick={() => setOpenNote(p.id)}
+                  className="text-[10px] text-yellow-700 italic mt-0.5 truncate max-w-[200px] text-left hover:underline"
+                  title="Clique para editar anotação"
+                  >
+                    📝 {note.split('\n')[0]}
+                </button>
+                )}
+
                 </div>
 
                 <div className="flex items-center gap-1">
