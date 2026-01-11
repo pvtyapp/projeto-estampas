@@ -554,10 +554,15 @@ def get_my_usage(user=Depends(current_user)):
     total_credits = sum(c["remaining"] or 0 for c in credits)
 
     status = "ok"
-    if used > limit:
-        status = "using_credits" if total_credits > 0 else "blocked"
-    elif used > limit * 0.8:
+
+    if used >= limit:
+        if total_credits > 0:
+            status = "using_credits"
+        else:
+            status = "blocked"
+    elif used >= limit * 0.8:
         status = "warning"
+
 
     return {
         "plan": plan_id,
