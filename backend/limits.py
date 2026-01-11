@@ -40,15 +40,15 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         raise LimitExceeded("Plano inválido.")
 
     plan = plan_res.data[0]
-
     now = datetime.now(timezone.utc)
 
-    def insert_usage(amount):
+    def insert_usage(amount, used_credits=False):
         row = {
             "user_id": user_id,
             "kind": "print",
             "amount": amount,
             "created_at": now.isoformat(),
+            "used_credits": used_credits,
         }
         if job_id:
             row["job_id"] = job_id
@@ -58,7 +58,7 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
     # =========================
     # DAILY limit
     # =========================
-    if plan.get("daily_limit"):
+    if plan.get("daily_limit") is not None:
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         used_today = (
@@ -74,11 +74,15 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
 
         total_today = sum(r.get("amount") or 0 for r in used_today)
 
-        if total_today + amount > plan["daily_limit"]:
-            raise LimitExceeded("Limite diário atingido.")
+        if total_today + amount <= plan["daily_limit"]:
+            insert_usage(amount)
+            return
 
-        insert_usage(amount)
-        return
+        # 🔥 Estourou DAILY → tentar créditos
+        needed = total_today + amount - plan["daily_limit"]
+
+    else:
+        needed = 0
 
     # =========================
     # MONTHLY limit
@@ -98,15 +102,16 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
 
     total_month = sum(r.get("amount") or 0 for r in used_month)
 
-    if total_month + amount <= plan["monthly_limit"]:
-        insert_usage(amount)
-        return
+    if needed == 0 and plan.get("monthly_limit") is not None:
+        if total_month + amount <= plan["monthly_limit"]:
+            insert_usage(amount)
+            return
+
+        needed = total_month + amount - plan["monthly_limit"]
 
     # =========================
     # Credit packs
     # =========================
-    needed = total_month + amount - plan["monthly_limit"]
-
     packs = (
         supabase
         .table("credit_packs")
@@ -131,6 +136,6 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         }).eq("id", pack["id"]).execute()
 
     if needed > 0:
-        raise LimitExceeded("Limite do plano e pacotes extras esgotados.")
+        raise LimitExceeded("Limite do plano e créditos esgotados.")
 
-    insert_usage(amount)
+    insert_usage(amount, used_credits=True)
