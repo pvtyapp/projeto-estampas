@@ -62,38 +62,43 @@ export default function JobHistory({ onSelect }: Props) {
     }
   }, [period])
 
-  function toYMD(d: Date) {
-    return d.toISOString().slice(0, 10)
+  function buildRange(): { from?: string; to?: string } {
+    const now = new Date()
+    let from: Date | null = null
+    let to: Date | null = null
+
+    if (period === 'today') {
+      from = new Date()
+      from.setHours(0, 0, 0, 0)
+      to = new Date()
+      to.setHours(23, 59, 59, 999)
+    } else if (period === 'yesterday') {
+      from = new Date()
+      from.setDate(from.getDate() - 1)
+      from.setHours(0, 0, 0, 0)
+
+      to = new Date(from)
+      to.setHours(23, 59, 59, 999)
+    } else {
+      const days = { '7d': 7, '30d': 30, '60d': 60 }[period]
+      from = new Date(Date.now() - days * 86400000)
+      to = new Date()
+    }
+
+    return {
+      from: from?.toISOString(),
+      to: to?.toISOString(),
+    }
   }
 
   async function load(cancelled: boolean) {
     setLoading(true)
     setError(null)
 
-    const now = new Date()
-    let from: Date | null = null
-    let to: Date | null = null
-
-    if (period === 'today') {
-      from = new Date(now)
-      from.setHours(0, 0, 0, 0)
-      to = new Date(now)
-      to.setHours(23, 59, 59, 999)
-    } else if (period === 'yesterday') {
-      const y = new Date()
-      y.setDate(y.getDate() - 1)
-      from = new Date(y)
-      from.setHours(0, 0, 0, 0)
-      to = new Date(y)
-      to.setHours(23, 59, 59, 999)
-    } else {
-      const days = { '7d': 7, '30d': 30, '60d': 60 }[period]
-      from = new Date(Date.now() - days * 86400000)
-    }
-
+    const { from, to } = buildRange()
     const params = new URLSearchParams()
-    if (from) params.append('from', toYMD(from))
-    if (to) params.append('to', toYMD(to))
+    if (from) params.append('from', from)
+    if (to) params.append('to', to)
 
     const qs = params.toString() ? `?${params.toString()}` : ''
 
@@ -178,8 +183,7 @@ export default function JobHistory({ onSelect }: Props) {
                 <Row label="Estampas incluídas">{stats.costs.prints}</Row>
 
                 <Row label="Custo médio por estampa">
-                  R${' '}
-                  {stats.costs.prints > 0
+                  R$ {stats.costs.prints > 0
                     ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2)
                     : '0'}
                 </Row>
