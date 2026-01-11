@@ -77,6 +77,8 @@ export default function PreviewPanel(props: Props) {
         method: 'POST',
         body: JSON.stringify({
           items: grouped.map(i => ({ print_id: i.print_id, qty: i.qty })),
+          sheet_size: localStorage.getItem('sheet_size') || '30x100',
+          dpi: Number(localStorage.getItem('dpi') || 300),
         }),
       })
 
