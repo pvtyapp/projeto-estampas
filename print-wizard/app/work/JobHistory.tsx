@@ -86,7 +86,7 @@ export default function JobHistory({ onSelect }: Props) {
       const [jobsData, statsData, forgottenData] = await Promise.all([
         api(`/jobs/history${params}`),
         api(`/stats/prints${params}`),
-        api(`/stats/prints`),
+        api(`/stats/prints?forgotten=true`),
       ])
 
       if (cancelled) return
@@ -151,30 +151,29 @@ export default function JobHistory({ onSelect }: Props) {
             </Panel>
 
             <Panel title="Indicadores de custo">
-            <div className="space-y-2 text-sm text-gray-700">
-            <Row label="Preço do metro (R$)">
-            <input
-            type="text"
-            inputMode="decimal"
-            value={price}
-            onChange={e => setPrice(e.target.value)}
-            onBlur={e => savePrice(e.target.value)}
-            className="border rounded px-2 py-1 w-24 text-right"
-            />
-            </Row>
+              <div className="space-y-2 text-sm text-gray-700">
+                <Row label="Preço do metro (R$)">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={price}
+                    onChange={e => setPrice(e.target.value)}
+                    onBlur={e => savePrice(e.target.value)}
+                    className="border rounded px-2 py-1 w-24 text-right"
+                  />
+                </Row>
 
-            <Row label="Arquivos gerados">{stats.costs.files}</Row>
-            <Row label="Estampas incluídas">{stats.costs.prints}</Row>
+                <Row label="Arquivos gerados">{stats.costs.files}</Row>
+                <Row label="Estampas incluídas">{stats.costs.prints}</Row>
 
-          <Row label="Custo médio por estampa">
-           R${' '}
-            {stats.costs.prints > 0
-            ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2)
-            : '0'}
-            </Row>
-            </div>
-          </Panel>
-
+                <Row label="Custo médio por estampa">
+                  R${' '}
+                  {stats.costs.prints > 0
+                    ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2)
+                    : '0'}
+                </Row>
+              </div>
+            </Panel>
 
             <Panel title="Top esquecidas (≥ 45 dias sem uso)">
               <div className="text-xs text-gray-400 mb-1">
