@@ -430,7 +430,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
                 dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
             else:
                 dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-            return dt.replace(tzinfo=LOCAL_TZ).astimezone(timezone.utc).isoformat()
+            return dt.replace(tzinfo=timezone.utc).isoformat()
 
         if from_:
             from_ = parse_date(from_, start=True)
@@ -504,14 +504,19 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         if p["id"] not in used_45:
             forgotten.append({"name": p["name"]})
 
-    files = (
+    files_q = (
         supabase
         .table("print_files")
-        .select("id")
+        .select("id, created_at")
         .eq("preview", False)
-        .execute()
-        .data or []
     )
+    if from_:
+        files_q = files_q.gte("created_at", from_)
+    if to:
+        files_q = files_q.lte("created_at", to)
+    files = files_q.execute().data or []
+    total_sheets = len(files)
+
 
     return {
         "top_used": top_used[:15],
