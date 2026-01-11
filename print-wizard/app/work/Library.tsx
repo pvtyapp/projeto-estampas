@@ -28,6 +28,7 @@ type PreviewItem = {
 
 type Usage = {
   library_limit: number | null
+  status?: 'ok' | 'warning' | 'blocked' | 'using_credits'
 }
 
 type Props = {
@@ -110,23 +111,30 @@ export default function Library({ onPreview, version }: Props) {
   const limit = usage?.library_limit || Infinity
   const used = prints.length
   const percent = (used / limit) * 100
-  const isBlocked = used >= limit
+  const isBlocked = used >= limit || usage?.status === 'blocked'
 
   const counterColor =
-    percent >= 100
+    percent >= 100 || usage?.status === 'blocked'
       ? 'text-red-600'
       : percent >= 70
       ? 'text-yellow-600'
       : 'text-gray-500'
 
   const tooltip =
-    percent >= 100
+    usage?.status === 'blocked'
+      ? 'Seu limite de uso e créditos foi atingido. Faça upgrade para continuar.'
+      : percent >= 100
       ? 'Você atingiu o limite do seu plano. Faça upgrade para adicionar mais estampas.'
       : percent >= 70
       ? 'Você está se aproximando do limite do seu plano.'
       : 'Quantidade de estampas usadas no seu plano.'
 
   function buildPreview() {
+    if (usage?.status === 'blocked') {
+      alert('Seu limite diário e créditos extras foram atingidos.')
+      return
+    }
+
     if (isBlocked) {
       alert('Você atingiu o limite do seu plano. Faça upgrade para continuar.')
       return
@@ -312,6 +320,12 @@ export default function Library({ onPreview, version }: Props) {
         >
           Gerar folhas
         </button>
+
+        {usage?.status === 'blocked' && (
+          <span className="text-[10px] text-red-600">
+            Seu limite diário e créditos extras foram atingidos.
+          </span>
+        )}
 
         <span className={`text-xs ${overLimit ? 'text-red-600' : 'text-gray-500'}`}>
           Total selecionado: {totalSelected} / 100
