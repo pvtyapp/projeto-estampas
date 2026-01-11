@@ -79,7 +79,9 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
             return
 
         # 🔥 Estourou DAILY → tentar créditos
-        needed = total_today + amount - plan["daily_limit"]
+        needed = (total_today + amount) - plan["daily_limit"]
+        needed = min(needed, amount)
+
 
     else:
         needed = 0
@@ -107,7 +109,9 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
             insert_usage(amount)
             return
 
-        needed = total_month + amount - plan["monthly_limit"]
+        needed = (total_month + amount) - plan["monthly_limit"]
+        needed = min(needed, amount)
+
 
     # =========================
     # Credit packs
