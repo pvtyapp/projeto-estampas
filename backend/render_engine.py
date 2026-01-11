@@ -159,14 +159,14 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     items = [
         {
             "print_url": p["url"],
-            "w": cm_to_px(p["width"], dpi),
-            "h": cm_to_px(p["height"], dpi),
+            "w": cm_to_px(p["width"] * dpi / 300),
+            "h": cm_to_px(p["height"] * dpi / 300),
         }
         for p in pieces
     ]
 
-    sheet_w = cm_to_px(width_cm, dpi)
-    sheet_h = cm_to_px(height_cm, dpi)
+    sheet_w = cm_to_px(width_cm * dpi / 300)
+    sheet_h = cm_to_px(height_cm * dpi / 300)
 
     sheets = pack_items_hybrid(items, sheet_w, sheet_h)
 
