@@ -425,14 +425,15 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         try:
             dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
         except ValueError:
-            dt = datetime.strptime(d, "%Y-%m-%d")
+            dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
         if start:
             dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
         else:
             dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        return dt.astimezone(timezone.utc).isoformat()
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
 
     if from_:
         from_ = parse_date(from_, start=True)
