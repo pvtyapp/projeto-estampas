@@ -86,7 +86,7 @@ export default function JobHistory({ onSelect }: Props) {
       const [jobsData, statsData, forgottenData] = await Promise.all([
         api(`/jobs/history${params}`),
         api(`/stats/prints${params}`),
-        api(`/stats/prints?forgotten=true`),
+        api(`/stats/prints?forgotten=true${params}`),
       ])
 
       if (cancelled) return
