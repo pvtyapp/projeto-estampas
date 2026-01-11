@@ -62,6 +62,10 @@ export default function JobHistory({ onSelect }: Props) {
     }
   }, [period])
 
+  function toYMD(d: Date) {
+    return d.toISOString().slice(0, 10)
+  }
+
   async function load(cancelled: boolean) {
     setLoading(true)
     setError(null)
@@ -80,24 +84,18 @@ export default function JobHistory({ onSelect }: Props) {
       from = new Date(Date.now() - days * 86400000)
     }
 
-    const params = from
-      ? `?from=${from.toISOString().slice(0, 10)}`
-      : ''
+    const params = from ? `?from=${toYMD(from)}` : ''
 
     try {
-      const [jobsData, statsData, forgottenData] = await Promise.all([
+      const [jobsData, statsData] = await Promise.all([
         api(`/jobs/history${params}`),
         api(`/stats/prints${params}`),
-        api(`/stats/prints?forgotten=true${params}`),
       ])
 
       if (cancelled) return
 
       setJobs(jobsData || [])
-      setStats({
-        ...statsData,
-        not_used: forgottenData?.not_used || [],
-      })
+      setStats(statsData || null)
     } catch (err) {
       console.error('JobHistory load failed:', err)
       if (!cancelled) {
