@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from backend.print_utils import load_print_image, cm_to_px
-from backend.print_config import SHEET_WIDTH_CM, SHEET_HEIGHT_CM, SPACING_PX
+from backend.print_config import SPACING_PX
 from backend.supabase_client import supabase
 
 _IMAGE_CACHE: dict[str, Image.Image] = {}
@@ -145,14 +145,28 @@ def _load_cached_image(url: str) -> Image.Image:
 
 
 def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
-    items = [{
-        "print_url": p["url"],
-        "w": cm_to_px(p["width"]),
-        "h": cm_to_px(p["height"]),
-    } for p in pieces]
+    job = supabase.table("jobs").select("payload").eq("id", job_id).single().execute().data or {}
+    payload = job.get("payload") or {}
 
-    sheet_w = cm_to_px(SHEET_WIDTH_CM)
-    sheet_h = cm_to_px(SHEET_HEIGHT_CM)
+    sheet_size = payload.get("sheet_size", "30x100")
+    dpi = payload.get("dpi", 300)
+
+    if sheet_size == "57x100":
+        width_cm, height_cm = 57, 100
+    else:
+        width_cm, height_cm = 30, 100
+
+    items = [
+        {
+            "print_url": p["url"],
+            "w": cm_to_px(p["width"], dpi),
+            "h": cm_to_px(p["height"], dpi),
+        }
+        for p in pieces
+    ]
+
+    sheet_w = cm_to_px(width_cm, dpi)
+    sheet_h = cm_to_px(height_cm, dpi)
 
     sheets = pack_items_hybrid(items, sheet_w, sheet_h)
 
@@ -190,7 +204,7 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
         supabase.storage.from_("jobs-output").upload(
             filename,
             data,
-            {"content-type": "image/png", "upsert": "true"}
+            {"content-type": "image/png", "upsert": "true"},
         )
 
         results.append(supabase.storage.from_("jobs-output").get_public_url(filename))

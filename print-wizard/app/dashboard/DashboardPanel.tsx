@@ -22,6 +22,10 @@ export default function DashboardPanel() {
   const [error, setError] = useState(false)
   const router = useRouter()
 
+  const [sheetSize, setSheetSize] = useState<'30x100' | '57x100'>('30x100')
+  const [dpi, setDpi] = useState<100 | 200 | 300>(300)
+
+
   useEffect(() => {
     if (sessionLoading || !session) return
 
@@ -136,6 +140,24 @@ export default function DashboardPanel() {
           {isFree ? 'Ver planos e preços' : 'Ver detalhes do plano'}
         </button>
       </div>
+    
+      <div className="border-t pt-4">
+        <div className="text-sm font-medium mb-2">Configuração de impressão</div>
+        <div className="flex gap-6 text-sm">
+          <div className="flex flex-col gap-1">
+            <span className="text-gray-500">Folha</span>
+            <label><input type="radio" checked={sheetSize==='30x100'} onChange={()=>setSheetSize('30x100')} /> 30x100</label>
+            <label><input type="radio" checked={sheetSize==='57x100'} onChange={()=>setSheetSize('57x100')} /> 57x100</label>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-gray-500">DPI</span>
+            <label><input type="radio" checked={dpi===100} onChange={()=>setDpi(100)} /> 100</label>
+            <label><input type="radio" checked={dpi===200} onChange={()=>setDpi(200)} /> 200</label>
+            <label><input type="radio" checked={dpi===300} onChange={()=>setDpi(300)} /> 300</label>
+          </div>
+        </div>
+      </div>
+
     </div>
   )
 }

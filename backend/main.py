@@ -86,6 +86,8 @@ class PrintJobItem(BaseModel):
 
 class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
+    sheet_size: str = '30x100'
+    dpi: int = 300
 
 class PrintNoteIn(BaseModel):
     print_id: str
@@ -379,7 +381,9 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
             "items": [i.dict() for i in payload.items],  # ← intenção do usuário
             "pieces": pieces,                            # ← material lógico
             "kits": total_kits,                          # ← total de SKUs
-            "sheets": None,                              # ← será definido pelo jobs.py
+            "sheets": None,
+            "sheet_size": payload.sheet_size,
+            "dpi": payload.dpi,
         },
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
