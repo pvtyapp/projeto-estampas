@@ -80,7 +80,9 @@ export default function JobHistory({ onSelect }: Props) {
       from = new Date(Date.now() - days * 86400000)
     }
 
-    const params = from ? `?from=${from.toISOString()}` : ''
+    const params = from
+      ? `?from=${from.toISOString().slice(0, 10)}`
+      : ''
 
     try {
       const [jobsData, statsData, forgottenData] = await Promise.all([
