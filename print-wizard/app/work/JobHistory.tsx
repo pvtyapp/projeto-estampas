@@ -72,24 +72,35 @@ export default function JobHistory({ onSelect }: Props) {
 
     const now = new Date()
     let from: Date | null = null
+    let to: Date | null = null
 
     if (period === 'today') {
-      from = new Date(now.setHours(0, 0, 0, 0))
+      from = new Date(now)
+      from.setHours(0, 0, 0, 0)
+      to = new Date(now)
+      to.setHours(23, 59, 59, 999)
     } else if (period === 'yesterday') {
       const y = new Date()
       y.setDate(y.getDate() - 1)
-      from = new Date(y.setHours(0, 0, 0, 0))
+      from = new Date(y)
+      from.setHours(0, 0, 0, 0)
+      to = new Date(y)
+      to.setHours(23, 59, 59, 999)
     } else {
       const days = { '7d': 7, '30d': 30, '60d': 60 }[period]
       from = new Date(Date.now() - days * 86400000)
     }
 
-    const params = from ? `?from=${toYMD(from)}` : ''
+    const params = new URLSearchParams()
+    if (from) params.append('from', toYMD(from))
+    if (to) params.append('to', toYMD(to))
+
+    const qs = params.toString() ? `?${params.toString()}` : ''
 
     try {
       const [jobsData, statsData] = await Promise.all([
-        api(`/jobs/history${params}`),
-        api(`/stats/prints${params}`),
+        api(`/jobs/history${qs}`),
+        api(`/stats/prints${qs}`),
       ])
 
       if (cancelled) return
