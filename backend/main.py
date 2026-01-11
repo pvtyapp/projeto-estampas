@@ -422,7 +422,6 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    # === AJUSTE DE PERÍODO (NÃO REMOVE NADA EXISTENTE) ===
     if from_ or to:
         def parse_date(d: str, start: bool):
             dt = datetime.strptime(d, "%Y-%m-%d")
@@ -436,7 +435,6 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
             from_ = parse_date(from_, start=True)
         if to:
             to = parse_date(to, start=False)
-    # === FIM DO AJUSTE ===
 
     since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
 
@@ -449,21 +447,32 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         .data or []
     )
 
-    q = supabase.table("jobs").select("payload,created_at").eq("user_id", user["sub"])
+    q = (
+        supabase
+        .table("jobs")
+        .select("payload,finished_at,status")
+        .eq("user_id", user["sub"])
+        .eq("status", "done")
+    )
+
     if from_:
-        q = q.gte("created_at", from_)
+        q = q.gte("finished_at", from_)
     if to:
-        q = q.lte("created_at", to)
+        q = q.lte("finished_at", to)
 
     jobs = q.execute().data or []
 
     counts: Dict[str, int] = {}
     used_recently = set()
+    total_kits = 0
     total_sheets = 0
 
     for j in jobs:
         payload = j.get("payload") or {}
         items = payload.get("items") or []
+        sheets = payload.get("sheets") or 0
+
+        total_sheets += sheets
 
         for item in items:
             pid = item.get("print_id")
@@ -471,7 +480,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
             if pid and qty > 0:
                 counts[pid] = counts.get(pid, 0) + qty
-                total_sheets += qty
+                total_kits += qty
                 used_recently.add(pid)
 
     top_used = []
@@ -482,13 +491,13 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
     top_used.sort(key=lambda x: x["count"], reverse=True)
 
-    forgotten = []
     q45 = (
         supabase
         .table("jobs")
-        .select("payload")
+        .select("payload,finished_at,status")
         .eq("user_id", user["sub"])
-        .gte("created_at", since_45d)
+        .eq("status", "done")
+        .gte("finished_at", since_45d)
         .execute()
         .data or []
     )
@@ -500,33 +509,21 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
             if pid:
                 used_45.add(pid)
 
+    forgotten = []
     for p in prints:
         if p["id"] not in used_45:
             forgotten.append({"name": p["name"]})
-
-    files_q = (
-        supabase
-        .table("print_files")
-        .select("id, created_at")
-        .eq("preview", False)
-    )
-    if from_:
-        files_q = files_q.gte("created_at", from_)
-    if to:
-        files_q = files_q.lte("created_at", to)
-    files = files_q.execute().data or []
-    total_sheets = len(files)
-
 
     return {
         "top_used": top_used[:15],
         "not_used": forgotten[:15],
         "costs": {
-            "files": len(files),
-            "prints": total_sheets,
+            "files": total_sheets,
+            "prints": total_kits,
             "total_cost": 0,
         },
     }
+
 
 
 # =========================
