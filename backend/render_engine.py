@@ -149,8 +149,6 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     payload = job.get("payload") or {}
 
     sheet_size = payload.get("sheet_size", "30x100")
-    dpi = payload.get("dpi", 300)
-
     if sheet_size == "57x100":
         width_cm, height_cm = 57, 100
     else:
@@ -159,14 +157,14 @@ def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
     items = [
         {
             "print_url": p["url"],
-            "w": cm_to_px(p["width"] * dpi / 300),
-            "h": cm_to_px(p["height"] * dpi / 300),
+            "w": cm_to_px(p["width"] ),
+            "h": cm_to_px(p["height"] ),
         }
         for p in pieces
     ]
 
-    sheet_w = cm_to_px(width_cm * dpi / 300)
-    sheet_h = cm_to_px(height_cm * dpi / 300)
+    sheet_w = cm_to_px(width_cm )
+    sheet_h = cm_to_px(height_cm )
 
     sheets = pack_items_hybrid(items, sheet_w, sheet_h)
 

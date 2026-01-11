@@ -24,8 +24,6 @@ type GeneratedFile = {
 
 type PreviewProps = {
   sheetSize: '30x100' | '57x100'
-  dpi: 100 | 200 | 300
-
   items: PreviewItem[]
   onJobCreated: (jobId: string) => void
   onReset: () => void
@@ -83,7 +81,6 @@ export default function PreviewPanel(props: Props) {
         body: JSON.stringify({
           items: grouped.map(i => ({ print_id: i.print_id, qty: i.qty })),
           sheet_size: props.sheetSize,
-          dpi: props.dpi,
         }),
       })
 

@@ -16,7 +16,7 @@ type Usage = {
   status: 'ok' | 'warning' | 'blocked' | 'using_credits'
 }
 
-export default function DashboardPanel({ sheetSize, setSheetSize, dpi, setDpi }: { sheetSize:'30x100'|'57x100', setSheetSize:(v:any)=>void, dpi:100|200|300, setDpi:(v:any)=>void }) {
+export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:'30x100'|'57x100', setSheetSize:(v:any)=>void }) {
   const { session, loading: sessionLoading } = useSession()
   const [usage, setUsage] = useState<Usage | null>(null)
   const [error, setError] = useState(false)
@@ -24,15 +24,12 @@ export default function DashboardPanel({ sheetSize, setSheetSize, dpi, setDpi }:
 
   useEffect(() => {
     const ss = localStorage.getItem('sheet_size') as any
-    const d = localStorage.getItem('dpi')
     if (ss) setSheetSize(ss)
-    if (d) setDpi(Number(d) as any)
   }, [])
 
   useEffect(() => {
     localStorage.setItem('sheet_size', sheetSize)
-    localStorage.setItem('dpi', String(dpi))
-  }, [sheetSize, dpi])
+  }, [sheetSize])
 
 
   useEffect(() => {
@@ -157,14 +154,7 @@ export default function DashboardPanel({ sheetSize, setSheetSize, dpi, setDpi }:
             <span className="text-gray-500">Folha</span>
             <label><input type="radio" checked={sheetSize==='30x100'} onChange={()=>setSheetSize('30x100')} /> 30x100</label>
             <label><input type="radio" checked={sheetSize==='57x100'} onChange={()=>setSheetSize('57x100')} /> 57x100</label>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-gray-500">DPI</span>
-            <label><input type="radio" checked={dpi===100} onChange={()=>setDpi(100)} /> 100</label>
-            <label><input type="radio" checked={dpi===200} onChange={()=>setDpi(200)} /> 200</label>
-            <label><input type="radio" checked={dpi===300} onChange={()=>setDpi(300)} /> 300</label>
-          </div>
-        </div>
+          </div>        </div>
       </div>
 
     </div>

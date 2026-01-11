@@ -20,7 +20,6 @@ export default function WorkPage() {
   const [libraryVersion, setLibraryVersion] = useState(0)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [sheetSize, setSheetSize] = useState<'30x100' | '57x100'>('30x100')
-  const [dpi, setDpi] = useState<100 | 200 | 300>(300)
 
   useEffect(() => {
     if (!loading && !session && !isLoggingOut) {
@@ -80,7 +79,7 @@ export default function WorkPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-        <DashboardPanel />
+        <DashboardPanel sheetSize={sheetSize} setSheetSize={setSheetSize} />
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="min-h-[720px]">
@@ -104,7 +103,6 @@ export default function WorkPage() {
               key={`preview-${previewItems.length}`}
               items={previewItems}
               sheetSize={sheetSize}
-              dpi={dpi}
               onJobCreated={jobId => {
                 setSelectedJob(jobId)
                 setPreviewItems(null)
