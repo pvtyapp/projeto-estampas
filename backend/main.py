@@ -297,8 +297,8 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
             "created_at": j["created_at"],
             "finished_at": j.get("finished_at"),
             "zip_url": j.get("zip_url"),
-            "file_count": sheets,        # 👈 agora vem do payload
-            "print_count": kits,         # 👈 kits = estampas
+            "file_count": sheets,
+            "print_count": kits,
         })
 
     return result
@@ -377,9 +377,9 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
         "user_id": user["sub"],
         "status": "preview",
         "payload": {
-            "items": [i.dict() for i in payload.items],  # ← intenção do usuário
-            "pieces": pieces,                            # ← material lógico
-            "kits": total_kits,                          # ← total de SKUs
+            "items": [i.dict() for i in payload.items],
+            "pieces": pieces,
+            "kits": total_kits,
             "sheets": None,
             "sheet_size": payload.sheet_size,
         },
@@ -389,7 +389,6 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
 
     return {"job_id": job_id, "total_kits": total_kits}
-
 
 @app.post("/print-jobs/{job_id}/confirm")
 def confirm_print_job(job_id: str, user=Depends(current_user)):
@@ -407,7 +406,6 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
     try:
         check_and_consume_limits(supabase, user["sub"], sheets, job_id=job_id)
-
     except LimitExceeded as e:
         raise HTTPException(status_code=402, detail=str(e))
 
@@ -417,44 +415,35 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     return {"status": "confirmed", "sheets": sheets}
 
 # =========================
-# STATS
-# =========================
+# STATS 
+# # =========================
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    if from_ or to:
-        def parse_date(d: str, start: bool):
-            dt = datetime.strptime(d, "%Y-%m-%d")
-            if start:
-                dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            else:
-                dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-            return dt.replace(tzinfo=timezone.utc).isoformat()
 
-        if from_:
-            from_ = parse_date(from_, start=True)
-        if to:
-            to = parse_date(to, start=False)
+    def parse_date(d: str, start: bool):
+        try:
+            dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
+        except ValueError:
+            dt = datetime.strptime(d, "%Y-%m-%d")
+
+        if start:
+            dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        return dt.astimezone(timezone.utc).isoformat()
+
+    if from_:
+        from_ = parse_date(from_, start=True)
+    if to:
+        to = parse_date(to, start=False)
 
     since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
 
-    prints = (
-        supabase
-        .table("prints")
-        .select("id,name")
-        .eq("user_id", user["sub"])
-        .execute()
-        .data or []
-    )
+    prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
 
-    q = (
-        supabase
-        .table("jobs")
-        .select("payload,finished_at,status")
-        .eq("user_id", user["sub"])
-        .eq("status", "done")
-    )
-
+    q = supabase.table("jobs").select("payload,finished_at,status").eq("user_id", user["sub"]).eq("status", "done")
     if from_:
         q = q.gte("finished_at", from_)
     if to:
@@ -491,16 +480,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
     top_used.sort(key=lambda x: x["count"], reverse=True)
 
-    q45 = (
-        supabase
-        .table("jobs")
-        .select("payload,finished_at,status")
-        .eq("user_id", user["sub"])
-        .eq("status", "done")
-        .gte("finished_at", since_45d)
-        .execute()
-        .data or []
-    )
+    q45 = supabase.table("jobs").select("payload,finished_at,status").eq("user_id", user["sub"]).eq("status", "done").gte("finished_at", since_45d).execute().data or []
 
     used_45 = set()
     for j in q45:
@@ -523,8 +503,6 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
             "total_cost": 0,
         },
     }
-
-
 
 # =========================
 # ACCOUNT
@@ -567,7 +545,6 @@ def get_my_usage(user=Depends(current_user)):
     elif used >= limit * 0.8:
         status = "warning"
 
-
     return {
         "plan": plan_id,
         "used": used,
@@ -584,14 +561,7 @@ def get_my_usage(user=Depends(current_user)):
 
 @app.get("/me/settings")
 def get_settings(user=Depends(current_user)):
-    res = (
-        supabase
-        .table("user_settings")
-        .select("*")
-        .eq("user_id", user["sub"])
-        .execute()
-    )
-
+    res = supabase.table("user_settings").select("*").eq("user_id", user["sub"]).execute()
     data = res.data if res and hasattr(res, "data") else None
 
     if not data:
@@ -612,13 +582,10 @@ def save_settings(data: SettingsIn, user=Depends(current_user)):
 # Planos
 # =========================
 
-
 @app.get("/plans")
 def get_plans(user=Depends(current_user)):
-    # Buscar todos os planos
     plans = supabase.table("plans").select("*").execute().data or []
 
-    # Buscar plano atual do usuário
     profile = (
         supabase.table("profiles")
         .select("plan_id")
