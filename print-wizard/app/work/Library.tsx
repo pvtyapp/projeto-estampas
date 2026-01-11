@@ -111,10 +111,14 @@ export default function Library({ onPreview, version }: Props) {
   const limit = usage?.library_limit || Infinity
   const used = prints.length
   const percent = (used / limit) * 100
-  const isBlocked = used >= limit || usage?.status === 'blocked'
+  const isBlocked =
+  used >= limit ||
+  usage?.status === 'blocked' ||
+  usage?.status === 'using_credits'
+
 
   const counterColor =
-    percent >= 100 || usage?.status === 'blocked'
+  percent >= 100 || usage?.status === 'blocked' || usage?.status === 'using_credits'
       ? 'text-red-600'
       : percent >= 70
       ? 'text-yellow-600'
@@ -130,10 +134,10 @@ export default function Library({ onPreview, version }: Props) {
       : 'Quantidade de estampas usadas no seu plano.'
 
   function buildPreview() {
-    if (usage?.status === 'blocked') {
-      alert('Seu limite diário e créditos extras foram atingidos.')
-      return
-    }
+    if (usage?.status === 'blocked' || usage?.status === 'using_credits') {
+  alert('Seu limite diário ou mensal foi atingido. Faça upgrade para continuar.')
+  return}
+
 
     if (isBlocked) {
       alert('Você atingiu o limite do seu plano. Faça upgrade para continuar.')
@@ -321,11 +325,12 @@ export default function Library({ onPreview, version }: Props) {
           Gerar folhas
         </button>
 
-        {usage?.status === 'blocked' && (
-          <span className="text-[10px] text-red-600">
-            Seu limite diário e créditos extras foram atingidos.
-          </span>
+        {(usage?.status === 'blocked' || usage?.status === 'using_credits') && (
+        <span className="text-[10px] text-red-600">
+        Seu limite diário ou mensal foi atingido. Faça upgrade para continuar.
+        </span>
         )}
+
 
         <span className={`text-xs ${overLimit ? 'text-red-600' : 'text-gray-500'}`}>
           Total selecionado: {totalSelected} / 100
