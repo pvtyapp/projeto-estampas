@@ -19,6 +19,8 @@ export default function WorkPage() {
   const [previewItems, setPreviewItems] = useState<PreviewItem[] | null>(null)
   const [libraryVersion, setLibraryVersion] = useState(0)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [sheetSize, setSheetSize] = useState<'30x100' | '57x100'>('30x100')
+  const [dpi, setDpi] = useState<100 | 200 | 300>(300)
 
   useEffect(() => {
     if (!loading && !session && !isLoggingOut) {
@@ -101,6 +103,8 @@ export default function WorkPage() {
             <PreviewPanel
               key={`preview-${previewItems.length}`}
               items={previewItems}
+              sheetSize={sheetSize}
+              dpi={dpi}
               onJobCreated={jobId => {
                 setSelectedJob(jobId)
                 setPreviewItems(null)

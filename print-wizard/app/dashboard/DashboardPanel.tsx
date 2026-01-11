@@ -16,14 +16,23 @@ type Usage = {
   status: 'ok' | 'warning' | 'blocked' | 'using_credits'
 }
 
-export default function DashboardPanel() {
+export default function DashboardPanel({ sheetSize, setSheetSize, dpi, setDpi }: { sheetSize:'30x100'|'57x100', setSheetSize:(v:any)=>void, dpi:100|200|300, setDpi:(v:any)=>void }) {
   const { session, loading: sessionLoading } = useSession()
   const [usage, setUsage] = useState<Usage | null>(null)
   const [error, setError] = useState(false)
   const router = useRouter()
 
-  const [sheetSize, setSheetSize] = useState<'30x100' | '57x100'>('30x100')
-  const [dpi, setDpi] = useState<100 | 200 | 300>(300)
+  useEffect(() => {
+    const ss = localStorage.getItem('sheet_size') as any
+    const d = localStorage.getItem('dpi')
+    if (ss) setSheetSize(ss)
+    if (d) setDpi(Number(d) as any)
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('sheet_size', sheetSize)
+    localStorage.setItem('dpi', String(dpi))
+  }, [sheetSize, dpi])
 
 
   useEffect(() => {

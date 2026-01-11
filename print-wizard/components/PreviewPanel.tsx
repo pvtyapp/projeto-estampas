@@ -23,6 +23,9 @@ type GeneratedFile = {
 }
 
 type PreviewProps = {
+  sheetSize: '30x100' | '57x100'
+  dpi: 100 | 200 | 300
+
   items: PreviewItem[]
   onJobCreated: (jobId: string) => void
   onReset: () => void
@@ -69,16 +72,18 @@ export default function PreviewPanel(props: Props) {
 
   async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
     if (creating) return
+    if (!isPreviewProps(props)) return
     setCreating(true)
     try {
       const grouped = groupByPrint(items)
 
       const res: { job_id: string } = await api('/print-jobs', {
         method: 'POST',
+        
         body: JSON.stringify({
           items: grouped.map(i => ({ print_id: i.print_id, qty: i.qty })),
-          sheet_size: localStorage.getItem('sheet_size') || '30x100',
-          dpi: Number(localStorage.getItem('dpi') || 300),
+          sheet_size: props.sheetSize,
+          dpi: props.dpi,
         }),
       })
 
