@@ -434,7 +434,6 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
         return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-
     if from_:
         from_ = parse_date(from_, start=True)
     if to:
@@ -444,16 +443,16 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
 
     prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
 
-    q = supabase.table("jobs").select("payload,finished_at,status").eq("user_id", user["sub"]).eq("status", "done")
+    q = supabase.table("jobs").select("payload,finished_at,created_at,status").eq("user_id", user["sub"]).eq("status", "done")
+
     if from_:
-        q = q.gte("finished_at", from_)
+        q = q.or_(f"finished_at.gte.{from_},and(finished_at.is.null,created_at.gte.{from_})")
     if to:
-        q = q.lte("finished_at", to)
+        q = q.or_(f"finished_at.lte.{to},and(finished_at.is.null,created_at.lte.{to})")
 
     jobs = q.execute().data or []
 
     counts: Dict[str, int] = {}
-    used_recently = set()
     total_kits = 0
     total_sheets = 0
 
@@ -471,17 +470,11 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
             if pid and qty > 0:
                 counts[pid] = counts.get(pid, 0) + qty
                 total_kits += qty
-                used_recently.add(pid)
 
-    top_used = []
-    for p in prints:
-        c = counts.get(p["id"], 0)
-        if c > 0:
-            top_used.append({"name": p["name"], "count": c})
-
+    top_used = [{"name": p["name"], "count": counts.get(p["id"], 0)} for p in prints if counts.get(p["id"], 0) > 0]
     top_used.sort(key=lambda x: x["count"], reverse=True)
 
-    q45 = supabase.table("jobs").select("payload,finished_at,status").eq("user_id", user["sub"]).eq("status", "done").gte("finished_at", since_45d).execute().data or []
+    q45 = supabase.table("jobs").select("payload,finished_at").eq("user_id", user["sub"]).eq("status", "done").gte("finished_at", since_45d).execute().data or []
 
     used_45 = set()
     for j in q45:
@@ -490,10 +483,7 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
             if pid:
                 used_45.add(pid)
 
-    forgotten = []
-    for p in prints:
-        if p["id"] not in used_45:
-            forgotten.append({"name": p["name"]})
+    forgotten = [{"name": p["name"]} for p in prints if p["id"] not in used_45]
 
     return {
         "top_used": top_used[:15],
