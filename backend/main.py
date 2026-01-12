@@ -1,7 +1,7 @@
 import uuid
 import os
 from datetime import datetime, timezone, timedelta
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, Request, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -418,72 +418,66 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 # STATS 
 # # =========================
 
-# =========================
-# STATS
-# =========================
-
 @app.get("/stats/prints")
-def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    q = (
-        supabase
-        .table("jobs")
-        .select("payload,finished_at,created_at,status")
+def get_print_stats(
+    request: Request,
+    user=Depends(current_user),
+    from_: str = Query(..., alias="from"),
+    to: str = Query(..., alias="to"),
+):
+    from_dt = datetime.fromisoformat(from_.replace("Z", "+00:00"))
+    to_dt = datetime.fromisoformat(to.replace("Z", "+00:00"))
+
+    jobs = (
+        supabase.table("jobs")
+        .select("payload")
         .eq("user_id", user["sub"])
-        .eq("status", "done")
+        .gte("created_at", from_dt.isoformat())
+        .lte("created_at", to_dt.isoformat())
+        .execute()
+        .data
+        or []
     )
 
-    # Monta filtro de datas corretamente
-    or_clauses = []
-
-    if from_:
-        or_clauses.append(f"finished_at.gte.{from_}")
-        or_clauses.append(f"and(finished_at.is.null,created_at.gte.{from_})")
-
-    if to:
-        or_clauses.append(f"finished_at.lte.{to}")
-        or_clauses.append(f"and(finished_at.is.null,created_at.lte.{to})")
-
-    if or_clauses:
-        q = q.or_(",".join(or_clauses))
-
-    jobs = q.execute().data or []
-
-    counts: Dict[str, int] = {}
-    total_files = 0
-    total_prints = 0
+    print_ids = []
+    counts: dict[str, int] = {}
 
     for j in jobs:
         payload = j.get("payload") or {}
         items = payload.get("items") or []
-
         for item in items:
-            name = item.get("name")
-            qty = item.get("qty") or 0
+            pid = item.get("print_id")
+            qty = int(item.get("qty", 1))
+            if pid:
+                counts[pid] = counts.get(pid, 0) + qty
+                print_ids.append(pid)
 
-            if not name:
-                continue
+    print_ids = list(set(print_ids))
 
-            total_files += 1
-            total_prints += qty
-            counts[name] = counts.get(name, 0) + qty
+    names = {}
+    if print_ids:
+        rows = (
+            supabase.table("prints")
+            .select("id,name")
+            .in_("id", print_ids)
+            .execute()
+            .data
+            or []
+        )
+        names = {r["id"]: r["name"] for r in rows}
 
     top_used = sorted(
-        [{"name": k, "count": v} for k, v in counts.items()],
+        [{"name": names.get(pid, pid), "count": count} for pid, count in counts.items()],
         key=lambda x: x["count"],
         reverse=True,
     )
 
-    prints_res = supabase.table("prints").select("name").eq("user_id", user["sub"]).execute()
-    all_prints = {p["name"] for p in (prints_res.data or [])}
-
-    not_used = [{"name": n} for n in sorted(all_prints - set(counts.keys()))]
-
     return {
         "top_used": top_used,
-        "not_used": not_used,
+        "not_used": [],
         "costs": {
-            "files": total_files,
-            "prints": total_prints,
+            "files": 0,
+            "prints": sum(counts.values()),
             "total_cost": 0,
         },
     }
