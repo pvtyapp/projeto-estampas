@@ -425,12 +425,12 @@ def get_print_stats(
     from_: str = Query(..., alias="from"),
     to: str = Query(..., alias="to"),
 ):
-    from_dt = datetime.fromisoformat(from_.replace("Z", "+00:00"))
-    to_dt = datetime.fromisoformat(to.replace("Z", "+00:00"))
+    from_dt = datetime.fromisoformat(from_.replace("Z", "+00:00")).astimezone(timezone.utc)
+    to_dt = datetime.fromisoformat(to.replace("Z", "+00:00")).astimezone(timezone.utc)
 
     jobs = (
         supabase.table("jobs")
-        .select("payload,status,sheets")
+        .select("id,payload,status,created_at")
         .eq("user_id", user["sub"])
         .gte("created_at", from_dt.isoformat())
         .lte("created_at", to_dt.isoformat())
@@ -441,25 +441,36 @@ def get_print_stats(
 
     counts: dict[str, int] = {}
     total_files = 0
+    total_prints = 0
 
     for j in jobs:
         payload = j.get("payload") or {}
         items = payload.get("items") or []
+        sheets = int(payload.get("sheets") or 0)
         status = j.get("status")
-        sheets = int(j.get("sheets") or 0)  # 👈 parêntese corrigido
 
+        # Arquivos reais vêm da tabela print_files
         if status == "done":
-            total_files += sheets
+            files = (
+                supabase.table("print_files")
+                .select("id")
+                .eq("job_id", j["id"])
+                .execute()
+                .data
+                or []
+            )
+            total_files += len(files)
 
         for item in items:
             pid = item.get("print_id")
             qty = int(item.get("qty", 1))
             if pid:
                 counts[pid] = counts.get(pid, 0) + qty
+                total_prints += qty
 
     print_ids = list(counts.keys())
-
     names = {}
+
     if print_ids:
         rows = (
             supabase.table("prints")
@@ -482,7 +493,7 @@ def get_print_stats(
         "not_used": [],
         "costs": {
             "files": total_files,
-            "prints": sum(counts.values()),
+            "prints": total_prints,
             "total_cost": 0,
         },
     }
