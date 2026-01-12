@@ -1,21 +1,23 @@
 import os
-from supabase import create_client, Client
-from dotenv import load_dotenv
+import httpx
+from supabase import create_client
 
-if os.getenv("ENV") != "production":
-    load_dotenv()
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError("Missing Supabase env vars")
 
-if not SUPABASE_URL:
-    raise RuntimeError("SUPABASE_URL não configurada")
+http_client = httpx.Client(
+    http2=False,
+    timeout=httpx.Timeout(10.0),
+    limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+)
 
-# Garante barra final para evitar erros no Storage
-if not SUPABASE_URL.endswith("/"):
-    SUPABASE_URL += "/"
-
-if not SUPABASE_SERVICE_ROLE_KEY:
-    raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY não configurada (NÃO use anon key no backend)")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+supabase = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY,
+    options={
+        "http_client": http_client,
+    },
+)
