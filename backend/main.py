@@ -430,7 +430,7 @@ def get_print_stats(
 
     jobs = (
         supabase.table("jobs")
-        .select("payload")
+        .select("payload,status,sheets")
         .eq("user_id", user["sub"])
         .gte("created_at", from_dt.isoformat())
         .lte("created_at", to_dt.isoformat())
@@ -441,10 +441,17 @@ def get_print_stats(
 
     print_ids = []
     counts: dict[str, int] = {}
+    total_files = 0
 
     for j in jobs:
         payload = j.get("payload") or {}
         items = payload.get("items") or []
+        status = j.get("status")
+        sheets = j.get("sheets") or 0
+
+        if status == "done":
+            total_files += int(sheets)
+
         for item in items:
             pid = item.get("print_id")
             qty = int(item.get("qty", 1))
@@ -476,11 +483,12 @@ def get_print_stats(
         "top_used": top_used,
         "not_used": [],
         "costs": {
-            "files": 0,
+            "files": total_files,
             "prints": sum(counts.values()),
             "total_cost": 0,
         },
     }
+
 
 
 # =========================
