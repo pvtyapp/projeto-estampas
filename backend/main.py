@@ -439,7 +439,6 @@ def get_print_stats(
         or []
     )
 
-    print_ids = []
     counts: dict[str, int] = {}
     total_files = 0
 
@@ -447,19 +446,18 @@ def get_print_stats(
         payload = j.get("payload") or {}
         items = payload.get("items") or []
         status = j.get("status")
-        sheets = j.get("sheets") or 0
+        sheets = int(j.get("sheets") or 0)  # 👈 parêntese corrigido
 
         if status == "done":
-            total_files += int(sheets)
+            total_files += sheets
 
         for item in items:
             pid = item.get("print_id")
             qty = int(item.get("qty", 1))
             if pid:
                 counts[pid] = counts.get(pid, 0) + qty
-                print_ids.append(pid)
 
-    print_ids = list(set(print_ids))
+    print_ids = list(counts.keys())
 
     names = {}
     if print_ids:
@@ -488,7 +486,6 @@ def get_print_stats(
             "total_cost": 0,
         },
     }
-
 
 
 # =========================
