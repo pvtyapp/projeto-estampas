@@ -64,40 +64,30 @@ export default function JobHistory({ onSelect }: Props) {
 
   function buildRange(): { from?: string; to?: string } {
     const now = new Date()
-
     let from: Date | null = null
     let to: Date | null = null
 
     if (period === 'today') {
       from = new Date(now)
       from.setHours(0, 0, 0, 0)
-
       to = new Date(now)
       to.setHours(23, 59, 59, 999)
-
     } else if (period === 'yesterday') {
       from = new Date(now)
       from.setDate(from.getDate() - 1)
       from.setHours(0, 0, 0, 0)
-
       to = new Date(from)
       to.setHours(23, 59, 59, 999)
-
     } else {
       const days = { '7d': 7, '30d': 30, '60d': 60 }[period]
-
       to = new Date(now)
       to.setHours(23, 59, 59, 999)
-
       from = new Date(now)
       from.setDate(from.getDate() - (days - 1))
       from.setHours(0, 0, 0, 0)
     }
 
-    return {
-      from: from?.toISOString(),
-      to: to?.toISOString(),
-    }
+    return { from: from?.toISOString(), to: to?.toISOString() }
   }
 
   async function load(isCancelled: () => boolean) {
@@ -108,7 +98,6 @@ export default function JobHistory({ onSelect }: Props) {
     const params = new URLSearchParams()
     if (from) params.append('from', from)
     if (to) params.append('to', to)
-
     const qs = params.toString() ? `?${params.toString()}` : ''
 
     try {
@@ -116,9 +105,7 @@ export default function JobHistory({ onSelect }: Props) {
         api(`/jobs/history${qs}`),
         api(`/stats/prints${qs}`),
       ])
-
       if (isCancelled()) return
-
       setJobs(jobsData || [])
       setStats(statsData || null)
     } catch (err) {
@@ -143,7 +130,6 @@ export default function JobHistory({ onSelect }: Props) {
   }
 
   const numericPrice = Number(price.replace(',', '.')) || 0
-
   const forgotten = stats?.not_used || []
   const activeForgotten = forgotten.filter(n => !silenced.includes(n.name))
   const silencedForgotten = forgotten.filter(n => silenced.includes(n.name))
@@ -187,10 +173,8 @@ export default function JobHistory({ onSelect }: Props) {
                     className="border rounded px-2 py-1 w-24 text-right"
                   />
                 </Row>
-
                 <Row label="Arquivos gerados">{stats.costs.files}</Row>
                 <Row label="Estampas incluídas">{stats.costs.prints}</Row>
-
                 <Row label="Custo médio por estampa">
                   R$ {stats.costs.prints > 0
                     ? ((stats.costs.files * numericPrice) / stats.costs.prints).toFixed(2)
@@ -203,7 +187,6 @@ export default function JobHistory({ onSelect }: Props) {
               <div className="text-xs text-gray-400 mb-1">
                 Independente do período selecionado acima
               </div>
-
               <div className="space-y-1">
                 {activeForgotten.slice(0, 30).map(p => (
                   <div key={p.name} className="flex justify-between text-sm">
