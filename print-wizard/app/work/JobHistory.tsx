@@ -56,7 +56,7 @@ export default function JobHistory({ onSelect }: Props) {
 
   useEffect(() => {
     let cancelled = false
-    load(cancelled)
+    load(() => cancelled)
     return () => {
       cancelled = true
     }
@@ -100,7 +100,7 @@ export default function JobHistory({ onSelect }: Props) {
     }
   }
 
-  async function load(cancelled: boolean) {
+  async function load(isCancelled: () => boolean) {
     setLoading(true)
     setError(null)
 
@@ -117,19 +117,19 @@ export default function JobHistory({ onSelect }: Props) {
         api(`/stats/prints${qs}`),
       ])
 
-      if (cancelled) return
+      if (isCancelled()) return
 
       setJobs(jobsData || [])
       setStats(statsData || null)
     } catch (err) {
       console.error('JobHistory load failed:', err)
-      if (!cancelled) {
+      if (!isCancelled()) {
         setError('Falha ao carregar histórico.')
         setJobs([])
         setStats(null)
       }
     } finally {
-      if (!cancelled) setLoading(false)
+      if (!isCancelled()) setLoading(false)
     }
   }
 
