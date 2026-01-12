@@ -11,10 +11,7 @@ from backend.jobs import process_render
 from backend.auth import get_current_user
 from backend.supabase_client import supabase
 from backend.limits import check_and_consume_limits, LimitExceeded
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict
 
-# ==== Stripe protegido ====
 try:
     from backend.stripe_routes import router as stripe_router
     STRIPE_ENABLED = True
@@ -22,19 +19,12 @@ except Exception as e:
     print("⚠️ Stripe desativado:", e)
     STRIPE_ENABLED = False
 
-
-LOCAL_TZ = timezone(timedelta(hours=-3))
-
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
-app = FastAPI(title="Projeto Estampas API", version="7.6")
+app = FastAPI(title="Projeto Estampas API", version="7.7")
 
 if STRIPE_ENABLED:
     app.include_router(stripe_router)
-
-# =========================
-# CORS
-# =========================
 
 app.add_middleware(
     CORSMiddleware,
@@ -58,16 +48,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     print("🔥 Unhandled exception:", repr(exc))
     return JSONResponse(
         status_code=500,
-        content={"error": "internal_server_error","detail": str(exc)},
+        content={"error": "internal_server_error", "detail": str(exc)},
         headers={
             "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
             "Access-Control-Allow-Credentials": "true",
         },
     )
-
-# =========================
-# MODELOS
-# =========================
 
 class Slot(BaseModel):
     type: str
@@ -86,7 +72,7 @@ class PrintJobItem(BaseModel):
 
 class PrintJobRequest(BaseModel):
     items: List[PrintJobItem]
-    sheet_size: str = '30x100'
+    sheet_size: str = "30x100"
 
 class PrintNoteIn(BaseModel):
     print_id: str
@@ -94,10 +80,6 @@ class PrintNoteIn(BaseModel):
 
 class SettingsIn(BaseModel):
     price_per_meter: float
-
-# =========================
-# AUTH
-# =========================
 
 def dev_user():
     return {"sub": "00000000-0000-0000-0000-000000000001"}
@@ -109,19 +91,12 @@ def current_user(user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
 
-# =========================
-# HELPERS
-# =========================
-
 def validate_slots(slots: List[Slot]):
     types = [s.type for s in slots]
-
     if "front" not in types:
         raise HTTPException(status_code=400, detail="Slot 'front' é obrigatório")
-
     if "extra" in types and "back" not in types:
         raise HTTPException(status_code=400, detail="Slot 'extra' só pode existir se 'back' existir")
-
     invalid = set(types) - {"front", "back", "extra"}
     if invalid:
         raise HTTPException(status_code=400, detail=f"Tipos inválidos: {invalid}")
@@ -129,330 +104,40 @@ def validate_slots(slots: List[Slot]):
 def load_slots(print_id: str):
     return supabase.table("print_slots").select("*").eq("print_id", print_id).execute().data or []
 
-# =========================
-# ROOT
-# =========================
-
 @app.get("/")
 def root():
     return {"status": "ok"}
 
-# =========================
-# PRINT NOTES
-# =========================
+# -----------------------------
+# STATS CORRIGIDO
+# -----------------------------
 
-@app.get("/print-notes")
-def list_print_notes(user=Depends(current_user)):
-    return supabase.table("print_notes").select("print_id,note").eq("user_id", user["sub"]).execute().data or []
-
-@app.post("/print-notes")
-def save_print_note(data: PrintNoteIn, user=Depends(current_user)):
-    supabase.table("print_notes").upsert({
-        "id": str(uuid.uuid4()),
-        "user_id": user["sub"],
-        "print_id": data.print_id,
-        "note": data.note,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }, on_conflict="user_id,print_id").execute()
-    return {"ok": True}
-
-# =========================
-# PRINTS
-# =========================
-
-@app.get("/prints")
-def list_prints(user=Depends(current_user)):
-    prints = supabase.table("prints").select("*").eq("user_id", user["sub"]).order("created_at", desc=True).execute().data or []
-    for p in prints:
-        p["slots"] = load_slots(p["id"])
-    return prints
-
-@app.get("/prints/{print_id}")
-def get_print(print_id: str, user=Depends(current_user)):
-    p = supabase.table("prints").select("*").eq("id", print_id).eq("user_id", user["sub"]).single().execute().data
-    if not p:
-        raise HTTPException(status_code=404, detail="Print não encontrado")
-    p["slots"] = load_slots(p["id"])
-    return p
-
-@app.post("/prints")
-def create_print(payload: PrintCreate, user=Depends(current_user)):
-    validate_slots(payload.slots)
-    print_id = str(uuid.uuid4())
-
-    supabase.table("prints").insert({
-        "id": print_id,
-        "user_id": user["sub"],
-        "name": payload.name,
-        "sku": payload.sku,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
-
-    for s in payload.slots:
-        supabase.table("print_slots").upsert({
-            "id": str(uuid.uuid4()),
-            "print_id": print_id,
-            "type": s.type,
-            "width_cm": s.width_cm,
-            "height_cm": s.height_cm,
-            "url": s.url,
-        }, on_conflict="print_id,type").execute()
-
-    return get_print(print_id, user)
-
-@app.patch("/prints/{print_id}")
-def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
-    slots = payload.get("slots")
-    if not isinstance(slots, list):
-        raise HTTPException(status_code=400, detail="slots inválido")
-
-    validate_slots([Slot(**s) for s in slots])
-
-    supabase.table("print_slots").delete().eq("print_id", print_id).execute()
-
-    for s in slots:
-        supabase.table("print_slots").insert({
-            "id": str(uuid.uuid4()),
-            "print_id": print_id,
-            "type": s["type"],
-            "width_cm": s["width_cm"],
-            "height_cm": s["height_cm"],
-            "url": s.get("url"),
-        }).execute()
-
-    return get_print(print_id, user)
-
-@app.delete("/prints/{print_id}")
-def delete_print(print_id: str, user=Depends(current_user)):
-    supabase.table("print_slots").delete().eq("print_id", print_id).execute()
-    supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
-    return {"status": "deleted"}
-
-@app.post("/prints/{print_id}/upload")
-def upload_print_file(
-    print_id: str,
-    file: UploadFile = File(...),
-    type: str = Form(...),
-    width_cm: float = Form(...),
-    height_cm: float = Form(...),
-    user=Depends(current_user),
-):
-    content = file.file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Arquivo vazio")
-
-    path = f"{user['sub']}/{print_id}/{type}.png"
-    supabase.storage.from_("prints").upload(path, content, {"upsert": "true"})
-    public_url = supabase.storage.from_("prints").get_public_url(path)
-
-    supabase.table("print_slots").upsert({
-        "id": str(uuid.uuid4()),
-        "print_id": print_id,
-        "type": type,
-        "width_cm": width_cm,
-        "height_cm": height_cm,
-        "url": public_url,
-    }, on_conflict="print_id,type").execute()
-
-    return {"url": public_url}
-
-# =========================
-# JOBS
-# =========================
-
-def build_pieces(print_obj, qty: int):
-    return [
-        {
-            "width": s["width_cm"],
-            "height": s["height_cm"],
-            "type": s["type"],
-            "print_id": print_obj["id"],
-            "url": s.get("url"),
-        }
-        for _ in range(qty)
-        for s in print_obj["slots"]
-    ]
-
-@app.get("/jobs/history")
-def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url,payload").eq("user_id", user["sub"])
-    if from_:
-        q = q.gte("created_at", from_)
-    if to:
-        q = q.lte("created_at", to)
-
-    jobs = q.order("created_at", desc=True).limit(50).execute().data or []
-    if not jobs:
-        return []
-
-    result = []
-    for j in jobs:
-        payload = j.get("payload") or {}
-        kits = payload.get("kits") or 0
-        sheets = payload.get("sheets") or 0
-
-        result.append({
-            "id": j["id"],
-            "status": j["status"],
-            "created_at": j["created_at"],
-            "finished_at": j.get("finished_at"),
-            "zip_url": j.get("zip_url"),
-            "file_count": sheets,
-            "print_count": kits,
-        })
-
-    return result
-
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, user=Depends(current_user)):
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    payload = job.get("payload") or {}
-    sheets = payload.get("sheets") or 0
-    kits = payload.get("kits") or 0
-
-    files = supabase.table("print_files").select("id").eq("job_id", job_id).execute().data or []
-
-    return {
-        "id": job["id"],
-        "status": job["status"],
-        "created_at": job["created_at"],
-        "finished_at": job.get("finished_at"),
-        "zip_url": job.get("zip_url"),
-        "file_count": len(files),
-        "print_count": sheets or kits,
-    }
-
-@app.get("/jobs/{job_id}/files")
-def get_job_files(job_id: str, user=Depends(current_user)):
-    uuid.UUID(job_id)
-
-    job = supabase.table("jobs").select("id").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-    if not job:
-        raise HTTPException(status_code=404, detail="Job não encontrado")
-
-    files = (
-        supabase
-        .table("print_files")
-        .select("id, public_url, page_index, created_at, preview")
-        .eq("job_id", job_id)
-        .order("page_index")
-        .execute()
-        .data
-        or []
-    )
-
-    return [
-        {
-            "id": f["id"],
-            "url": f["public_url"],
-            "page_index": f.get("page_index", 0),
-            "created_at": f.get("created_at"),
-            "preview": f.get("preview", False),
-        }
-        for f in files
-    ]
-
-@app.post("/print-jobs")
-def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
-    if not payload.items:
-        raise HTTPException(status_code=400, detail="Nenhum item enviado")
-
-    total_kits = sum(max(i.qty, 0) for i in payload.items)
-
-    pieces = []
-    for item in payload.items:
-        print_obj = get_print(item.print_id, user)
-        pieces.extend(build_pieces(print_obj, item.qty))
-
-    if not pieces:
-        raise HTTPException(status_code=400, detail="Nenhuma peça gerada")
-
-    job_id = str(uuid.uuid4())
-
-    supabase.table("jobs").insert({
-        "id": job_id,
-        "user_id": user["sub"],
-        "status": "preview",
-        "payload": {
-            "items": [i.dict() for i in payload.items],
-            "pieces": pieces,
-            "kits": total_kits,
-            "sheets": None,
-            "sheet_size": payload.sheet_size,
-        },
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
-
-    queue.enqueue(process_render, job_id, preview=True, job_timeout=600)
-
-    return {"job_id": job_id, "total_kits": total_kits}
-
-@app.post("/print-jobs/{job_id}/confirm")
-def confirm_print_job(job_id: str, user=Depends(current_user)):
-    uuid.UUID(job_id)
-
-    updated = supabase.table("jobs").update({"status": "confirming"}).eq("id", job_id).eq("status", "preview_done").execute()
-    if not updated.data:
-        raise HTTPException(status_code=409, detail="Job já foi confirmado ou está em processamento")
-
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
-
-    sheets = (job.get("payload") or {}).get("sheets") or 0
-    if sheets <= 0:
-        raise HTTPException(status_code=400, detail="Nenhum kit no job")
-
-    try:
-        check_and_consume_limits(supabase, user["sub"], sheets, job_id=job_id)
-    except LimitExceeded as e:
-        raise HTTPException(status_code=402, detail=str(e))
-
-    supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
-    queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
-
-    return {"status": "confirmed", "sheets": sheets}
-
-# =========================
-# STATS 
-# # =========================
+def parse_date(d: str) -> str:
+    if "T" in d:
+        return d
+    dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-
-    def parse_date(d: str, start: bool):
-        try:
-            dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
-        except ValueError:
-            dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-
-        if start:
-            dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        else:
-            dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
-
-        return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
     if from_:
-        from_ = parse_date(from_, start=True)
+        from_ = parse_date(from_)
     if to:
-        to = parse_date(to, start=False)
-
-    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
+        to = parse_date(to)
 
     prints = supabase.table("prints").select("id,name").eq("user_id", user["sub"]).execute().data or []
 
-    q = supabase.table("jobs").select("payload,finished_at,created_at,status").eq("user_id", user["sub"]).eq("status", "done")
+    q = supabase.table("jobs").select("payload,finished_at,created_at").eq("user_id", user["sub"]).eq("status", "done")
 
     if from_:
-        q = q.or_(f"finished_at.gte.{from_},and(finished_at.is.null,created_at.gte.{from_})")
+        q = q.gte("finished_at", from_)
     if to:
-        q = q.or_(f"finished_at.lte.{to},and(finished_at.is.null,created_at.lte.{to})")
+        q = q.lte("finished_at", to)
 
     jobs = q.execute().data or []
 
     counts: Dict[str, int] = {}
+    used_recently = set()
     total_kits = 0
     total_sheets = 0
 
@@ -460,21 +145,22 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         payload = j.get("payload") or {}
         items = payload.get("items") or []
         sheets = payload.get("sheets") or 0
-
         total_sheets += sheets
 
         for item in items:
             pid = item.get("print_id")
             qty = item.get("qty") or 0
-
             if pid and qty > 0:
                 counts[pid] = counts.get(pid, 0) + qty
                 total_kits += qty
+                used_recently.add(pid)
 
-    top_used = [{"name": p["name"], "count": counts.get(p["id"], 0)} for p in prints if counts.get(p["id"], 0) > 0]
+    top_used = [{"name": p["name"], "count": counts[p["id"]]} for p in prints if p["id"] in counts]
     top_used.sort(key=lambda x: x["count"], reverse=True)
 
-    q45 = supabase.table("jobs").select("payload,finished_at").eq("user_id", user["sub"]).eq("status", "done").gte("finished_at", since_45d).execute().data or []
+    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat().replace("+00:00", "Z")
+
+    q45 = supabase.table("jobs").select("payload").eq("user_id", user["sub"]).eq("status", "done").gte("finished_at", since_45d).execute().data or []
 
     used_45 = set()
     for j in q45:
