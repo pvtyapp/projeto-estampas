@@ -1,17 +1,17 @@
 import { supabase } from './supabaseClient'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL!
-
-if (!API_URL) {
-  throw new Error('Missing NEXT_PUBLIC_API_URL')
-}
-
 function normalizePath(path: string) {
   if (!path.startsWith('/')) return '/' + path
   return path
 }
 
 export async function api(path: string, options: RequestInit = {}) {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL
+
+  if (!API_URL) {
+    throw new Error('Missing NEXT_PUBLIC_API_URL')
+  }
+
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -27,7 +27,9 @@ export async function api(path: string, options: RequestInit = {}) {
     headers.Authorization = `Bearer ${token}`
   }
 
-  const res = await fetch(`${API_URL.replace(/\/$/, '')}${normalizePath(path)}`, {
+  const base = API_URL.replace(/\/$/, '')
+
+  const res = await fetch(`${base}${normalizePath(path)}`, {
     ...options,
     headers,
     credentials: 'include',
