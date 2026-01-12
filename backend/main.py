@@ -420,29 +420,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    # Mantém o comportamento atual de datas (ISO passa direto, YYYY-MM-DD vira ISO)
-    def parse_date(d: str) -> str:
-        if "T" in d:
-            return d
-        dt = datetime.strptime(d, "%Y-%m-%d")
-        dt = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
-        return dt.isoformat()
-
-    if from_:
-        from_ = parse_date(from_)
-    if to:
-        to = parse_date(to)
-
-    since_45d = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat()
-
-    prints = (
-        supabase
-        .table("prints")
-        .select("id,name")
-        .eq("user_id", user["sub"])
-        .execute()
-        .data or []
-    )
+    from backend.supabase_client import supabase
 
     q = (
         supabase
@@ -452,82 +430,66 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         .eq("status", "done")
     )
 
-    # --------- AQUI ESTÁ A CORREÇÃO REAL ----------
-    filters = []
+    # Monta a condição combinada
+    or_parts = []
 
     if from_:
-        filters.append(f"or(finished_at.gte.{from_},and(finished_at.is.null,created_at.gte.{from_}))")
+        or_parts.append(
+            f"(finished_at.gte.{from_},and(finished_at.is.null,created_at.gte.{from_}))"
+        )
 
     if to:
-        filters.append(f"or(finished_at.lte.{to},and(finished_at.is.null,created_at.lte.{to}))")
+        or_parts.append(
+            f"(finished_at.lte.{to},and(finished_at.is.null,created_at.lte.{to}))"
+        )
 
-    for f in filters:
-        q = q.filter(f)
-    # ----------------------------------------------
+    # Aplica tudo em um único .or_()
+    if or_parts:
+        q = q.or_("and" + "".join(or_parts))
 
-    jobs = q.execute().data or []
+    res = q.execute()
+    jobs = res.data or []
 
     counts: Dict[str, int] = {}
-    used_recently = set()
-    total_kits = 0
-    total_sheets = 0
+    total_files = 0
+    total_prints = 0
 
     for j in jobs:
         payload = j.get("payload") or {}
         items = payload.get("items") or []
-        sheets = payload.get("sheets") or 0
-
-        total_sheets += sheets
 
         for item in items:
-            pid = item.get("print_id")
+            name = item.get("name")
             qty = item.get("qty") or 0
 
-            if pid and qty > 0:
-                counts[pid] = counts.get(pid, 0) + qty
-                total_kits += qty
-                used_recently.add(pid)
+            if not name:
+                continue
 
-    top_used = []
-    for p in prints:
-        c = counts.get(p["id"], 0)
-        if c > 0:
-            top_used.append({"name": p["name"], "count": c})
+            total_files += 1
+            total_prints += qty
+            counts[name] = counts.get(name, 0) + qty
 
-    top_used.sort(key=lambda x: x["count"], reverse=True)
-
-    q45 = (
-        supabase
-        .table("jobs")
-        .select("payload,finished_at,status")
-        .eq("user_id", user["sub"])
-        .eq("status", "done")
-        .gte("finished_at", since_45d)
-        .execute()
-        .data or []
+    top_used = sorted(
+        [{"name": k, "count": v} for k, v in counts.items()],
+        key=lambda x: x["count"],
+        reverse=True,
     )
 
-    used_45 = set()
-    for j in q45:
-        for item in (j.get("payload") or {}).get("items", []):
-            pid = item.get("print_id")
-            if pid:
-                used_45.add(pid)
+    prints_res = supabase.table("prints").select("name").eq("user_id", user["sub"]).execute()
+    all_prints = {p["name"] for p in (prints_res.data or [])}
 
-    forgotten = []
-    for p in prints:
-        if p["id"] not in used_45:
-            forgotten.append({"name": p["name"]})
+    not_used = [{"name": n} for n in sorted(all_prints - set(counts.keys()))]
 
     return {
-        "top_used": top_used[:15],
-        "not_used": forgotten[:15],
+        "top_used": top_used,
+        "not_used": not_used,
         "costs": {
-            "files": total_sheets,
-            "prints": total_kits,
+            "files": total_files,
+            "prints": total_prints,
             "total_cost": 0,
         },
     }
+
 
 # =========================
 # ACCOUNT
