@@ -418,10 +418,12 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 # STATS 
 # # =========================
 
+# =========================
+# STATS
+# =========================
+
 @app.get("/stats/prints")
 def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
-    from backend.supabase_client import supabase
-
     q = (
         supabase
         .table("jobs")
@@ -430,25 +432,21 @@ def get_print_stats(from_: Optional[str] = None, to: Optional[str] = None, user=
         .eq("status", "done")
     )
 
-    # Monta a condição combinada
-    or_parts = []
+    # Monta filtro de datas corretamente
+    or_clauses = []
 
     if from_:
-        or_parts.append(
-            f"(finished_at.gte.{from_},and(finished_at.is.null,created_at.gte.{from_}))"
-        )
+        or_clauses.append(f"finished_at.gte.{from_}")
+        or_clauses.append(f"and(finished_at.is.null,created_at.gte.{from_})")
 
     if to:
-        or_parts.append(
-            f"(finished_at.lte.{to},and(finished_at.is.null,created_at.lte.{to}))"
-        )
+        or_clauses.append(f"finished_at.lte.{to}")
+        or_clauses.append(f"and(finished_at.is.null,created_at.lte.{to})")
 
-    # Aplica tudo em um único .or_()
-    if or_parts:
-        q = q.or_("and" + "".join(or_parts))
+    if or_clauses:
+        q = q.or_(",".join(or_clauses))
 
-    res = q.execute()
-    jobs = res.data or []
+    jobs = q.execute().data or []
 
     counts: Dict[str, int] = {}
     total_files = 0
