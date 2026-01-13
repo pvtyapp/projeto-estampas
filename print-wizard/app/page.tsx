@@ -56,7 +56,14 @@ export default function Home() {
     }
   }
 
-  async function handleRegister(e: React.FormEvent) {
+  
+function validateDocument(){
+  if(form.person_type==='cpf' && form.document.replace(/\D/g,'').length!==11) return false;
+  if(form.person_type==='cnpj' && form.document.replace(/\D/g,'').length!==14) return false;
+  return true;
+}
+
+async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     if (form.password !== form.confirm) {
       setError('As senhas não conferem')
