@@ -199,7 +199,11 @@ async function handleRegister(e: React.FormEvent) {
                 <>
                   <h3 className="text-xl font-semibold mb-4">Criar conta</h3>
                   <form onSubmit={handleRegister} className="space-y-3">
-                    <input className="input" placeholder="Nome" onChange={e=>update('name',e.target.value)} />
+                    <select className="input" value={form.person_type} onChange={e=>update('person_type',e.target.value)}>
+  <option value="cpf">Pessoa Física (CPF)</option>
+  <option value="cnpj">Pessoa Jurídica (CNPJ)</option>
+</select>
+<input className="input" placeholder={form.person_type==='cpf'?'Nome completo':'Razão social'} onChange={e=>update('name',e.target.value)} />
                     <input className="input" placeholder="Email" onChange={e=>update('email',e.target.value)} />
                     <input className="input" placeholder="Telefone" onChange={e=>update('phone',e.target.value)} />
                     <select className="input" value={form.person_type} onChange={e=>update('person_type',e.target.value)}>
