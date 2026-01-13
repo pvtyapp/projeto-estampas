@@ -57,6 +57,23 @@ export default function Home() {
   }
 
   
+
+function onlyDigits(v:string){return v.replace(/\D/g,'')}
+
+function maskDocument(v:string){
+  const d=onlyDigits(v)
+  if(form.person_type==='cpf'){
+    return d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})\.(\d{3})(\d)/,'$1.$2.$3').replace(/(\d{3})\.(\d{3})\.(\d{3})(\d{1,2})/,'$1.$2.$3-$4')
+  }else{
+    return d.replace(/(\d{2})(\d)/,'$1.$2').replace(/(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/(\d{2})\.(\d{3})\.(\d{3})(\d)/,'$1.$2.$3/$4').replace(/(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d{1,2})/,'$1.$2.$3/$4-$5')
+  }
+}
+
+function validateReal(){
+  const d=onlyDigits(form.document)
+  return (form.person_type==='cpf' && d.length===11)||(form.person_type==='cnpj' && d.length===14)
+}
+
 function validateDocument(){
   if(form.person_type==='cpf' && form.document.replace(/\D/g,'').length!==11) return false;
   if(form.person_type==='cnpj' && form.document.replace(/\D/g,'').length!==14) return false;
@@ -65,6 +82,12 @@ function validateDocument(){
 
 async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
+    
+    if (!validateReal()) {
+      setError(form.person_type === 'cpf' ? 'CPF deve ter 11 dígitos' : 'CNPJ deve ter 14 dígitos')
+      return
+    }
+
     if (form.password !== form.confirm) {
       setError('As senhas não conferem')
       return
@@ -203,10 +226,10 @@ async function handleRegister(e: React.FormEvent) {
   <option value="cpf">Pessoa Física (CPF)</option>
   <option value="cnpj">Pessoa Jurídica (CNPJ)</option>
 </select>
-<input className="input" placeholder={form.person_type==='cpf'?'Nome completo':'Razão social'} onChange={e=>update('name',e.target.value)} />
+<input placeholder={form.person_type==='cpf'?'Nome completo':'Razão social'} onChange={e=>update('name',e.target.value)} />
                     <input className="input" placeholder="Email" onChange={e=>update('email',e.target.value)} />
                     <input className="input" placeholder="Telefone" onChange={e=>update('phone',e.target.value)} />
-                    <input className="input" placeholder={form.person_type==='cpf'?'CPF':'CNPJ'} value={form.document} onChange={e=>update('document',e.target.value)} />
+                    <input placeholder={form.person_type==='cpf'?'CPF':'CNPJ'} value={form.document} onChange={e=>update('document',maskDocument(e.target.value))} className={`input ${error?'border-red-500':''}`} />
                     <input className="input" placeholder="Endereço" onChange={e=>update('address',e.target.value)} />
                     <input type="password" className="input" placeholder="Senha" onChange={e=>update('password',e.target.value)} />
                     <input type="password" className="input" placeholder="Confirmar senha" onChange={e=>update('confirm',e.target.value)} />
