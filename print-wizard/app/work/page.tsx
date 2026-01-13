@@ -9,7 +9,7 @@ import { PreviewItem } from '@/app/types/preview'
 import PreviewPanel from '@/components/PreviewPanel'
 import SkuUploadWizard from '@/app/work/SkuUploadWizard'
 import JobHistory from '@/app/work/JobHistory'
-import { supabase } from '@/lib/supabaseClient'
+import UserMenu from '@/components/UserMenu'
 
 export default function WorkPage() {
   const router = useRouter()
@@ -18,35 +18,16 @@ export default function WorkPage() {
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
   const [previewItems, setPreviewItems] = useState<PreviewItem[] | null>(null)
   const [libraryVersion, setLibraryVersion] = useState(0)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [sheetSize, setSheetSize] = useState<'30x100' | '57x100'>('30x100')
 
   useEffect(() => {
-    if (!loading && !session && !isLoggingOut) {
+    if (!loading && !session) {
       router.replace('/auth')
     }
-  }, [loading, session, isLoggingOut, router])
+  }, [loading, session, router])
 
   if (loading) return <p className="p-6 text-gray-500">Carregando sessão...</p>
-  if (!session && !isLoggingOut) return null
-
-  async function logout() {
-    if (isLoggingOut) return
-    setIsLoggingOut(true)
-    await supabase.auth.signOut()
-    router.replace('/')
-  }
-
-  function scrollToHelp() {
-    const el = document.getElementById('footer-help')
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }
-
-  function goToPlans() {
-    router.push('/plans')
-  }
+  if (!session) return null
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -58,22 +39,8 @@ export default function WorkPage() {
             PVTY
           </div>
 
-          <div className="flex justify-end items-center gap-4">
-            <button
-              onClick={goToPlans}
-              className="text-sm text-gray-600 hover:underline"
-            >
-              Planos
-            </button>
-            <button
-              onClick={scrollToHelp}
-              className="text-sm text-gray-600 hover:underline"
-            >
-              Como usar?
-            </button>
-            <button onClick={logout} className="text-sm text-red-600">
-              Sair
-            </button>
+          <div className="flex justify-end items-center">
+            <UserMenu />
           </div>
         </div>
       </header>

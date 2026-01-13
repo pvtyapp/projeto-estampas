@@ -13,6 +13,8 @@ from backend.supabase_client import supabase
 from backend.limits import check_and_consume_limits, LimitExceeded
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
+from backend.app.routes import fiscal
+
 
 # ==== Stripe protegido ====
 try:
@@ -31,6 +33,9 @@ app = FastAPI(title="Projeto Estampas API", version="7.6")
 
 if STRIPE_ENABLED:
     app.include_router(stripe_router)
+
+app.include_router(fiscal.router)
+
 
 # =========================
 # CORS
