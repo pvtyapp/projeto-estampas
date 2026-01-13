@@ -202,7 +202,11 @@ async function handleRegister(e: React.FormEvent) {
                     <input className="input" placeholder="Nome" onChange={e=>update('name',e.target.value)} />
                     <input className="input" placeholder="Email" onChange={e=>update('email',e.target.value)} />
                     <input className="input" placeholder="Telefone" onChange={e=>update('phone',e.target.value)} />
-                    <input className="input" placeholder="CPF" onChange={e=>update('cpf',e.target.value)} />
+                    <select className="input" value={form.person_type} onChange={e=>update('person_type',e.target.value)}>
+  <option value="cpf">CPF</option>
+  <option value="cnpj">CNPJ</option>
+</select>
+<input className="input" placeholder={form.person_type==='cpf'?'CPF':'CNPJ'} value={form.document} onChange={e=>update('document',e.target.value)} />
                     <input className="input" placeholder="Endereço" onChange={e=>update('address',e.target.value)} />
                     <input type="password" className="input" placeholder="Senha" onChange={e=>update('password',e.target.value)} />
                     <input type="password" className="input" placeholder="Confirmar senha" onChange={e=>update('confirm',e.target.value)} />
