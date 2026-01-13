@@ -19,6 +19,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
 
   const [form, setForm] = useState({
+    person_type: 'cpf',
+    document: '',
     name: '',
     email: '',
     phone: '',
@@ -64,10 +66,10 @@ export default function Home() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signUp({
+    const { data , error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { name: form.name, phone: form.phone, cpf: form.cpf, address: form.address } },
+      options: { data: { name: form.name, phone: form.phone, person_type: form.person_type, document: form.document, address: form.address } },
     })
 
     setLoading(false)
@@ -76,6 +78,12 @@ export default function Home() {
       setError(error.message)
     } else {
       setRegisteredEmail(form.email)
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/after-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.NEXT_PUBLIC_INTERNAL_KEY || '' },
+        body: JSON.stringify({ id: data?.user?.id, user_metadata: { person_type: form.person_type, document: form.document, name: form.name, phone: form.phone, address: form.address } })
+      })
+
       setCooldown(120)
     }
   }

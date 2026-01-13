@@ -14,6 +14,8 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from backend.app.routes import fiscal
+from fastapi import Header
+INTERNAL_KEY = os.getenv("INTERNAL_API_KEY")
 
 
 # ==== Stripe protegido ====
@@ -113,6 +115,33 @@ def current_user(user=Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
+
+@app.post("/auth/after-signup")
+def after_signup(payload: dict, x_internal_key: str = Header(None)):
+    if x_internal_key != INTERNAL_KEY:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    user_id = payload["id"]
+    meta = payload.get("user_metadata") or {}
+
+    person_type = meta.get("person_type") or ("cpf" if meta.get("cpf") else None)
+
+    fiscal = {
+        "user_id": user_id,
+        "person_type": person_type,
+        "document": meta.get("document") or meta.get("cpf"),
+        "full_name": meta.get("name"),
+        "phone": meta.get("phone"),
+        "street": meta.get("address"),
+    }
+
+    fiscal = {k: v for k, v in fiscal.items() if v}
+
+    if fiscal:
+        supabase.table("user_fiscal_data").upsert(fiscal, on_conflict="user_id").execute()
+
+    return {"ok": True}
+
 
 # =========================
 # HELPERS
@@ -601,3 +630,33 @@ def get_plans(user=Depends(current_user)):
         "plans": plans,
         "current_plan": current_plan,
     }
+
+import stripe
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+@app.post("/stripe/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if event["type"] == "invoice.paid":
+        invoice = event["data"]["object"]
+        user_id = invoice.get("metadata", {}).get("user_id")
+        amount = invoice.get("amount_paid", 0) / 100
+        currency = invoice.get("currency")
+
+        supabase.table("billing_events").insert({
+            "user_id": user_id,
+            "stripe_event_id": event["id"],
+            "amount": amount,
+            "currency": currency,
+            "status": "paid",
+        }).execute()
+
+    return {"ok": True}
