@@ -116,13 +116,15 @@ def current_user(user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
 
+
 @app.post("/auth/after-signup")
 def after_signup(payload: dict, x_internal_key: str = Header(None)):
     if x_internal_key != INTERNAL_KEY:
         raise HTTPException(status_code=401, detail="unauthorized")
 
     user_id = (
-        payload.get("id")
+        payload.get("user_id")
+        or payload.get("id")
         or payload.get("user", {}).get("id")
         or payload.get("data", {}).get("user", {}).get("id")
         or payload.get("record", {}).get("id")
@@ -130,7 +132,8 @@ def after_signup(payload: dict, x_internal_key: str = Header(None)):
 
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id não encontrado no payload")
-    meta = payload.get("user_metadata") or {}
+
+    meta = payload.get("user_metadata") or payload
 
     person_type = meta.get("person_type") or ("cpf" if meta.get("cpf") else None)
 
