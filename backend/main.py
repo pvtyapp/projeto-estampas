@@ -674,20 +674,45 @@ async def stripe_webhook(request: Request):
 
     return {"ok": True}
 
-@app.post('/auth/register')
+import requests  # <- adicione no topo do arquivo se não existir
+
+@app.post("/auth/register")
 def register(payload: dict):
     email = payload.get("email")
     password = payload.get("password")
     meta = payload.get("meta") or payload.get("user_metadata") or {}
+
     if not email or not password:
         raise HTTPException(status_code=400, detail="email e password obrigatórios")
+
     res = supabase.auth.sign_up({
-    "email": email,
-    "password": password,
-    "options": {
-        "data": meta
-    }
-})
+        "email": email,
+        "password": password,
+        "options": {
+            "data": meta
+        }
+    })
+
     if getattr(res, "error", None):
         raise HTTPException(status_code=400, detail=str(res.error))
+
+    user = getattr(res, "user", None)
+    if not user or not user.id:
+        raise HTTPException(status_code=500, detail="Usuário criado mas sem ID retornado")
+
+    
+    try:
+        requests.post(
+            f"{os.getenv('API_BASE_URL')}/auth/after-signup",
+            headers={"x-internal-key": INTERNAL_KEY},
+            json={
+                "id": user.id,
+                "user_metadata": meta
+            },
+            timeout=5
+        )
+    except Exception as e:
+        print("⚠️ Falha ao chamar after-signup:", e)
+
     return {"ok": True}
+

@@ -101,7 +101,7 @@ async function handleRegister(e: React.FormEvent) {
     setLoading(true)
     setError(null)
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.email,password:form.password,person_type:form.person_type,document:form.document,name:form.name,phone:form.phone,street:form.street,number:form.number,cep:form.cep})}); const json = await res.json(); const error = json?.error; const data = json?.data;
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.email,password:form.password,meta:{person_type:form.person_type,document:form.document,name:form.name,phone:form.phone,street:form.street,number:form.number,cep:form.cep}})}); const json = await res.json(); const error = json?.error; const data = json?.data;
 setLoading(false)
 
     if (error) {
