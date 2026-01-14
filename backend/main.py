@@ -140,7 +140,9 @@ def after_signup(payload: dict, x_internal_key: str = Header(None)):
         "document": meta.get("document") or meta.get("cpf"),
         "full_name": meta.get("name"),
         "phone": meta.get("phone"),
-        "street": meta.get("address"),
+        "street": meta.get("street") or meta.get("address"),
+        "number": meta.get("number"),
+        "cep": meta.get("cep"),
     }
 
     fiscal = {k: v for k, v in fiscal.items() if v}
