@@ -681,7 +681,13 @@ def register(payload: dict):
     meta = payload.get("meta") or payload.get("user_metadata") or {}
     if not email or not password:
         raise HTTPException(status_code=400, detail="email e password obrigatórios")
-    res = supabase.auth.sign_up(email=email, password=password, options={"data": meta})
+    res = supabase.auth.sign_up({
+    "email": email,
+    "password": password,
+    "options": {
+        "data": meta
+    }
+})
     if getattr(res, "error", None):
         raise HTTPException(status_code=400, detail=str(res.error))
     return {"ok": True}
