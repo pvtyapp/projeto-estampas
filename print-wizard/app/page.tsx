@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Cpu, Layers, Users, BarChart3, Zap } from 'lucide-react'
 
-export default function maskPhone(v: string){return v.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
+export default function maskPhone(v: any){const s=String(v||'');return s.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
 
 function Home() {
   const router = useRouter()
@@ -63,7 +63,7 @@ function Home() {
 
   
 
-function onlyDigits(v:string){return v.replace(/\D/g,'')}
+function onlyDigits(v:any){return String(v||'').replace(/\D/g,'')}
 
 function maskDocument(v:string){
   const d=onlyDigits(v)
