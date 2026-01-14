@@ -7,7 +7,9 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Cpu, Layers, Users, BarChart3, Zap } from 'lucide-react'
 
-export default function Home() {
+export default function maskPhone(v: string){return v.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
+
+function Home() {
   const router = useRouter()
 
   const [email, setEmail] = useState('')
@@ -25,6 +27,9 @@ export default function Home() {
     email: '',
     phone: '',
     cpf: '',
+    street: '',
+    number: '',
+    cep: '',
     address: '',
     password: '',
     confirm: '',
@@ -99,7 +104,9 @@ async function handleRegister(e: React.FormEvent) {
     const { data , error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
-      options: { data: { name: form.name, phone: form.phone, person_type: form.person_type, document: form.document, address: form.address } },
+      options: { data: { name: form.name, phone: form.phone, person_type: form.person_type, document: form.document, street: form.street,
+        number: form.number,
+        cep: form.cep } },
     })
 
     setLoading(false)
@@ -111,7 +118,9 @@ async function handleRegister(e: React.FormEvent) {
       await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/after-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.NEXT_PUBLIC_INTERNAL_KEY || '' },
-        body: JSON.stringify({ id: data?.user?.id, user_metadata: { person_type: form.person_type, document: form.document, name: form.name, phone: form.phone, address: form.address } })
+        body: JSON.stringify({ id: data?.user?.id, user_metadata: { person_type: form.person_type, document: form.document, name: form.name, phone: form.phone, street: form.street,
+        number: form.number,
+        cep: form.cep } })
       })
 
       setCooldown(120)
@@ -226,11 +235,13 @@ async function handleRegister(e: React.FormEvent) {
   <option value="cpf">Pessoa Física (CPF)</option>
   <option value="cnpj">Pessoa Jurídica (CNPJ)</option>
 </select>
-<input placeholder={form.person_type==='cpf'?'Nome completo':'Razão social'} onChange={e=>update('name',e.target.value)} />
+<input className="input" placeholder={form.person_type==='cpf'?'Nome completo':'Razão social'} onChange={e=>update('name',e.target.value)} />
                     <input className="input" placeholder="Email" onChange={e=>update('email',e.target.value)} />
-                    <input className="input" placeholder="Telefone" onChange={e=>update('phone',e.target.value)} />
+                    <input className="input" placeholder="Telefone" onChange={e=>update('phone',maskPhone(e.target.value))} />
                     <input placeholder={form.person_type==='cpf'?'CPF':'CNPJ'} value={form.document} onChange={e=>update('document',maskDocument(e.target.value))} className={`input ${error?'border-red-500':''}`} />
-                    <input className="input" placeholder="Endereço" onChange={e=>update('address',e.target.value)} />
+                    <input className="input" placeholder="Rua" onChange={e=>update('street',e.target.value)} />
+<input className="input" placeholder="Número" onChange={e=>update('number',e.target.value)} />
+<input className="input" placeholder="CEP" onChange={e=>update('cep',e.target.value.replace(/\D/g,'').slice(0,8))} />
                     <input type="password" className="input" placeholder="Senha" onChange={e=>update('password',e.target.value)} />
                     <input type="password" className="input" placeholder="Confirmar senha" onChange={e=>update('confirm',e.target.value)} />
 

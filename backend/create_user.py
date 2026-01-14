@@ -130,7 +130,7 @@ if person_type and document:
         "neighborhood": neighborhood,
         "city": city,
         "state": state,
-        "zip": zip_code
+        "cep": zip_code
     }
 
     # remove campos vazios
