@@ -131,7 +131,7 @@ def after_signup(payload: dict, x_internal_key: str = Header(None)):
     )
 
     if not user_id:
-        raise HTTPException(status_code=400, detail="user_id não encontrado no payload")
+        return {"ok": True, "skipped": True}
 
     meta = payload.get("user_metadata") or payload
 
