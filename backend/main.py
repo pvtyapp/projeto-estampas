@@ -660,39 +660,3 @@ async def stripe_webhook(request: Request):
         }).execute()
 
     return {"ok": True}
-
-
-# === added: transactional register ===
-from backend.auth import validate_document
-
-class RegisterIn(BaseModel):
-    email:str
-    password:str
-    person_type:str
-    document:str
-    name:Optional[str]=None
-    phone:Optional[str]=None
-    street:Optional[str]=None
-    number:Optional[str]=None
-    cep:Optional[str]=None
-
-@app.post("/auth/register")
-def register(data: RegisterIn):
-    validate_document(data.person_type, data.document)
-    # create user
-    res = supabase.auth.sign_up({"email": data.email, "password": data.password})
-    if not res or not getattr(res, 'user', None):
-        raise HTTPException(status_code=400, detail="erro ao criar usuario")
-    user_id = res.user.id
-    fiscal = {
-        "user_id": user_id,
-        "person_type": data.person_type,
-        "document": data.document,
-        "full_name": data.name,
-        "phone": data.phone,
-        "street": data.street,
-        "number": data.number,
-        "cep": data.cep,
-    }
-    supabase.table("user_fiscal_data").insert(fiscal).execute()
-    return {"ok": True, "user_id": user_id}
