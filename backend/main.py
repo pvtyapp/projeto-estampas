@@ -121,7 +121,15 @@ def after_signup(payload: dict, x_internal_key: str = Header(None)):
     if x_internal_key != INTERNAL_KEY:
         raise HTTPException(status_code=401, detail="unauthorized")
 
-    user_id = payload["id"]
+    user_id = (
+        payload.get("id")
+        or payload.get("user", {}).get("id")
+        or payload.get("data", {}).get("user", {}).get("id")
+        or payload.get("record", {}).get("id")
+    )
+
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id não encontrado no payload")
     meta = payload.get("user_metadata") or {}
 
     person_type = meta.get("person_type") or ("cpf" if meta.get("cpf") else None)
