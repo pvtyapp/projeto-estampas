@@ -116,6 +116,10 @@ def current_user(user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
 
+@app.post("/auth/register")
+def register_alias(payload: dict, x_internal_key: str = Header(None)):
+    return after_signup(payload, x_internal_key)
+
 @app.post("/auth/after-signup")
 def after_signup(payload: dict, x_internal_key: str = Header(None)):
     if x_internal_key != INTERNAL_KEY:
