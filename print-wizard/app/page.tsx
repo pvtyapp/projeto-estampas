@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Cpu, Layers, Users, BarChart3, Zap } from 'lucide-react'
 
-export default function maskPhone(v: any){const s=String(v||'');return s.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
+export function maskPhone(v: any){const s=String(v||'');return s.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
 
 function Home() {
   const router = useRouter()
@@ -267,3 +267,6 @@ setLoading(false)
     </main>
   )
 }
+
+
+export default Home
