@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Cpu, Layers, Users, BarChart3, Zap } from 'lucide-react'
 
-export default function maskPhone(v: string){return v.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
+export default function maskPhone(v: any){const s=String(v||'');return s.replace(/\D/g,'').replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2').slice(0,15)}
 
 function Home() {
   const router = useRouter()
@@ -63,7 +63,7 @@ function Home() {
 
   
 
-function onlyDigits(v:string){return v.replace(/\D/g,'')}
+function onlyDigits(v:any){return String(v||'').replace(/\D/g,'')}
 
 function maskDocument(v:string){
   const d=onlyDigits(v)
@@ -101,15 +101,8 @@ async function handleRegister(e: React.FormEvent) {
     setLoading(true)
     setError(null)
 
-    const { data , error } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: { data: { name: form.name, phone: form.phone, person_type: form.person_type, document: form.document, street: form.street,
-        number: form.number,
-        cep: form.cep } },
-    })
-
-    setLoading(false)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:form.email,password:form.password,person_type:form.person_type,document:form.document,name:form.name,phone:form.phone,street:form.street,number:form.number,cep:form.cep})}); const json = await res.json(); const error = json?.error; const data = json?.data;
+setLoading(false)
 
     if (error) {
       setError(error.message)

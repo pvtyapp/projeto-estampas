@@ -14,7 +14,7 @@ type FiscalData = {
   neighborhood?: string
   city?: string
   state?: string
-  zip?: string
+  cep?: string
 }
 
 export default function FiscalModal({ onClose }: { onClose: () => void }) {
@@ -72,7 +72,7 @@ export default function FiscalModal({ onClose }: { onClose: () => void }) {
           />
 
           <input placeholder="Telefone" value={data.phone || ''} onChange={e => setData({ ...data, phone: e.target.value })} className="input" />
-          <input placeholder="CEP" value={data.zip || ''} onChange={e => setData({ ...data, zip: e.target.value })} className="input" />
+          <input placeholder="CEP" value={data.cep || ''} onChange={e => setData({ ...data, cep: e.target.value })} className="input" />
           <input placeholder="Rua" value={data.street || ''} onChange={e => setData({ ...data, street: e.target.value })} className="input col-span-2" />
           <input placeholder="Número" value={data.number || ''} onChange={e => setData({ ...data, number: e.target.value })} className="input" />
           <input placeholder="Complemento" value={data.complement || ''} onChange={e => setData({ ...data, complement: e.target.value })} className="input" />

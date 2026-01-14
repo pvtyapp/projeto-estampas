@@ -148,6 +148,10 @@ if person_type and document:
     )
 
     if r.status_code not in (200, 201):
+        # rollback user
+        requests.delete(f"{AUTH_URL}/{user_id}", headers=HEADERS)
+        print("Rollback: usuário removido")
+
         print("Erro ao criar dados fiscais:", r.text)
     else:
         print("Dados fiscais criados.")
