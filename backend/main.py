@@ -688,31 +688,36 @@ def register(payload: dict):
     res = supabase.auth.sign_up({
         "email": email,
         "password": password,
-        "options": {
-            "data": meta
-        }
+        "options": {"data": meta}
     })
 
     if getattr(res, "error", None):
         raise HTTPException(status_code=400, detail=str(res.error))
 
-    user = getattr(res, "user", None)
-    if not user or not user.id:
-        raise HTTPException(status_code=500, detail="Usuário criado mas sem ID retornado")
+    data = res.get("user") if isinstance(res, dict) else getattr(res, "user", None)
 
-    
-    try:
-        requests.post(
-            f"{os.getenv('API_BASE_URL')}/auth/after-signup",
-            headers={"x-internal-key": INTERNAL_KEY},
-            json={
-                "id": user.id,
-                "user_metadata": meta
-            },
-            timeout=5
-        )
-    except Exception as e:
-        print("⚠️ Falha ao chamar after-signup:", e)
+    if not data:
+        raise HTTPException(status_code=500, detail="Usuário não retornado pelo Supabase")
+
+    user_id = data["id"]
+
+    fiscal = {
+        "user_id": user_id,
+        "person_type": meta.get("person_type"),
+        "document": meta.get("document"),
+        "full_name": meta.get("name"),
+        "email": email,
+        "phone": meta.get("phone"),
+        "street": meta.get("street"),
+        "number": meta.get("number"),
+        "cep": meta.get("cep"),
+    }
+
+    fiscal = {k: v for k, v in fiscal.items() if v}
+
+    if fiscal:
+        supabase.table("user_fiscal_data").insert(fiscal).execute()
 
     return {"ok": True}
+
 
