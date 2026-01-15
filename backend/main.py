@@ -699,7 +699,7 @@ def register(payload: dict):
     if not data:
         raise HTTPException(status_code=500, detail="Usuário não retornado pelo Supabase")
 
-    user_id = data["id"]
+    user_id = data.id if hasattr(data, "id") else data["id"]
 
     fiscal = {
         "user_id": user_id,
