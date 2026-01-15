@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
+import { useUsage } from '@/app/providers/UsageProvider'
 import { useRouter } from 'next/navigation'
 
 type Plan = {
@@ -16,10 +17,10 @@ type Plan = {
 
 export default function PlansPage() {
   const { session, loading } = useSession()
+  const { usage } = useUsage()
   const router = useRouter()
 
   const [plans, setPlans] = useState<Plan[]>([])
-  const [currentPlan, setCurrentPlan] = useState<string | null>(null)
   const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null)
 
   useEffect(() => {
@@ -33,7 +34,6 @@ export default function PlansPage() {
       const res = await api('/plans')
       const sorted = (res.plans || []).sort((a: Plan, b: Plan) => a.price - b.price)
       setPlans(sorted)
-      setCurrentPlan(res.current_plan || null)
     }
     load()
   }, [])
@@ -52,6 +52,8 @@ export default function PlansPage() {
   }
 
   if (!session) return null
+
+  const currentPlan = usage?.plan || null
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 space-y-24">
@@ -180,7 +182,6 @@ export default function PlansPage() {
         </div>
       </div>
 
-    
       {/* Marketing */}
       <section className="space-y-20">
         <div className="text-center max-w-3xl mx-auto">

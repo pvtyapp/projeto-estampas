@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { api } from '@/lib/apiClient'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
+import { useUsage } from '@/app/providers/UsageProvider'
 
 type Slot = {
   type: 'front' | 'back' | 'extra'
@@ -26,8 +27,8 @@ type PreviewItem = {
   sku?: string
 }
 
-type Usage = {
-  library_limit: number | null
+type UsageLocal = {
+  library_limit?: number | null
   status?: 'ok' | 'warning' | 'blocked' | 'using_credits'
 }
 
@@ -40,7 +41,8 @@ export default function Library({ onPreview, version }: Props) {
   const [prints, setPrints] = useState<Print[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [usage, setUsage] = useState<Usage | null>(null)
+
+  const { usage } = useUsage() as { usage: UsageLocal | null }
 
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [openNote, setOpenNote] = useState<string | null>(null)
@@ -62,13 +64,11 @@ export default function Library({ onPreview, version }: Props) {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const [printsData, usageData, notesData] = await Promise.all([
+      const [printsData, notesData] = await Promise.all([
         api('/prints'),
-        api('/me/usage'),
         api('/print-notes'),
       ])
       setPrints(printsData)
-      setUsage(usageData)
 
       const map: Record<string, string> = {}
       for (const n of notesData || []) {
@@ -108,7 +108,7 @@ export default function Library({ onPreview, version }: Props) {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [prints, search])
 
-  const limit = usage?.library_limit || Infinity
+  const limit = usage?.library_limit ?? Infinity
   const used = prints.length
   const percent = (used / limit) * 100
   const isBlocked = used >= limit || usage?.status === 'blocked'

@@ -1,25 +1,16 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
+import { useUsage } from '@/app/providers/UsageProvider'
 import { useRouter } from 'next/navigation'
 
 type Plan = 'free' | 'start' | 'pro' | 'ent'
 
-type Usage = {
-  plan: Plan
-  used: number
-  limit: number
-  credits: number
-  remaining_days: number
-  status: 'ok' | 'warning' | 'blocked' | 'using_credits'
-}
-
 export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:'30x100'|'57x100', setSheetSize:(v:any)=>void }) {
-  const { session, loading: sessionLoading } = useSession()
-  const [usage, setUsage] = useState<Usage | null>(null)
-  const [error, setError] = useState(false)
+  const { session } = useSession()
+  const { usage, loading } = useUsage()
+  const [error] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -31,32 +22,9 @@ export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:
     localStorage.setItem('sheet_size', sheetSize)
   }, [sheetSize])
 
-
-  useEffect(() => {
-    if (sessionLoading || !session) return
-
-    let cancelled = false
-    setError(false)
-
-    api('/me/usage')
-      .then(res => {
-        if (!cancelled) setUsage(res)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setUsage(null)
-          setError(true)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [sessionLoading, session])
-
   if (!session) return null
 
-  if (!usage && !error) {
+  if (loading && !usage) {
     return (
       <div className="bg-white border rounded-xl shadow p-6 flex flex-col gap-4 opacity-30 animate-pulse">
         <div className="h-4 bg-gray-200 rounded w-1/3" />
@@ -146,7 +114,7 @@ export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:
           {isFree ? 'Ver planos e preços' : 'Ver detalhes do plano'}
         </button>
       </div>
-    
+
       <div className="border-t pt-4">
         <div className="text-sm font-medium mb-2">Configuração de impressão</div>
         <div className="flex gap-6 text-sm">
@@ -154,7 +122,8 @@ export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:
             <span className="text-gray-500">Folha</span>
             <label><input type="radio" checked={sheetSize==='30x100'} onChange={()=>setSheetSize('30x100')} /> 30x100</label>
             <label><input type="radio" checked={sheetSize==='57x100'} onChange={()=>setSheetSize('57x100')} /> 57x100</label>
-          </div>        </div>
+          </div>
+        </div>
       </div>
 
     </div>

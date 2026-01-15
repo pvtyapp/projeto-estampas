@@ -1,5 +1,6 @@
 import './globals.css'
 import SessionProvider from './providers/SessionProvider'
+import { UsageProvider } from './providers/UsageProvider'
 
 export default function RootLayout({
   children,
@@ -9,7 +10,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className="bg-white text-gray-900">
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <UsageProvider>
+            {children}
+          </UsageProvider>
+        </SessionProvider>
       </body>
     </html>
   )
