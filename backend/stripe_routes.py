@@ -79,12 +79,16 @@ async def stripe_webhook(request: Request):
             if plan in SUBSCRIPTION_PLANS:
                 subscription_id = session.get("subscription")
 
-                stripe_sub = None
+                period_start = None
                 period_end = None
 
                 if subscription_id:
                     try:
                         stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                        period_start = datetime.fromtimestamp(
+                            stripe_sub.current_period_start,
+                            tz=timezone.utc
+                        ).isoformat()
                         period_end = datetime.fromtimestamp(
                             stripe_sub.current_period_end,
                             tz=timezone.utc
@@ -95,6 +99,7 @@ async def stripe_webhook(request: Request):
                 supabase.table("profiles").update({
                     "plan_id": plan,
                     "stripe_subscription_id": subscription_id,
+                    "stripe_current_period_start": period_start,
                     "stripe_current_period_end": period_end,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", user_id).execute()
@@ -116,6 +121,10 @@ async def stripe_webhook(request: Request):
         user_id = subscription.get("metadata", {}).get("user_id")
 
         if user_id:
+            period_start = datetime.fromtimestamp(
+                subscription.current_period_start,
+                tz=timezone.utc
+            ).isoformat()
             period_end = datetime.fromtimestamp(
                 subscription.current_period_end,
                 tz=timezone.utc
@@ -123,6 +132,7 @@ async def stripe_webhook(request: Request):
 
             supabase.table("profiles").update({
                 "stripe_subscription_id": subscription.id,
+                "stripe_current_period_start": period_start,
                 "stripe_current_period_end": period_end,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", user_id).execute()
@@ -136,6 +146,7 @@ async def stripe_webhook(request: Request):
             supabase.table("profiles").update({
                 "plan_id": "free",
                 "stripe_subscription_id": None,
+                "stripe_current_period_start": None,
                 "stripe_current_period_end": None,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", user_id).execute()

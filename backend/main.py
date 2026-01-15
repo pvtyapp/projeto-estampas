@@ -11,8 +11,6 @@ from backend.jobs import process_render
 from backend.auth import get_current_user
 from backend.supabase_client import supabase
 from backend.limits import check_and_consume_limits, LimitExceeded
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict
 from backend.app.routes import fiscal
 from fastapi import Header
 import stripe
@@ -550,46 +548,55 @@ def get_print_stats(
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    profile = supabase.table("profiles").select("*").eq("id", user["sub"]).execute().data
-    plan_id = profile[0]["plan_id"] if profile else "free"
+    profile_rows = supabase.table("profiles").select("*").eq("id", user["sub"]).execute().data or []
+    profile = profile_rows[0] if profile_rows else {}
 
-    plan = supabase.table("plans").select("*").eq("id", plan_id).execute().data
-    plan = plan[0] if plan else {}
+    plan_id = profile.get("plan_id") or "free"
+
+    plan_rows = supabase.table("plans").select("*").eq("id", plan_id).execute().data or []
+    plan = plan_rows[0] if plan_rows else {}
 
     now = datetime.now(timezone.utc)
 
+    # --- Stripe subscription window ---
+    period_start = None
+    period_end = None
+
+    if profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
+        period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
+        period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
+
     remaining_days = 0
+    if period_end:
+        remaining_days = max(0, (period_end - now).days)
 
-    # Stripe-based renewal (30 days after subscription, not calendar)
-    stripe_subscription_id = (profile[0] or {}).get("stripe_subscription_id") if profile else None
-    if stripe_subscription_id:
-        try:
-            sub = stripe.Subscription.retrieve(stripe_subscription_id)
-            period_end = datetime.fromtimestamp(sub.current_period_end, tz=timezone.utc)
-            remaining_days = max(0, (period_end - now).days)
-        except Exception:
-            remaining_days = 0
-
+    # --- Usage window ---
     if plan.get("daily_limit"):
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         limit = plan["daily_limit"]
     else:
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start = period_start or now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         limit = plan.get("monthly_limit") or 100
 
-    rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).gte("created_at", start.isoformat()).execute().data or []
+    rows = (
+        supabase
+        .table("usage")
+        .select("amount")
+        .eq("user_id", user["sub"])
+        .gte("created_at", start.isoformat())
+        .execute()
+        .data
+        or []
+    )
+
     used = sum(r["amount"] or 0 for r in rows)
 
     credits = supabase.table("credit_packs").select("remaining").eq("user_id", user["sub"]).execute().data or []
     total_credits = sum(c["remaining"] or 0 for c in credits)
 
     status = "ok"
-
     if used >= limit:
-        if total_credits > 0:
-            status = "using_credits"
-        else:
-            status = "blocked"
+        status = "using_credits" if total_credits > 0 else "blocked"
     elif used >= limit * 0.8:
         status = "warning"
 
@@ -649,32 +656,6 @@ def get_plans(user=Depends(current_user)):
         "plans": plans,
         "current_plan": current_plan,
     }
-
-@app.post("/stripe/webhook")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature")
-
-    try:
-        event = stripe.Webhook.construct_event(payload, sig, STRIPE_WEBHOOK_SECRET)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    if event["type"] == "invoice.paid":
-        invoice = event["data"]["object"]
-        user_id = invoice.get("metadata", {}).get("user_id")
-        amount = invoice.get("amount_paid", 0) / 100
-        currency = invoice.get("currency")
-
-        supabase.table("billing_events").insert({
-            "user_id": user_id,
-            "stripe_event_id": event["id"],
-            "amount": amount,
-            "currency": currency,
-            "status": "paid",
-        }).execute()
-
-    return {"ok": True}
 
 import requests
 
