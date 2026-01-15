@@ -76,19 +76,32 @@ async def stripe_webhook(request: Request):
         if user_id and plan:
 
             # === PLANOS (recorrentes) ===
-            if plan in {"start", "pro", "ent"}:
-                print(f"✅ Ativando plano '{plan}' para usuário {user_id}")
+            if plan in SUBSCRIPTION_PLANS:
+                subscription_id = session.get("subscription")
+
+                stripe_sub = None
+                period_end = None
+
+                if subscription_id:
+                    try:
+                        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                        period_end = datetime.fromtimestamp(
+                            stripe_sub.current_period_end,
+                            tz=timezone.utc
+                        ).isoformat()
+                    except Exception as e:
+                        print("⚠️ Erro ao buscar subscription:", e)
 
                 supabase.table("profiles").update({
                     "plan_id": plan,
+                    "stripe_subscription_id": subscription_id,
+                    "stripe_current_period_end": period_end,
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", user_id).execute()
 
             # === PACOTES AVULSOS ===
             elif plan in {"extra20", "extra50"}:
                 amount = 20 if plan == "extra20" else 50
-
-                print(f"➕ Adicionando pacote {amount} créditos para usuário {user_id}")
 
                 supabase.table("credit_packs").insert({
                     "id": str(uuid.uuid4()),
@@ -97,16 +110,33 @@ async def stripe_webhook(request: Request):
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }).execute()
 
+    # Assinatura atualizada (renovação, upgrade, downgrade)
+    if event["type"] == "customer.subscription.updated":
+        subscription = event["data"]["object"]
+        user_id = subscription.get("metadata", {}).get("user_id")
+
+        if user_id:
+            period_end = datetime.fromtimestamp(
+                subscription.current_period_end,
+                tz=timezone.utc
+            ).isoformat()
+
+            supabase.table("profiles").update({
+                "stripe_subscription_id": subscription.id,
+                "stripe_current_period_end": period_end,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", user_id).execute()
+
     # Assinatura cancelada
     if event["type"] == "customer.subscription.deleted":
         subscription = event["data"]["object"]
         user_id = subscription.get("metadata", {}).get("user_id")
 
         if user_id:
-            print(f"⚠️ Assinatura cancelada — voltando para plano free ({user_id})")
-
             supabase.table("profiles").update({
                 "plan_id": "free",
+                "stripe_subscription_id": None,
+                "stripe_current_period_end": None,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", user_id).execute()
 

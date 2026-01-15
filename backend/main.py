@@ -15,8 +15,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from backend.app.routes import fiscal
 from fastapi import Header
-INTERNAL_KEY = os.getenv("INTERNAL_API_KEY")
+import stripe
 
+INTERNAL_KEY = os.getenv("INTERNAL_API_KEY")
 
 # ==== Stripe protegido ====
 try:
@@ -26,6 +27,8 @@ except Exception as e:
     print("⚠️ Stripe desativado:", e)
     STRIPE_ENABLED = False
 
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 LOCAL_TZ = timezone(timedelta(hours=-3))
 
@@ -37,7 +40,6 @@ if STRIPE_ENABLED:
     app.include_router(stripe_router)
 
 app.include_router(fiscal.router)
-
 
 # =========================
 # CORS
@@ -116,7 +118,6 @@ def current_user(user=Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
 
-
 @app.post("/auth/after-signup")
 def after_signup(payload: dict, x_internal_key: str = Header(None)):
     if x_internal_key != INTERNAL_KEY:
@@ -154,7 +155,6 @@ def after_signup(payload: dict, x_internal_key: str = Header(None)):
         supabase.table("user_fiscal_data").upsert(fiscal, on_conflict="user_id").execute()
 
     return {"ok": True}
-
 
 # =========================
 # HELPERS
@@ -463,7 +463,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 
 # =========================
 # STATS 
-# # =========================
+# =========================
 
 @app.get("/stats/prints")
 def get_print_stats(
@@ -496,7 +496,6 @@ def get_print_stats(
         sheets = int(payload.get("sheets") or 0)
         status = j.get("status")
 
-        # Arquivos reais vêm da tabela print_files
         if status == "done":
             files = (
                 supabase.table("print_files")
@@ -545,7 +544,6 @@ def get_print_stats(
         },
     }
 
-
 # =========================
 # ACCOUNT
 # =========================
@@ -560,16 +558,24 @@ def get_my_usage(user=Depends(current_user)):
 
     now = datetime.now(timezone.utc)
 
+    remaining_days = 0
+
+    # Stripe-based renewal (30 days after subscription, not calendar)
+    stripe_subscription_id = (profile[0] or {}).get("stripe_subscription_id") if profile else None
+    if stripe_subscription_id:
+        try:
+            sub = stripe.Subscription.retrieve(stripe_subscription_id)
+            period_end = datetime.fromtimestamp(sub.current_period_end, tz=timezone.utc)
+            remaining_days = max(0, (period_end - now).days)
+        except Exception:
+            remaining_days = 0
+
     if plan.get("daily_limit"):
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         limit = plan["daily_limit"]
-        remaining_days = 0
     else:
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         limit = plan.get("monthly_limit") or 100
-        import calendar
-        days_in_month = calendar.monthrange(now.year, now.month)[1]
-        remaining_days = days_in_month - now.day
 
     rows = supabase.table("usage").select("amount").eq("user_id", user["sub"]).gte("created_at", start.isoformat()).execute().data or []
     used = sum(r["amount"] or 0 for r in rows)
@@ -644,10 +650,6 @@ def get_plans(user=Depends(current_user)):
         "current_plan": current_plan,
     }
 
-import stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
-
 @app.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -674,7 +676,7 @@ async def stripe_webhook(request: Request):
 
     return {"ok": True}
 
-import requests  # <- adicione no topo do arquivo se não existir
+import requests
 
 @app.post("/auth/register")
 def register(payload: dict):
@@ -719,5 +721,3 @@ def register(payload: dict):
         supabase.table("user_fiscal_data").insert(fiscal).execute()
 
     return {"ok": True}
-
-
