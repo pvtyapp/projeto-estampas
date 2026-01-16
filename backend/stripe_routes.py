@@ -11,11 +11,13 @@ WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
-def get_supabase():
-    return create_client(
-        SUPABASE_URL,
-        SUPABASE_SERVICE_KEY,
+if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    raise RuntimeError(
+        "SUPABASE_URL ou SUPABASE_SERVICE_KEY não configurados no ambiente"
     )
+
+def get_supabase():
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
 
@@ -26,12 +28,11 @@ PRICE_MAP = {
 }
 
 PRICE_TO_PLAN = {v: k for k, v in PRICE_MAP.items()}
-SUBSCRIPTION_PLANS = set(PRICE_MAP.keys())
 
 
 @router.post("/checkout")
 def create_checkout(plan: str, user=Depends(get_current_user)):
-    if plan not in SUBSCRIPTION_PLANS:
+    if plan not in PRICE_MAP:
         raise HTTPException(status_code=400, detail="Plano inválido")
 
     session = stripe.checkout.Session.create(
@@ -99,7 +100,7 @@ async def stripe_webhook(request: Request):
         if not plan_id:
             return {"status": "ok"}
 
-        profiles = (
+        profile = (
             supabase.table("profiles")
             .select("id")
             .eq("stripe_customer_id", customer_id)
@@ -108,14 +109,14 @@ async def stripe_webhook(request: Request):
             .data
         )
 
-        if not profiles:
+        if not profile:
+            print("⚠️ Perfil não encontrado para customer:", customer_id)
             return {"status": "ok"}
 
         subscription = stripe.Subscription.retrieve(subscription_id)
 
         supabase.table("profiles").update({
             "plan_id": plan_id,
-            "stripe_subscription_id": subscription_id,
             "stripe_current_period_start": datetime.fromtimestamp(
                 subscription["current_period_start"], tz=timezone.utc
             ).isoformat(),
@@ -123,51 +124,7 @@ async def stripe_webhook(request: Request):
                 subscription["current_period_end"], tz=timezone.utc
             ).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", profiles[0]["id"]).execute()
-
-        return {"status": "ok"}
-
-    # =========================
-    # SUBSCRIPTION UPDATE
-    # =========================
-    if event_type == "customer.subscription.updated":
-        subscription_id = obj["id"]
-
-        profiles = (
-            supabase.table("profiles")
-            .select("id")
-            .eq("stripe_subscription_id", subscription_id)
-            .limit(1)
-            .execute()
-            .data
-        )
-
-        if profiles:
-            supabase.table("profiles").update({
-                "stripe_current_period_start": datetime.fromtimestamp(
-                    obj["current_period_start"], tz=timezone.utc
-                ).isoformat(),
-                "stripe_current_period_end": datetime.fromtimestamp(
-                    obj["current_period_end"], tz=timezone.utc
-                ).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", profiles[0]["id"]).execute()
-
-        return {"status": "ok"}
-
-    # =========================
-    # SUBSCRIPTION CANCELADA
-    # =========================
-    if event_type == "customer.subscription.deleted":
-        subscription_id = obj["id"]
-
-        supabase.table("profiles").update({
-            "plan_id": "free",
-            "stripe_subscription_id": None,
-            "stripe_current_period_start": None,
-            "stripe_current_period_end": None,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("stripe_subscription_id", subscription_id).execute()
+        }).eq("id", profile[0]["id"]).execute()
 
         return {"status": "ok"}
 
