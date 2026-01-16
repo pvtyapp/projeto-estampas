@@ -96,13 +96,25 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
     # PERIOD (subscription) limit
     # =========================
     period_start = profile.get("stripe_current_period_start")
+    period_end = profile.get("stripe_current_period_end")
+
+    start = None
 
     if period_start:
         try:
             start = datetime.fromisoformat(period_start)
         except Exception:
-            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    else:
+            start = None
+
+    if period_end:
+        try:
+            end = datetime.fromisoformat(period_end)
+            if end < now:
+                start = now
+        except Exception:
+            pass
+
+    if not start:
         # fallback (free ou legado)
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 

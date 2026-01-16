@@ -67,6 +67,32 @@ async def stripe_webhook(request: Request):
     print("📨 Stripe event recebido:", event["type"])
 
     # =========================
+    # ASSINATURA CRIADA
+    # =========================
+    if event["type"] == "customer.subscription.created":
+        sub_event = event["data"]["object"]
+        user_id = sub_event.get("metadata", {}).get("user_id")
+        subscription_id = sub_event.get("id")
+
+        if user_id and subscription_id:
+            try:
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+
+                supabase.table("profiles").update({
+                    "stripe_subscription_id": stripe_sub.id,
+                    "stripe_current_period_start": datetime.fromtimestamp(
+                        stripe_sub.current_period_start, tz=timezone.utc
+                    ).isoformat(),
+                    "stripe_current_period_end": datetime.fromtimestamp(
+                        stripe_sub.current_period_end, tz=timezone.utc
+                    ).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", user_id).execute()
+
+            except Exception as e:
+                print("⚠️ Erro no customer.subscription.created:", e)
+
+    # =========================
     # CHECKOUT FINALIZADO
     # =========================
     if event["type"] == "checkout.session.completed":
@@ -78,13 +104,11 @@ async def stripe_webhook(request: Request):
 
         if user_id and plan in SUBSCRIPTION_PLANS and subscription_id:
             try:
-                # garante metadata na subscription
                 stripe.Subscription.modify(
                     subscription_id,
                     metadata={"user_id": user_id}
                 )
 
-                # SEMPRE buscar subscription completa
                 stripe_sub = stripe.Subscription.retrieve(subscription_id)
 
                 supabase.table("profiles").update({
@@ -112,7 +136,6 @@ async def stripe_webhook(request: Request):
 
         if user_id and subscription_id:
             try:
-                # SEMPRE buscar subscription completa
                 stripe_sub = stripe.Subscription.retrieve(subscription_id)
 
                 supabase.table("profiles").update({
