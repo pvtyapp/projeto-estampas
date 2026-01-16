@@ -45,10 +45,6 @@ def create_checkout(plan: str, user=Depends(get_current_user)):
     return {"url": session.url}
 
 
-# =========================
-# WEBHOOK STRIPE
-# =========================
-
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -64,100 +60,84 @@ async def stripe_webhook(request: Request):
         print("❌ Webhook inválido:", e)
         raise HTTPException(status_code=400, detail="Invalid webhook")
 
-    print("📨 Stripe event recebido:", event["type"])
+    event_type = event["type"]
+    print("📨 Stripe event recebido:", event_type)
 
-    # =========================
-    # ASSINATURA CRIADA
-    # =========================
-    if event["type"] == "customer.subscription.created":
-        sub_event = event["data"]["object"]
-        user_id = sub_event.get("metadata", {}).get("user_id")
-        subscription_id = sub_event.get("id")
+    obj = event["data"]["object"]
+
+    if event_type == "customer.subscription.created":
+        user_id = obj.get("metadata", {}).get("user_id")
+        subscription_id = obj.get("id")
 
         if user_id and subscription_id:
-            try:
-                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+            supabase.table("profiles").update({
+                "stripe_subscription_id": subscription_id,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", user_id).execute()
 
-                supabase.table("profiles").update({
-                    "stripe_subscription_id": stripe_sub.id,
-                    "stripe_current_period_start": datetime.fromtimestamp(
-                        stripe_sub.current_period_start, tz=timezone.utc
-                    ).isoformat(),
-                    "stripe_current_period_end": datetime.fromtimestamp(
-                        stripe_sub.current_period_end, tz=timezone.utc
-                    ).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }).eq("id", user_id).execute()
-
-            except Exception as e:
-                print("⚠️ Erro no customer.subscription.created:", e)
-
-    # =========================
-    # CHECKOUT FINALIZADO
-    # =========================
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-
-        user_id = session.get("metadata", {}).get("user_id")
-        plan = session.get("metadata", {}).get("plan")
-        subscription_id = session.get("subscription")
+    if event_type == "checkout.session.completed":
+        user_id = obj.get("metadata", {}).get("user_id")
+        plan = obj.get("metadata", {}).get("plan")
+        subscription_id = obj.get("subscription")
 
         if user_id and plan in SUBSCRIPTION_PLANS and subscription_id:
-            try:
-                stripe.Subscription.modify(
-                    subscription_id,
-                    metadata={"user_id": user_id}
-                )
+            stripe.Subscription.modify(
+                subscription_id,
+                metadata={"user_id": user_id}
+            )
 
-                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+            supabase.table("profiles").update({
+                "plan_id": plan,
+                "stripe_subscription_id": subscription_id,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", user_id).execute()
 
+    if event_type == "invoice.payment_succeeded":
+        subscription_id = obj.get("subscription")
+
+        if subscription_id:
+            stripe_sub = stripe.Subscription.retrieve(subscription_id)
+            user_id = stripe_sub.get("metadata", {}).get("user_id")
+
+            period_start = stripe_sub.get("current_period_start")
+            period_end = stripe_sub.get("current_period_end")
+
+            if user_id and period_start and period_end:
                 supabase.table("profiles").update({
-                    "plan_id": plan,
                     "stripe_subscription_id": stripe_sub.id,
                     "stripe_current_period_start": datetime.fromtimestamp(
-                        stripe_sub.current_period_start, tz=timezone.utc
+                        period_start, tz=timezone.utc
                     ).isoformat(),
                     "stripe_current_period_end": datetime.fromtimestamp(
-                        stripe_sub.current_period_end, tz=timezone.utc
+                        period_end, tz=timezone.utc
                     ).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", user_id).execute()
 
-            except Exception as e:
-                print("⚠️ Erro no checkout.session.completed:", e)
+    if event_type == "customer.subscription.updated":
+        subscription_id = obj.get("id")
 
-    # =========================
-    # ASSINATURA ATUALIZADA
-    # =========================
-    if event["type"] == "customer.subscription.updated":
-        sub_event = event["data"]["object"]
-        user_id = sub_event.get("metadata", {}).get("user_id")
-        subscription_id = sub_event.get("id")
+        if subscription_id:
+            stripe_sub = stripe.Subscription.retrieve(subscription_id)
+            user_id = stripe_sub.get("metadata", {}).get("user_id")
 
-        if user_id and subscription_id:
-            try:
-                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+            period_start = stripe_sub.get("current_period_start")
+            period_end = stripe_sub.get("current_period_end")
 
+            if user_id and period_start and period_end:
                 supabase.table("profiles").update({
                     "stripe_subscription_id": stripe_sub.id,
                     "stripe_current_period_start": datetime.fromtimestamp(
-                        stripe_sub.current_period_start, tz=timezone.utc
+                        period_start, tz=timezone.utc
                     ).isoformat(),
                     "stripe_current_period_end": datetime.fromtimestamp(
-                        stripe_sub.current_period_end, tz=timezone.utc
+                        period_end, tz=timezone.utc
                     ).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }).eq("id", user_id).execute()
 
-            except Exception as e:
-                print("⚠️ Erro no customer.subscription.updated:", e)
-
-    # =========================
-    # ASSINATURA CANCELADA
-    # =========================
-    if event["type"] == "customer.subscription.deleted":
-        sub_event = event["data"]["object"]
-        user_id = sub_event.get("metadata", {}).get("user_id")
+    if event_type == "customer.subscription.deleted":
+        user_id = obj.get("metadata", {}).get("user_id")
 
         if user_id:
             supabase.table("profiles").update({
