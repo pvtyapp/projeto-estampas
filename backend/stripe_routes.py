@@ -74,34 +74,33 @@ async def stripe_webhook(request: Request):
 
         user_id = session.get("metadata", {}).get("user_id")
         plan = session.get("metadata", {}).get("plan")
+        subscription_id = session.get("subscription")
 
-        if user_id and plan and plan in SUBSCRIPTION_PLANS:
-            subscription_id = session.get("subscription")
+        if user_id and plan in SUBSCRIPTION_PLANS and subscription_id:
+            try:
+                # garante metadata na subscription
+                stripe.Subscription.modify(
+                    subscription_id,
+                    metadata={"user_id": user_id}
+                )
 
-            if subscription_id:
-                try:
-                    # Garante metadata na subscription
-                    stripe.Subscription.modify(
-                        subscription_id,
-                        metadata={"user_id": user_id}
-                    )
+                # SEMPRE buscar subscription completa
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
 
-                    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                supabase.table("profiles").update({
+                    "plan_id": plan,
+                    "stripe_subscription_id": stripe_sub.id,
+                    "stripe_current_period_start": datetime.fromtimestamp(
+                        stripe_sub.current_period_start, tz=timezone.utc
+                    ).isoformat(),
+                    "stripe_current_period_end": datetime.fromtimestamp(
+                        stripe_sub.current_period_end, tz=timezone.utc
+                    ).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", user_id).execute()
 
-                    supabase.table("profiles").update({
-                        "plan_id": plan,
-                        "stripe_subscription_id": stripe_sub.id,
-                        "stripe_current_period_start": datetime.fromtimestamp(
-                            stripe_sub.current_period_start, tz=timezone.utc
-                        ).isoformat(),
-                        "stripe_current_period_end": datetime.fromtimestamp(
-                            stripe_sub.current_period_end, tz=timezone.utc
-                        ).isoformat(),
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }).eq("id", user_id).execute()
-
-                except Exception as e:
-                    print("⚠️ Erro no checkout.session.completed:", e)
+            except Exception as e:
+                print("⚠️ Erro no checkout.session.completed:", e)
 
     # =========================
     # ASSINATURA ATUALIZADA
@@ -109,10 +108,12 @@ async def stripe_webhook(request: Request):
     if event["type"] == "customer.subscription.updated":
         sub_event = event["data"]["object"]
         user_id = sub_event.get("metadata", {}).get("user_id")
+        subscription_id = sub_event.get("id")
 
-        if user_id:
+        if user_id and subscription_id:
             try:
-                stripe_sub = stripe.Subscription.retrieve(sub_event["id"])
+                # SEMPRE buscar subscription completa
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
 
                 supabase.table("profiles").update({
                     "stripe_subscription_id": stripe_sub.id,
