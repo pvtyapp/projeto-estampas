@@ -1,11 +1,9 @@
-
 import os
 import stripe
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from backend.auth import get_current_user
 from supabase import create_client
-import httpx
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -17,7 +15,6 @@ def get_supabase():
     return create_client(
         SUPABASE_URL,
         SUPABASE_SERVICE_KEY,
-        http_client=httpx.Client(http2=False, timeout=30.0),
     )
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
@@ -30,6 +27,7 @@ PRICE_MAP = {
 
 PRICE_TO_PLAN = {v: k for k, v in PRICE_MAP.items()}
 SUBSCRIPTION_PLANS = set(PRICE_MAP.keys())
+
 
 @router.post("/checkout")
 def create_checkout(plan: str, user=Depends(get_current_user)):
@@ -47,13 +45,16 @@ def create_checkout(plan: str, user=Depends(get_current_user)):
 
     return {"url": session.url}
 
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, WEBHOOK_SECRET
+        )
     except Exception as e:
         print("❌ Webhook inválido:", e)
         raise HTTPException(status_code=400, detail="Invalid webhook")
@@ -64,6 +65,9 @@ async def stripe_webhook(request: Request):
 
     print("📨 Stripe event recebido:", event_type)
 
+    # =========================
+    # CHECKOUT FINALIZADO
+    # =========================
     if event_type == "checkout.session.completed":
         user_id = obj.get("metadata", {}).get("user_id")
         customer_id = obj.get("customer")
@@ -78,16 +82,20 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
+    # =========================
+    # PAGAMENTO CONFIRMADO
+    # =========================
     if event_type == "invoice.payment_succeeded":
-        subscription_id = obj.get("subscription")
         customer_id = obj.get("customer")
+        subscription_id = obj.get("subscription")
         lines = obj.get("lines", {}).get("data", [])
 
-        if not subscription_id or not customer_id or not lines:
+        if not customer_id or not subscription_id or not lines:
             return {"status": "ok"}
 
         price_id = lines[0]["price"]["id"]
         plan_id = PRICE_TO_PLAN.get(price_id)
+
         if not plan_id:
             return {"status": "ok"}
 
@@ -103,7 +111,6 @@ async def stripe_webhook(request: Request):
         if not profiles:
             return {"status": "ok"}
 
-        user_id = profiles[0]["id"]
         subscription = stripe.Subscription.retrieve(subscription_id)
 
         supabase.table("profiles").update({
@@ -116,10 +123,13 @@ async def stripe_webhook(request: Request):
                 subscription["current_period_end"], tz=timezone.utc
             ).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", user_id).execute()
+        }).eq("id", profiles[0]["id"]).execute()
 
         return {"status": "ok"}
 
+    # =========================
+    # SUBSCRIPTION UPDATE
+    # =========================
     if event_type == "customer.subscription.updated":
         subscription_id = obj["id"]
 
@@ -145,6 +155,9 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
+    # =========================
+    # SUBSCRIPTION CANCELADA
+    # =========================
     if event_type == "customer.subscription.deleted":
         subscription_id = obj["id"]
 
