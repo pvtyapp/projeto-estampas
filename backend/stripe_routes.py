@@ -84,6 +84,12 @@ async def stripe_webhook(request: Request):
 
                 if subscription_id:
                     try:
+                        # PATCH: garante user_id na subscription
+                        stripe.Subscription.modify(
+                            subscription_id,
+                            metadata={"user_id": user_id}
+                        )
+
                         stripe_sub = stripe.Subscription.retrieve(subscription_id)
                         period_start = datetime.fromtimestamp(
                             stripe_sub.current_period_start,
