@@ -1,5 +1,5 @@
 # stripe_routes.py
-# FINAL – robust, production-safe Stripe integration for plans, subscriptions and credits
+# FINAL – production-safe Stripe integration aligned with project auth (JWT via Authorization header)
 
 import os
 import json
@@ -9,6 +9,7 @@ from typing import Optional
 import stripe
 from fastapi import APIRouter, Request, HTTPException
 from supabase import create_client, Client
+import jwt
 
 # -----------------------------------------------------------------------------
 # Config
@@ -26,12 +27,7 @@ STRIPE_PRICE_EXTRA_50 = os.getenv("STRIPE_PRICE_EXTRA_50")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-if not STRIPE_SECRET_KEY:
-    raise RuntimeError("STRIPE_SECRET_KEY not set")
-
-if not STRIPE_WEBHOOK_SECRET:
-    raise RuntimeError("STRIPE_WEBHOOK_SECRET not set")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
 stripe.api_key = STRIPE_SECRET_KEY
 
@@ -47,24 +43,42 @@ def get_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
+def get_user_from_request(request: Request) -> dict:
+    auth = request.headers.get("authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing authorization")
+
+    token = auth.split(" ", 1)[1]
+
+    try:
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return {
+        "id": payload.get("sub"),
+        "email": payload.get("email"),
+    }
+
+
 PRICE_TO_PLAN = {
     STRIPE_PRICE_START: "start",
     STRIPE_PRICE_PRO: "pro",
     STRIPE_PRICE_ENT: "ent",
 }
 
-
 EXTRA_PRICE_TO_CREDITS = {
     STRIPE_PRICE_EXTRA_20: 20,
     STRIPE_PRICE_EXTRA_50: 50,
 }
 
-
 def resolve_plan_from_price(price_id: Optional[str]) -> Optional[str]:
-    if not price_id:
-        return None
     return PRICE_TO_PLAN.get(price_id)
-
 
 # -----------------------------------------------------------------------------
 # Checkout
@@ -75,10 +89,7 @@ def stripe_checkout(plan: str, request: Request):
     if plan not in ("start", "pro", "ent", "extra20", "extra50"):
         raise HTTPException(status_code=400, detail="Invalid plan")
 
-    user = request.state.user
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
+    user = get_user_from_request(request)
     supabase = get_supabase()
 
     profile = (
@@ -134,7 +145,6 @@ def stripe_checkout(plan: str, request: Request):
 
     return {"url": session.url}
 
-
 # -----------------------------------------------------------------------------
 # Webhook
 # -----------------------------------------------------------------------------
@@ -148,41 +158,32 @@ async def stripe_webhook(request: Request):
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except Exception as e:
-        logger.error(f"Webhook signature error: {e}")
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     supabase = get_supabase()
 
-    # ------------------------------------------------------------------
-    # Subscription CREATED / UPDATED  -> apply plan
-    # ------------------------------------------------------------------
     if event["type"] in (
         "customer.subscription.created",
         "customer.subscription.updated",
     ):
-        subscription = event["data"]["object"]
-        customer_id = subscription.get("customer")
-
-        items = subscription["items"]["data"]
+        sub = event["data"]["object"]
+        customer_id = sub.get("customer")
+        items = sub["items"]["data"]
         price_id = items[0]["price"]["id"] if items else None
-
         plan_id = resolve_plan_from_price(price_id)
 
         if plan_id:
             supabase.table("profiles").update(
                 {
                     "plan_id": plan_id,
-                    "stripe_subscription_id": subscription["id"],
+                    "stripe_subscription_id": sub["id"],
                 }
             ).eq("stripe_customer_id", customer_id).execute()
 
-    # ------------------------------------------------------------------
-    # Subscription DELETED -> back to free
-    # ------------------------------------------------------------------
     if event["type"] == "customer.subscription.deleted":
-        subscription = event["data"]["object"]
-        customer_id = subscription.get("customer")
+        sub = event["data"]["object"]
+        customer_id = sub.get("customer")
 
         supabase.table("profiles").update(
             {
@@ -191,33 +192,17 @@ async def stripe_webhook(request: Request):
             }
         ).eq("stripe_customer_id", customer_id).execute()
 
-    # ------------------------------------------------------------------
-    # Invoice paid -> monthly renewal (credits / limits)
-    # ------------------------------------------------------------------
-    if event["type"] == "invoice.payment_succeeded":
-        invoice = event["data"]["object"]
-        customer_id = invoice.get("customer")
-
-        # renewal logic is handled elsewhere (limits reset by date)
-        logger.info(f"Invoice paid for customer {customer_id}")
-
-    # ------------------------------------------------------------------
-    # One-time payments (extra credits)
-    # ------------------------------------------------------------------
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-
         if session.get("mode") == "payment":
             customer_id = session.get("customer")
-            line_items = stripe.checkout.Session.list_line_items(session["id"])
+            items = stripe.checkout.Session.list_line_items(session["id"])
 
-            total_credits = 0
-            for item in line_items["data"]:
-                price_id = item["price"]["id"]
-                credits = EXTRA_PRICE_TO_CREDITS.get(price_id, 0)
-                total_credits += credits
+            credits = 0
+            for item in items["data"]:
+                credits += EXTRA_PRICE_TO_CREDITS.get(item["price"]["id"], 0)
 
-            if total_credits > 0:
+            if credits > 0:
                 profile = (
                     supabase.table("profiles")
                     .select("extra_credits")
@@ -226,11 +211,8 @@ async def stripe_webhook(request: Request):
                     .execute()
                     .data
                 )
-
-                new_credits = (profile.get("extra_credits") or 0) + total_credits
-
                 supabase.table("profiles").update(
-                    {"extra_credits": new_credits}
+                    {"extra_credits": (profile.get("extra_credits") or 0) + credits}
                 ).eq("stripe_customer_id", customer_id).execute()
 
     return {"status": "ok"}
