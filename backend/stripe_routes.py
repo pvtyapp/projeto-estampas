@@ -3,25 +3,36 @@ import stripe
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from supabase import create_client
-import httpx
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
+
+# =========================
+# SUPABASE
+# =========================
 
 def get_supabase():
     return create_client(
         SUPABASE_URL,
         SUPABASE_SERVICE_ROLE_KEY,
-        http_client=httpx.Client(http2=False, timeout=30.0),
     )
 
+# =========================
+# AUTH
+# =========================
+
 from backend.auth import get_current_user
+
+# =========================
+# PLANOS / PRICES
+# =========================
 
 PRICE_MAP = {
     "start": os.getenv("STRIPE_PRICE_START"),
@@ -31,6 +42,10 @@ PRICE_MAP = {
 
 PRICE_TO_PLAN = {v: k for k, v in PRICE_MAP.items() if v}
 VALID_PLANS = set(PRICE_MAP.keys())
+
+# =========================
+# CHECKOUT
+# =========================
 
 @router.post("/checkout")
 def create_checkout(
@@ -62,6 +77,10 @@ def create_checkout(
 
     return {"url": session.url}
 
+# =========================
+# WEBHOOK
+# =========================
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -78,6 +97,9 @@ async def stripe_webhook(request: Request):
     event_type = event["type"]
     obj = event["data"]["object"]
 
+    # -------------------------
+    # CHECKOUT COMPLETED
+    # -------------------------
     if event_type == "checkout.session.completed":
         user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
         customer_id = obj.get("customer")
@@ -92,6 +114,9 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
+    # -------------------------
+    # PAYMENT SUCCEEDED → APLICA PLANO
+    # -------------------------
     if event_type == "invoice.payment_succeeded":
         customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
@@ -113,6 +138,7 @@ async def stripe_webhook(request: Request):
             .execute()
             .data
         )
+
         if not profiles:
             return {"status": "ok"}
 
@@ -132,6 +158,9 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
+    # -------------------------
+    # SUBSCRIPTION UPDATED
+    # -------------------------
     if event_type == "customer.subscription.updated":
         subscription_id = obj["id"]
 
@@ -157,6 +186,9 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
+    # -------------------------
+    # SUBSCRIPTION DELETED
+    # -------------------------
     if event_type == "customer.subscription.deleted":
         subscription_id = obj["id"]
 
