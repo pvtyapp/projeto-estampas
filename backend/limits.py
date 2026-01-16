@@ -5,9 +5,6 @@ class LimitExceeded(Exception):
 
 
 def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = None):
-    # =========================
-    # Get or create profile
-    # =========================
     profile_res = (
         supabase
         .table("profiles")
@@ -34,9 +31,6 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
 
     plan_id = profile.get("plan_id") or "free"
 
-    # =========================
-    # Get plan
-    # =========================
     plan_res = (
         supabase
         .table("plans")
@@ -75,28 +69,19 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         period_end = period_start + timedelta(days=1)
         limit = plan.get("daily_limit", 0)
 
-    # MONTHLY / SUBSCRIPTION PLAN (Stripe period)
+    # SUBSCRIPTION PLAN (30 dias corridos via Stripe)
     else:
-        if profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
-            try:
-                period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
-                period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
-            except Exception:
-                period_start = None
-                period_end = None
-        else:
-            period_start = None
-            period_end = None
+        try:
+            period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
+            period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
+        except Exception:
+            raise LimitExceeded("Período do plano inválido ou inexistente.")
 
-        if not period_start or not period_end:
-            period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            period_end = period_start + timedelta(days=30)
+        if now >= period_end:
+            raise LimitExceeded("Plano expirado. Renovação pendente.")
 
         limit = plan.get("monthly_limit", 0)
 
-    # =========================
-    # Calculate used in period
-    # =========================
     used_rows = (
         supabase
         .table("usage")
@@ -111,9 +96,6 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
 
     used = sum(r.get("amount") or 0 for r in used_rows)
 
-    # =========================
-    # Within plan limit
-    # =========================
     if limit and used + amount <= limit:
         insert_usage(amount)
         return
@@ -122,9 +104,6 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
     if limit:
         needed = max(0, (used + amount) - limit)
 
-    # =========================
-    # Credit packs
-    # =========================
     packs = (
         supabase
         .table("credit_packs")

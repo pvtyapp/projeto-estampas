@@ -27,6 +27,7 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false)
 
   const fetchedRef = useRef(false)
+  const sessionRef = useRef<string | null>(null)
 
   const fetchUsage = async () => {
     if (!session) return
@@ -41,16 +42,25 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    // logout → limpa estado
     if (!sessionLoading && !session) {
       setUsage(null)
       fetchedRef.current = false
+      sessionRef.current = null
       return
     }
 
-    // login / session ready → fetch uma única vez
-    if (!sessionLoading && session && !fetchedRef.current) {
-      fetchUsage()
+    if (!sessionLoading && session) {
+      const userObj = session.user as unknown as { id?: string; sub?: string }
+      const currentUser = userObj.id || userObj.sub || null
+
+      if (sessionRef.current !== currentUser) {
+        fetchedRef.current = false
+        sessionRef.current = currentUser
+      }
+
+      if (!fetchedRef.current) {
+        fetchUsage()
+      }
     }
   }, [sessionLoading, session])
 

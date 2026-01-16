@@ -5,24 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from supabase import create_client
 import httpx
 
-# =====================================================
-# CONFIG
-# =====================================================
-
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
-
-
-# =====================================================
-# SUPABASE
-# =====================================================
 
 def get_supabase():
     return create_client(
@@ -31,21 +21,7 @@ def get_supabase():
         http_client=httpx.Client(http2=False, timeout=30.0),
     )
 
-
-# =====================================================
-# AUTH
-# =====================================================
-# ⚠️ IMPORTANTE:
-# Essa função deve vir do seu auth central (Supabase / NextAuth / etc)
-# Ela DEVE retornar algo assim:
-# { "id": "...", "email": "..." }
-
 from backend.auth import get_current_user
-
-
-# =====================================================
-# PLANOS / PRICES
-# =====================================================
 
 PRICE_MAP = {
     "start": os.getenv("STRIPE_PRICE_START"),
@@ -55,11 +31,6 @@ PRICE_MAP = {
 
 PRICE_TO_PLAN = {v: k for k, v in PRICE_MAP.items() if v}
 VALID_PLANS = set(PRICE_MAP.keys())
-
-
-# =====================================================
-# CHECKOUT
-# =====================================================
 
 @router.post("/checkout")
 def create_checkout(
@@ -71,16 +42,18 @@ def create_checkout(
 
     price_id = PRICE_MAP.get(plan)
     if not price_id:
-        raise HTTPException(status_code=500, detail="Price não configurado")
+        raise HTTPException(status_code=400, detail="Price não configurado")
+
+    user_id = user.get("sub") or user.get("id")
 
     session = stripe.checkout.Session.create(
         mode="subscription",
         payment_method_types=["card"],
         line_items=[{"price": price_id, "quantity": 1}],
         customer_email=user["email"],
-        client_reference_id=user["id"],
+        client_reference_id=user_id,
         metadata={
-            "user_id": user["id"],
+            "user_id": user_id,
             "plan": plan,
         },
         success_url=f"{FRONTEND_URL}/work?checkout=success",
@@ -88,11 +61,6 @@ def create_checkout(
     )
 
     return {"url": session.url}
-
-
-# =====================================================
-# WEBHOOK
-# =====================================================
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
@@ -103,19 +71,13 @@ async def stripe_webhook(request: Request):
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except Exception as e:
-        print("❌ Webhook inválido:", e)
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid webhook")
 
     supabase = get_supabase()
     event_type = event["type"]
     obj = event["data"]["object"]
 
-    print("📨 Stripe event recebido:", event_type)
-
-    # -------------------------------------------------
-    # CHECKOUT FINALIZADO
-    # -------------------------------------------------
     if event_type == "checkout.session.completed":
         user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
         customer_id = obj.get("customer")
@@ -130,9 +92,6 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
-    # -------------------------------------------------
-    # FATURA PAGA → ATIVA / RENOVA PLANO
-    # -------------------------------------------------
     if event_type == "invoice.payment_succeeded":
         customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
@@ -154,7 +113,6 @@ async def stripe_webhook(request: Request):
             .execute()
             .data
         )
-
         if not profiles:
             return {"status": "ok"}
 
@@ -172,12 +130,8 @@ async def stripe_webhook(request: Request):
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", profiles[0]["id"]).execute()
 
-        print("✅ Plano aplicado:", plan_id)
         return {"status": "ok"}
 
-    # -------------------------------------------------
-    # ALTERAÇÃO DE ASSINATURA
-    # -------------------------------------------------
     if event_type == "customer.subscription.updated":
         subscription_id = obj["id"]
 
@@ -203,9 +157,6 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
-    # -------------------------------------------------
-    # CANCELAMENTO → VOLTA PARA FREE
-    # -------------------------------------------------
     if event_type == "customer.subscription.deleted":
         subscription_id = obj["id"]
 
@@ -217,7 +168,6 @@ async def stripe_webhook(request: Request):
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }).eq("stripe_subscription_id", subscription_id).execute()
 
-        print("⚠️ Assinatura cancelada → plano free")
         return {"status": "ok"}
 
     return {"status": "ok"}

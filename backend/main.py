@@ -1,6 +1,7 @@
 import uuid
 import os
 from datetime import datetime, timezone, timedelta
+from math import ceil
 from fastapi import FastAPI, HTTPException, Depends, Request, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,7 +30,6 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 LOCAL_TZ = timezone(timedelta(hours=-3))
-
 DEV_NO_AUTH = os.getenv("DEV_NO_AUTH", "false").lower() == "true"
 
 app = FastAPI(title="Projeto Estampas API", version="7.6")
@@ -65,7 +65,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     print("🔥 Unhandled exception:", repr(exc))
     return JSONResponse(
         status_code=500,
-        content={"error": "internal_server_error","detail": str(exc)},
+        content={"error": "internal_server_error", "detail": str(exc)},
         headers={
             "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
             "Access-Control-Allow-Credentials": "true",
@@ -133,7 +133,6 @@ def after_signup(payload: dict, x_internal_key: str = Header(None)):
         return {"ok": True, "skipped": True}
 
     meta = payload.get("user_metadata") or payload
-
     person_type = meta.get("person_type") or ("cpf" if meta.get("cpf") else None)
 
     fiscal = {
@@ -543,57 +542,62 @@ def get_print_stats(
     }
 
 # =========================
-# ACCOUNT
+# ACCOUNT / USAGE (ATUALIZADO)
 # =========================
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    profile_rows = (
+    profile = (
         supabase.table("profiles")
         .select("*")
         .eq("id", user["sub"])
         .limit(1)
         .execute()
         .data
-        or []
-    )
-    profile = profile_rows[0] if profile_rows else {}
+        or [{}]
+    )[0]
 
     plan_id = profile.get("plan_id") or "free"
 
-    plan_rows = (
+    plan = (
         supabase.table("plans")
         .select("*")
         .eq("id", plan_id)
         .limit(1)
         .execute()
         .data
-        or []
-    )
-    plan = plan_rows[0] if plan_rows else {}
+        or [{}]
+    )[0]
 
     now = datetime.now(timezone.utc)
 
-    # ===== PERÍODO E LIMITE =====
-    if plan.get("daily_limit"):
+    # FREE / DAILY
+    if plan.get("daily_limit") is not None:
         period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(days=1)
         limit = plan.get("daily_limit", 0)
-    else:
-        if profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
-            period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
-            period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
-        else:
-            period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            period_end = period_start + timedelta(days=30)
 
+    # PAID / STRIPE 30 DIAS CORRIDOS
+    else:
+        if not profile.get("stripe_current_period_start") or not profile.get("stripe_current_period_end"):
+            return {
+                "plan": plan_id,
+                "used": 0,
+                "limit": plan.get("monthly_limit", 0),
+                "credits": 0,
+                "remaining_days": 0,
+                "status": "blocked",
+                "library_limit": plan.get("library_limit"),
+            }
+
+        period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
+        period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
         limit = plan.get("monthly_limit", 0)
 
-    remaining_days = max(0, (period_end - now).days)
+    remaining_days = max(0, ceil((period_end - now).total_seconds() / 86400))
 
-    rows = (
-        supabase
-        .table("usage")
+    used_rows = (
+        supabase.table("usage")
         .select("amount")
         .eq("user_id", user["sub"])
         .gte("created_at", period_start.isoformat())
@@ -603,9 +607,9 @@ def get_my_usage(user=Depends(current_user)):
         or []
     )
 
-    used = sum(r["amount"] or 0 for r in rows)
+    used = sum(r.get("amount") or 0 for r in used_rows)
 
-    credits = (
+    credit_rows = (
         supabase.table("credit_packs")
         .select("remaining")
         .eq("user_id", user["sub"])
@@ -613,7 +617,7 @@ def get_my_usage(user=Depends(current_user)):
         .data
         or []
     )
-    total_credits = sum(c["remaining"] or 0 for c in credits)
+    total_credits = sum(c.get("remaining") or 0 for c in credit_rows)
 
     status = "ok"
     if limit and used >= limit:
@@ -630,6 +634,8 @@ def get_my_usage(user=Depends(current_user)):
         "status": status,
         "library_limit": plan.get("library_limit"),
     }
+
+
 
 # =========================
 # SETTINGS
@@ -724,3 +730,4 @@ def register(payload: dict):
         supabase.table("user_fiscal_data").insert(fiscal).execute()
 
     return {"ok": True}
+
