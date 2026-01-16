@@ -18,6 +18,12 @@ PRICE_MAP = {
     "extra50": "price_1So5YbIcNQlLzrcJPgjlBSpj",
 }
 
+PRICE_TO_PLAN = {
+    "price_1So5VLIcNQlLzrcJU7Hja5BU": "start",
+    "price_1So5WLIcNQlLzrcJnthHWSto": "pro",
+    "price_1So5WrIcNQlLzrcJldLXVh3C": "ent",
+}
+
 SUBSCRIPTION_PLANS = {"start", "pro", "ent"}
 
 
@@ -77,6 +83,13 @@ async def stripe_webhook(request: Request):
         if not customer_id or not subscription_id:
             return {"status": "ok"}
 
+        lines = obj.get("lines", {}).get("data", [])
+        if not lines:
+            return {"status": "ok"}
+
+        price_id = lines[0].get("price", {}).get("id")
+        plan_id = PRICE_TO_PLAN.get(price_id)
+
         profiles = (
             supabase.table("profiles")
             .select("id")
@@ -98,7 +111,7 @@ async def stripe_webhook(request: Request):
         if not period_start or not period_end:
             return {"status": "ok"}
 
-        supabase.table("profiles").update({
+        update_data = {
             "stripe_subscription_id": stripe_sub.id,
             "stripe_current_period_start": datetime.fromtimestamp(
                 period_start, tz=timezone.utc
@@ -107,7 +120,12 @@ async def stripe_webhook(request: Request):
                 period_end, tz=timezone.utc
             ).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", user_id).execute()
+        }
+
+        if plan_id:
+            update_data["plan_id"] = plan_id
+
+        supabase.table("profiles").update(update_data).eq("id", user_id).execute()
 
     if event_type == "customer.subscription.updated":
         customer_id = obj.get("customer")
