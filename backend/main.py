@@ -548,17 +548,33 @@ def get_print_stats(
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    profile_rows = supabase.table("profiles").select("*").eq("id", user["sub"]).execute().data or []
+    profile_rows = (
+        supabase.table("profiles")
+        .select("*")
+        .eq("id", user["sub"])
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
     profile = profile_rows[0] if profile_rows else {}
 
     plan_id = profile.get("plan_id") or "free"
 
-    plan_rows = supabase.table("plans").select("*").eq("id", plan_id).execute().data or []
+    plan_rows = (
+        supabase.table("plans")
+        .select("*")
+        .eq("id", plan_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
     plan = plan_rows[0] if plan_rows else {}
 
     now = datetime.now(timezone.utc)
 
-    # --- Stripe subscription window ---
+    # ===== Stripe subscription window (source of truth) =====
     period_start = None
     period_end = None
 
@@ -566,24 +582,24 @@ def get_my_usage(user=Depends(current_user)):
         period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
         period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
 
-    remaining_days = 0
-    if period_end:
-        remaining_days = max(0, (period_end - now).days)
+    # fallback apenas se FREE (sem assinatura)
+    if not period_start:
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if not period_end:
+        period_end = period_start + timedelta(days=30)
 
-    # --- Usage window ---
-    if plan.get("daily_limit"):
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        limit = plan["daily_limit"]
-    else:
-        start = period_start or now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        limit = plan.get("monthly_limit") or 100
+    remaining_days = max(0, (period_end - now).days)
+
+    # ===== Usage sempre baseado no período da assinatura =====
+    limit = plan.get("monthly_limit") or plan.get("daily_limit") or 0
 
     rows = (
         supabase
         .table("usage")
         .select("amount")
         .eq("user_id", user["sub"])
-        .gte("created_at", start.isoformat())
+        .gte("created_at", period_start.isoformat())
+        .lte("created_at", period_end.isoformat())
         .execute()
         .data
         or []
@@ -591,13 +607,20 @@ def get_my_usage(user=Depends(current_user)):
 
     used = sum(r["amount"] or 0 for r in rows)
 
-    credits = supabase.table("credit_packs").select("remaining").eq("user_id", user["sub"]).execute().data or []
+    credits = (
+        supabase.table("credit_packs")
+        .select("remaining")
+        .eq("user_id", user["sub"])
+        .execute()
+        .data
+        or []
+    )
     total_credits = sum(c["remaining"] or 0 for c in credits)
 
     status = "ok"
-    if used >= limit:
+    if limit and used >= limit:
         status = "using_credits" if total_credits > 0 else "blocked"
-    elif used >= limit * 0.8:
+    elif limit and used >= limit * 0.8:
         status = "warning"
 
     return {
@@ -612,6 +635,7 @@ def get_my_usage(user=Depends(current_user)):
 
 # =========================
 # SETTINGS
+
 # =========================
 
 @app.get("/me/settings")

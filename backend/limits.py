@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 class LimitExceeded(Exception):
     pass
@@ -15,6 +15,7 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
             "id, plan_id, stripe_current_period_start, stripe_current_period_end"
         )
         .eq("id", user_id)
+        .limit(1)
         .execute()
     )
 
@@ -41,6 +42,7 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         .table("plans")
         .select("*")
         .eq("id", plan_id)
+        .limit(1)
         .execute()
     )
 
@@ -64,80 +66,59 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         supabase.table("usage").insert(row).execute()
 
     # =========================
-    # DAILY limit
+    # Define usage window
     # =========================
+    period_start = None
+    period_end = None
+
+    # 1) DAILY PLAN → reset diário
     if plan.get("daily_limit") is not None:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        period_end = period_start + timedelta(days=1)
 
-        used_today = (
-            supabase
-            .table("usage")
-            .select("amount")
-            .eq("user_id", user_id)
-            .eq("kind", "print")
-            .gte("created_at", start.isoformat())
-            .execute()
-            .data or []
-        )
+    # 2) MONTHLY / SUBSCRIPTION PLAN → período Stripe
+    elif profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
+        try:
+            period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
+            period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
+        except Exception:
+            period_start = None
+            period_end = None
 
-        total_today = sum(r.get("amount") or 0 for r in used_today)
-
-        if total_today + amount <= plan["daily_limit"]:
-            insert_usage(amount)
-            return
-
-        needed = (total_today + amount) - plan["daily_limit"]
-        needed = min(needed, amount)
-
-    else:
-        needed = 0
+    # 3) FREE / fallback
+    if not period_start or not period_end:
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        period_end = period_start + timedelta(days=1)
 
     # =========================
-    # PERIOD (subscription) limit
+    # Calculate used in period
     # =========================
-    period_start = profile.get("stripe_current_period_start")
-    period_end = profile.get("stripe_current_period_end")
-
-    start = None
-
-    if period_start:
-        try:
-            start = datetime.fromisoformat(period_start)
-        except Exception:
-            start = None
-
-    if period_end:
-        try:
-            end = datetime.fromisoformat(period_end)
-            if end < now:
-                start = now
-        except Exception:
-            pass
-
-    if not start:
-        # fallback (free ou legado)
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-
-    used_period = (
+    used_rows = (
         supabase
         .table("usage")
         .select("amount")
         .eq("user_id", user_id)
         .eq("kind", "print")
-        .gte("created_at", start.isoformat())
+        .gte("created_at", period_start.isoformat())
+        .lt("created_at", period_end.isoformat())
         .execute()
         .data or []
     )
 
-    total_period = sum(r.get("amount") or 0 for r in used_period)
+    used = sum(r.get("amount") or 0 for r in used_rows)
 
-    if needed == 0 and plan.get("monthly_limit") is not None:
-        if total_period + amount <= plan["monthly_limit"]:
-            insert_usage(amount)
-            return
+    limit = plan.get("daily_limit") or plan.get("monthly_limit")
 
-        needed = (total_period + amount) - plan["monthly_limit"]
-        needed = min(needed, amount)
+    # =========================
+    # Within plan limit
+    # =========================
+    if limit is not None and used + amount <= limit:
+        insert_usage(amount)
+        return
+
+    needed = amount
+    if limit is not None:
+        needed = max(0, (used + amount) - limit)
 
     # =========================
     # Credit packs
