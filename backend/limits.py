@@ -11,7 +11,9 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
     profile_res = (
         supabase
         .table("profiles")
-        .select("id, plan_id")
+        .select(
+            "id, plan_id, stripe_current_period_start, stripe_current_period_end"
+        )
         .eq("id", user_id)
         .execute()
     )
@@ -21,9 +23,15 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
             "id": user_id,
             "plan_id": "free",
         }).execute()
-        plan_id = "free"
+        profile = {
+            "plan_id": "free",
+            "stripe_current_period_start": None,
+            "stripe_current_period_end": None,
+        }
     else:
-        plan_id = profile_res.data[0].get("plan_id") or "free"
+        profile = profile_res.data[0]
+
+    plan_id = profile.get("plan_id") or "free"
 
     # =========================
     # Get plan
@@ -78,20 +86,27 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
             insert_usage(amount)
             return
 
-        # 🔥 Estourou DAILY → tentar créditos
         needed = (total_today + amount) - plan["daily_limit"]
         needed = min(needed, amount)
-
 
     else:
         needed = 0
 
     # =========================
-    # MONTHLY limit
+    # PERIOD (subscription) limit
     # =========================
-    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_start = profile.get("stripe_current_period_start")
 
-    used_month = (
+    if period_start:
+        try:
+            start = datetime.fromisoformat(period_start)
+        except Exception:
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        # fallback (free ou legado)
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    used_period = (
         supabase
         .table("usage")
         .select("amount")
@@ -102,16 +117,15 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         .data or []
     )
 
-    total_month = sum(r.get("amount") or 0 for r in used_month)
+    total_period = sum(r.get("amount") or 0 for r in used_period)
 
     if needed == 0 and plan.get("monthly_limit") is not None:
-        if total_month + amount <= plan["monthly_limit"]:
+        if total_period + amount <= plan["monthly_limit"]:
             insert_usage(amount)
             return
 
-        needed = (total_month + amount) - plan["monthly_limit"]
+        needed = (total_period + amount) - plan["monthly_limit"]
         needed = min(needed, amount)
-
 
     # =========================
     # Credit packs
