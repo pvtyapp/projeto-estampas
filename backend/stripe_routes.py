@@ -9,14 +9,9 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
 FRONTEND_URL = os.getenv("FRONTEND_URL", "")
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
-
-# =========================
-# SUPABASE
-# =========================
 
 def get_supabase():
     return create_client(
@@ -24,15 +19,7 @@ def get_supabase():
         SUPABASE_SERVICE_ROLE_KEY,
     )
 
-# =========================
-# AUTH
-# =========================
-
 from backend.auth import get_current_user
-
-# =========================
-# PLANOS / PRICES
-# =========================
 
 PRICE_MAP = {
     "start": os.getenv("STRIPE_PRICE_START"),
@@ -42,10 +29,6 @@ PRICE_MAP = {
 
 PRICE_TO_PLAN = {v: k for k, v in PRICE_MAP.items() if v}
 VALID_PLANS = set(PRICE_MAP.keys())
-
-# =========================
-# CHECKOUT
-# =========================
 
 @router.post("/checkout")
 def create_checkout(
@@ -63,23 +46,14 @@ def create_checkout(
 
     session = stripe.checkout.Session.create(
         mode="subscription",
-        payment_method_types=["card"],
         line_items=[{"price": price_id, "quantity": 1}],
         customer_email=user["email"],
         client_reference_id=user_id,
-        metadata={
-            "user_id": user_id,
-            "plan": plan,
-        },
         success_url=f"{FRONTEND_URL}/work?checkout=success",
         cancel_url=f"{FRONTEND_URL}/plans?checkout=cancel",
     )
 
     return {"url": session.url}
-
-# =========================
-# WEBHOOK
-# =========================
 
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
@@ -97,11 +71,8 @@ async def stripe_webhook(request: Request):
     event_type = event["type"]
     obj = event["data"]["object"]
 
-    # -------------------------
-    # CHECKOUT COMPLETED
-    # -------------------------
     if event_type == "checkout.session.completed":
-        user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
+        user_id = obj.get("client_reference_id")
         customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
 
@@ -114,19 +85,17 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
-    # -------------------------
-    # PAYMENT SUCCEEDED → APLICA PLANO
-    # -------------------------
     if event_type == "invoice.payment_succeeded":
-        customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
-        lines = obj.get("lines", {}).get("data", [])
+        customer_id = obj.get("customer")
 
-        if not customer_id or not subscription_id or not lines:
+        if not subscription_id or not customer_id:
             return {"status": "ok"}
 
-        price_id = lines[0]["price"]["id"]
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        price_id = subscription["items"]["data"][0]["price"]["id"]
         plan_id = PRICE_TO_PLAN.get(price_id)
+
         if not plan_id:
             return {"status": "ok"}
 
@@ -142,8 +111,6 @@ async def stripe_webhook(request: Request):
         if not profiles:
             return {"status": "ok"}
 
-        subscription = stripe.Subscription.retrieve(subscription_id)
-
         supabase.table("profiles").update({
             "plan_id": plan_id,
             "stripe_subscription_id": subscription_id,
@@ -158,37 +125,6 @@ async def stripe_webhook(request: Request):
 
         return {"status": "ok"}
 
-    # -------------------------
-    # SUBSCRIPTION UPDATED
-    # -------------------------
-    if event_type == "customer.subscription.updated":
-        subscription_id = obj["id"]
-
-        profiles = (
-            supabase.table("profiles")
-            .select("id")
-            .eq("stripe_subscription_id", subscription_id)
-            .limit(1)
-            .execute()
-            .data
-        )
-
-        if profiles:
-            supabase.table("profiles").update({
-                "stripe_current_period_start": datetime.fromtimestamp(
-                    obj["current_period_start"], tz=timezone.utc
-                ).isoformat(),
-                "stripe_current_period_end": datetime.fromtimestamp(
-                    obj["current_period_end"], tz=timezone.utc
-                ).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", profiles[0]["id"]).execute()
-
-        return {"status": "ok"}
-
-    # -------------------------
-    # SUBSCRIPTION DELETED
-    # -------------------------
     if event_type == "customer.subscription.deleted":
         subscription_id = obj["id"]
 
