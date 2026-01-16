@@ -49,6 +49,7 @@ def create_checkout(
         line_items=[{"price": price_id, "quantity": 1}],
         customer_email=user["email"],
         client_reference_id=user_id,
+        metadata={"user_id": user_id},
         success_url=f"{FRONTEND_URL}/work?checkout=success",
         cancel_url=f"{FRONTEND_URL}/plans?checkout=cancel",
     )
@@ -72,11 +73,11 @@ async def stripe_webhook(request: Request):
     obj = event["data"]["object"]
 
     if event_type == "checkout.session.completed":
-        user_id = obj.get("client_reference_id")
+        user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
         customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
 
-        if user_id and customer_id:
+        if user_id:
             supabase.table("profiles").update({
                 "stripe_customer_id": customer_id,
                 "stripe_subscription_id": subscription_id,
@@ -89,7 +90,7 @@ async def stripe_webhook(request: Request):
         subscription_id = obj.get("subscription")
         customer_id = obj.get("customer")
 
-        if not subscription_id or not customer_id:
+        if not subscription_id:
             return {"status": "ok"}
 
         subscription = stripe.Subscription.retrieve(subscription_id)
@@ -99,20 +100,26 @@ async def stripe_webhook(request: Request):
         if not plan_id:
             return {"status": "ok"}
 
-        profiles = (
+        profile = (
             supabase.table("profiles")
             .select("id")
-            .eq("stripe_customer_id", customer_id)
+            .or_(
+                f"stripe_subscription_id.eq.{subscription_id},stripe_customer_id.eq.{customer_id}"
+            )
             .limit(1)
             .execute()
             .data
         )
 
-        if not profiles:
-            return {"status": "ok"}
+        if not profile:
+            user_id = subscription.get("metadata", {}).get("user_id")
+            if not user_id:
+                return {"status": "ok"}
+            profile = [{"id": user_id}]
 
         supabase.table("profiles").update({
             "plan_id": plan_id,
+            "stripe_customer_id": customer_id,
             "stripe_subscription_id": subscription_id,
             "stripe_current_period_start": datetime.fromtimestamp(
                 subscription["current_period_start"], tz=timezone.utc
@@ -121,7 +128,7 @@ async def stripe_webhook(request: Request):
                 subscription["current_period_end"], tz=timezone.utc
             ).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", profiles[0]["id"]).execute()
+        }).eq("id", profile[0]["id"]).execute()
 
         return {"status": "ok"}
 
