@@ -65,20 +65,28 @@ async def stripe_webhook(request: Request):
 
     obj = event["data"]["object"]
 
+    # =========================
+    # SUBSCRIPTION CREATED
+    # =========================
     if event_type == "customer.subscription.created":
-        user_id = obj.get("metadata", {}).get("user_id")
         subscription_id = obj.get("id")
+        customer_id = obj.get("customer")
 
-        if user_id and subscription_id:
+        if subscription_id and customer_id:
             supabase.table("profiles").update({
                 "stripe_subscription_id": subscription_id,
+                "stripe_customer_id": customer_id,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", user_id).execute()
+            }).eq("stripe_subscription_id", subscription_id).execute()
 
+    # =========================
+    # CHECKOUT COMPLETED
+    # =========================
     if event_type == "checkout.session.completed":
         user_id = obj.get("metadata", {}).get("user_id")
         plan = obj.get("metadata", {}).get("plan")
         subscription_id = obj.get("subscription")
+        customer_id = obj.get("customer")
 
         if user_id and plan in SUBSCRIPTION_PLANS and subscription_id:
             stripe.Subscription.modify(
@@ -89,63 +97,105 @@ async def stripe_webhook(request: Request):
             supabase.table("profiles").update({
                 "plan_id": plan,
                 "stripe_subscription_id": subscription_id,
+                "stripe_customer_id": customer_id,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", user_id).execute()
 
+    # =========================
+    # INVOICE PAID (SOURCE OF TRUTH)
+    # =========================
     if event_type == "invoice.payment_succeeded":
+        customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
 
-        if subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription_id)
-            user_id = stripe_sub.get("metadata", {}).get("user_id")
+        if not customer_id or not subscription_id:
+            return {"status": "ok"}
 
-            period_start = stripe_sub.get("current_period_start")
-            period_end = stripe_sub.get("current_period_end")
+        profile = (
+            supabase.table("profiles")
+            .select("id")
+            .eq("stripe_customer_id", customer_id)
+            .single()
+            .execute()
+            .data
+        )
 
-            if user_id and period_start and period_end:
-                supabase.table("profiles").update({
-                    "stripe_subscription_id": stripe_sub.id,
-                    "stripe_current_period_start": datetime.fromtimestamp(
-                        period_start, tz=timezone.utc
-                    ).isoformat(),
-                    "stripe_current_period_end": datetime.fromtimestamp(
-                        period_end, tz=timezone.utc
-                    ).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }).eq("id", user_id).execute()
+        if not profile:
+            return {"status": "ok"}
 
+        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+
+        period_start = stripe_sub.get("current_period_start")
+        period_end = stripe_sub.get("current_period_end")
+
+        if not period_start or not period_end:
+            return {"status": "ok"}
+
+        supabase.table("profiles").update({
+            "stripe_subscription_id": stripe_sub.id,
+            "stripe_current_period_start": datetime.fromtimestamp(
+                period_start, tz=timezone.utc
+            ).isoformat(),
+            "stripe_current_period_end": datetime.fromtimestamp(
+                period_end, tz=timezone.utc
+            ).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", profile["id"]).execute()
+
+    # =========================
+    # SUBSCRIPTION UPDATED
+    # =========================
     if event_type == "customer.subscription.updated":
         subscription_id = obj.get("id")
+        customer_id = obj.get("customer")
 
-        if subscription_id:
-            stripe_sub = stripe.Subscription.retrieve(subscription_id)
-            user_id = stripe_sub.get("metadata", {}).get("user_id")
+        if not subscription_id or not customer_id:
+            return {"status": "ok"}
 
-            period_start = stripe_sub.get("current_period_start")
-            period_end = stripe_sub.get("current_period_end")
+        profile = (
+            supabase.table("profiles")
+            .select("id")
+            .eq("stripe_customer_id", customer_id)
+            .single()
+            .execute()
+            .data
+        )
 
-            if user_id and period_start and period_end:
-                supabase.table("profiles").update({
-                    "stripe_subscription_id": stripe_sub.id,
-                    "stripe_current_period_start": datetime.fromtimestamp(
-                        period_start, tz=timezone.utc
-                    ).isoformat(),
-                    "stripe_current_period_end": datetime.fromtimestamp(
-                        period_end, tz=timezone.utc
-                    ).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }).eq("id", user_id).execute()
+        if not profile:
+            return {"status": "ok"}
 
+        stripe_sub = stripe.Subscription.retrieve(subscription_id)
+
+        period_start = stripe_sub.get("current_period_start")
+        period_end = stripe_sub.get("current_period_end")
+
+        if not period_start or not period_end:
+            return {"status": "ok"}
+
+        supabase.table("profiles").update({
+            "stripe_subscription_id": stripe_sub.id,
+            "stripe_current_period_start": datetime.fromtimestamp(
+                period_start, tz=timezone.utc
+            ).isoformat(),
+            "stripe_current_period_end": datetime.fromtimestamp(
+                period_end, tz=timezone.utc
+            ).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", profile["id"]).execute()
+
+    # =========================
+    # SUBSCRIPTION DELETED
+    # =========================
     if event_type == "customer.subscription.deleted":
-        user_id = obj.get("metadata", {}).get("user_id")
+        customer_id = obj.get("customer")
 
-        if user_id:
+        if customer_id:
             supabase.table("profiles").update({
                 "plan_id": "free",
                 "stripe_subscription_id": None,
                 "stripe_current_period_start": None,
                 "stripe_current_period_end": None,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", user_id).execute()
+            }).eq("stripe_customer_id", customer_id).execute()
 
     return {"status": "ok"}
