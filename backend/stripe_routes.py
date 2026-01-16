@@ -1,62 +1,145 @@
-import os
-import stripe
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
-from supabase import create_client
+# stripe_routes.py
+# FINAL – robust, production-safe Stripe integration for plans, subscriptions and credits
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+import os
+import json
+import logging
+from typing import Optional
+
+import stripe
+from fastapi import APIRouter, Request, HTTPException
+from supabase import create_client, Client
+
+# -----------------------------------------------------------------------------
+# Config
+# -----------------------------------------------------------------------------
+
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+STRIPE_PRICE_START = os.getenv("STRIPE_PRICE_START")
+STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO")
+STRIPE_PRICE_ENT = os.getenv("STRIPE_PRICE_ENT")
+
+STRIPE_PRICE_EXTRA_20 = os.getenv("STRIPE_PRICE_EXTRA_20")
+STRIPE_PRICE_EXTRA_50 = os.getenv("STRIPE_PRICE_EXTRA_50")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "")
 
-router = APIRouter(prefix="/stripe", tags=["stripe"])
+if not STRIPE_SECRET_KEY:
+    raise RuntimeError("STRIPE_SECRET_KEY not set")
 
-def get_supabase():
-    return create_client(
-        SUPABASE_URL,
-        SUPABASE_SERVICE_ROLE_KEY,
-    )
+if not STRIPE_WEBHOOK_SECRET:
+    raise RuntimeError("STRIPE_WEBHOOK_SECRET not set")
 
-from backend.auth import get_current_user
+stripe.api_key = STRIPE_SECRET_KEY
 
-PRICE_MAP = {
-    "start": os.getenv("STRIPE_PRICE_START"),
-    "pro": os.getenv("STRIPE_PRICE_PRO"),
-    "ent": os.getenv("STRIPE_PRICE_ENT"),
+router = APIRouter()
+logger = logging.getLogger("stripe")
+logger.setLevel(logging.INFO)
+
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+
+def get_supabase() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+
+PRICE_TO_PLAN = {
+    STRIPE_PRICE_START: "start",
+    STRIPE_PRICE_PRO: "pro",
+    STRIPE_PRICE_ENT: "ent",
 }
 
-PRICE_TO_PLAN = {v: k for k, v in PRICE_MAP.items() if v}
-VALID_PLANS = set(PRICE_MAP.keys())
 
-@router.post("/checkout")
-def create_checkout(
-    plan: str,
-    user: dict = Depends(get_current_user),
-):
-    if plan not in VALID_PLANS:
-        raise HTTPException(status_code=400, detail="Plano inválido")
+EXTRA_PRICE_TO_CREDITS = {
+    STRIPE_PRICE_EXTRA_20: 20,
+    STRIPE_PRICE_EXTRA_50: 50,
+}
 
-    price_id = PRICE_MAP.get(plan)
+
+def resolve_plan_from_price(price_id: Optional[str]) -> Optional[str]:
     if not price_id:
-        raise HTTPException(status_code=400, detail="Price não configurado")
+        return None
+    return PRICE_TO_PLAN.get(price_id)
 
-    user_id = user.get("sub") or user.get("id")
 
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{"price": price_id, "quantity": 1}],
-        customer_email=user["email"],
-        client_reference_id=user_id,
-        metadata={"user_id": user_id},
-        success_url=f"{FRONTEND_URL}/work?checkout=success",
-        cancel_url=f"{FRONTEND_URL}/plans?checkout=cancel",
+# -----------------------------------------------------------------------------
+# Checkout
+# -----------------------------------------------------------------------------
+
+@router.post("/stripe/checkout")
+def stripe_checkout(plan: str, request: Request):
+    if plan not in ("start", "pro", "ent", "extra20", "extra50"):
+        raise HTTPException(status_code=400, detail="Invalid plan")
+
+    user = request.state.user
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    supabase = get_supabase()
+
+    profile = (
+        supabase.table("profiles")
+        .select("*")
+        .eq("id", user["id"])
+        .single()
+        .execute()
+        .data
     )
+
+    customer_id = profile.get("stripe_customer_id")
+
+    if not customer_id:
+        customer = stripe.Customer.create(
+            email=user.get("email"),
+            metadata={"user_id": user["id"]},
+        )
+        customer_id = customer.id
+
+        supabase.table("profiles").update(
+            {"stripe_customer_id": customer_id}
+        ).eq("id", user["id"]).execute()
+
+    if plan in ("start", "pro", "ent"):
+        price_id = {
+            "start": STRIPE_PRICE_START,
+            "pro": STRIPE_PRICE_PRO,
+            "ent": STRIPE_PRICE_ENT,
+        }[plan]
+
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer_id,
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=f"{os.getenv('FRONTEND_URL')}/work?checkout=success",
+            cancel_url=f"{os.getenv('FRONTEND_URL')}/plans",
+        )
+
+    else:
+        price_id = {
+            "extra20": STRIPE_PRICE_EXTRA_20,
+            "extra50": STRIPE_PRICE_EXTRA_50,
+        }[plan]
+
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            customer=customer_id,
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=f"{os.getenv('FRONTEND_URL')}/work?checkout=success",
+            cancel_url=f"{os.getenv('FRONTEND_URL')}/plans",
+        )
 
     return {"url": session.url}
 
-@router.post("/webhook")
+
+# -----------------------------------------------------------------------------
+# Webhook
+# -----------------------------------------------------------------------------
+
+@router.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -65,84 +148,89 @@ async def stripe_webhook(request: Request):
         event = stripe.Webhook.construct_event(
             payload, sig_header, STRIPE_WEBHOOK_SECRET
         )
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid webhook")
+    except Exception as e:
+        logger.error(f"Webhook signature error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
     supabase = get_supabase()
-    event_type = event["type"]
-    obj = event["data"]["object"]
 
-    if event_type == "checkout.session.completed":
-        user_id = obj.get("client_reference_id") or obj.get("metadata", {}).get("user_id")
-        customer_id = obj.get("customer")
-        subscription_id = obj.get("subscription")
+    # ------------------------------------------------------------------
+    # Subscription CREATED / UPDATED  -> apply plan
+    # ------------------------------------------------------------------
+    if event["type"] in (
+        "customer.subscription.created",
+        "customer.subscription.updated",
+    ):
+        subscription = event["data"]["object"]
+        customer_id = subscription.get("customer")
 
-        if user_id:
-            supabase.table("profiles").update({
-                "stripe_customer_id": customer_id,
-                "stripe_subscription_id": subscription_id,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("id", user_id).execute()
+        items = subscription["items"]["data"]
+        price_id = items[0]["price"]["id"] if items else None
 
-        return {"status": "ok"}
+        plan_id = resolve_plan_from_price(price_id)
 
-    if event_type == "invoice.payment_succeeded":
-        subscription_id = obj.get("subscription")
-        customer_id = obj.get("customer")
+        if plan_id:
+            supabase.table("profiles").update(
+                {
+                    "plan_id": plan_id,
+                    "stripe_subscription_id": subscription["id"],
+                }
+            ).eq("stripe_customer_id", customer_id).execute()
 
-        if not subscription_id:
-            return {"status": "ok"}
+    # ------------------------------------------------------------------
+    # Subscription DELETED -> back to free
+    # ------------------------------------------------------------------
+    if event["type"] == "customer.subscription.deleted":
+        subscription = event["data"]["object"]
+        customer_id = subscription.get("customer")
 
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        price_id = subscription["items"]["data"][0]["price"]["id"]
-        plan_id = PRICE_TO_PLAN.get(price_id)
+        supabase.table("profiles").update(
+            {
+                "plan_id": "free",
+                "stripe_subscription_id": None,
+            }
+        ).eq("stripe_customer_id", customer_id).execute()
 
-        if not plan_id:
-            return {"status": "ok"}
+    # ------------------------------------------------------------------
+    # Invoice paid -> monthly renewal (credits / limits)
+    # ------------------------------------------------------------------
+    if event["type"] == "invoice.payment_succeeded":
+        invoice = event["data"]["object"]
+        customer_id = invoice.get("customer")
 
-        profile = (
-            supabase.table("profiles")
-            .select("id")
-            .or_(
-                f"stripe_subscription_id.eq.{subscription_id},stripe_customer_id.eq.{customer_id}"
-            )
-            .limit(1)
-            .execute()
-            .data
-        )
+        # renewal logic is handled elsewhere (limits reset by date)
+        logger.info(f"Invoice paid for customer {customer_id}")
 
-        if not profile:
-            user_id = subscription.get("metadata", {}).get("user_id")
-            if not user_id:
-                return {"status": "ok"}
-            profile = [{"id": user_id}]
+    # ------------------------------------------------------------------
+    # One-time payments (extra credits)
+    # ------------------------------------------------------------------
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
 
-        supabase.table("profiles").update({
-            "plan_id": plan_id,
-            "stripe_customer_id": customer_id,
-            "stripe_subscription_id": subscription_id,
-            "stripe_current_period_start": datetime.fromtimestamp(
-                subscription["current_period_start"], tz=timezone.utc
-            ).isoformat(),
-            "stripe_current_period_end": datetime.fromtimestamp(
-                subscription["current_period_end"], tz=timezone.utc
-            ).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", profile[0]["id"]).execute()
+        if session.get("mode") == "payment":
+            customer_id = session.get("customer")
+            line_items = stripe.checkout.Session.list_line_items(session["id"])
 
-        return {"status": "ok"}
+            total_credits = 0
+            for item in line_items["data"]:
+                price_id = item["price"]["id"]
+                credits = EXTRA_PRICE_TO_CREDITS.get(price_id, 0)
+                total_credits += credits
 
-    if event_type == "customer.subscription.deleted":
-        subscription_id = obj["id"]
+            if total_credits > 0:
+                profile = (
+                    supabase.table("profiles")
+                    .select("extra_credits")
+                    .eq("stripe_customer_id", customer_id)
+                    .single()
+                    .execute()
+                    .data
+                )
 
-        supabase.table("profiles").update({
-            "plan_id": "free",
-            "stripe_subscription_id": None,
-            "stripe_current_period_start": None,
-            "stripe_current_period_end": None,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("stripe_subscription_id", subscription_id).execute()
+                new_credits = (profile.get("extra_credits") or 0) + total_credits
 
-        return {"status": "ok"}
+                supabase.table("profiles").update(
+                    {"extra_credits": new_credits}
+                ).eq("stripe_customer_id", customer_id).execute()
 
     return {"status": "ok"}
