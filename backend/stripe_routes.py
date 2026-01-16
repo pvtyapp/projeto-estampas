@@ -80,7 +80,7 @@ async def stripe_webhook(request: Request):
         customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
 
-        if not customer_id or not subscription_id:
+        if not subscription_id:
             return {"status": "ok"}
 
         lines = obj.get("lines", {}).get("data", [])
@@ -93,11 +93,21 @@ async def stripe_webhook(request: Request):
         profiles = (
             supabase.table("profiles")
             .select("id")
-            .eq("stripe_customer_id", customer_id)
+            .eq("stripe_subscription_id", subscription_id)
             .limit(1)
             .execute()
             .data
         )
+
+        if not profiles and customer_id:
+            profiles = (
+                supabase.table("profiles")
+                .select("id")
+                .eq("stripe_customer_id", customer_id)
+                .limit(1)
+                .execute()
+                .data
+            )
 
         if not profiles:
             return {"status": "ok"}
@@ -113,6 +123,7 @@ async def stripe_webhook(request: Request):
 
         update_data = {
             "stripe_subscription_id": stripe_sub.id,
+            "stripe_customer_id": customer_id,
             "stripe_current_period_start": datetime.fromtimestamp(
                 period_start, tz=timezone.utc
             ).isoformat(),
@@ -128,20 +139,30 @@ async def stripe_webhook(request: Request):
         supabase.table("profiles").update(update_data).eq("id", user_id).execute()
 
     if event_type == "customer.subscription.updated":
-        customer_id = obj.get("customer")
         subscription_id = obj.get("id")
+        customer_id = obj.get("customer")
 
-        if not customer_id or not subscription_id:
+        if not subscription_id:
             return {"status": "ok"}
 
         profiles = (
             supabase.table("profiles")
             .select("id")
-            .eq("stripe_customer_id", customer_id)
+            .eq("stripe_subscription_id", subscription_id)
             .limit(1)
             .execute()
             .data
         )
+
+        if not profiles and customer_id:
+            profiles = (
+                supabase.table("profiles")
+                .select("id")
+                .eq("stripe_customer_id", customer_id)
+                .limit(1)
+                .execute()
+                .data
+            )
 
         if not profiles:
             return {"status": "ok"}
@@ -157,6 +178,7 @@ async def stripe_webhook(request: Request):
 
         supabase.table("profiles").update({
             "stripe_subscription_id": stripe_sub.id,
+            "stripe_customer_id": customer_id,
             "stripe_current_period_start": datetime.fromtimestamp(
                 period_start, tz=timezone.utc
             ).isoformat(),
