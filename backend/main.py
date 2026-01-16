@@ -574,24 +574,22 @@ def get_my_usage(user=Depends(current_user)):
 
     now = datetime.now(timezone.utc)
 
-    # ===== Stripe subscription window (source of truth) =====
-    period_start = None
-    period_end = None
-
-    if profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
-        period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
-        period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
-
-    # fallback apenas se FREE (sem assinatura)
-    if not period_start:
+    # ===== PERÍODO E LIMITE =====
+    if plan.get("daily_limit"):
         period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if not period_end:
-        period_end = period_start + timedelta(days=30)
+        period_end = period_start + timedelta(days=1)
+        limit = plan.get("daily_limit", 0)
+    else:
+        if profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
+            period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
+            period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
+        else:
+            period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            period_end = period_start + timedelta(days=30)
+
+        limit = plan.get("monthly_limit", 0)
 
     remaining_days = max(0, (period_end - now).days)
-
-    # ===== Usage sempre baseado no período da assinatura =====
-    limit = plan.get("monthly_limit") or plan.get("daily_limit") or 0
 
     rows = (
         supabase
@@ -599,7 +597,7 @@ def get_my_usage(user=Depends(current_user)):
         .select("amount")
         .eq("user_id", user["sub"])
         .gte("created_at", period_start.isoformat())
-        .lte("created_at", period_end.isoformat())
+        .lt("created_at", period_end.isoformat())
         .execute()
         .data
         or []

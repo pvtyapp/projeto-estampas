@@ -1,6 +1,6 @@
 import os
-import json
 import stripe
+import jwt
 from fastapi import APIRouter, Request, HTTPException
 from supabase import create_client
 from datetime import datetime, timezone
@@ -16,20 +16,43 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 def get_supabase():
-    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-        raise RuntimeError("Supabase env vars missing")
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 # =====================
-# HELPERS
+# AUTH HELPER
+# =====================
+
+def get_user_from_request(request: Request):
+    auth = request.headers.get("authorization")
+    if not auth or not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token")
+
+    token = auth.replace("Bearer ", "")
+    payload = jwt.decode(
+        token,
+        SUPABASE_JWT_SECRET,
+        algorithms=["HS256"],
+        options={"verify_aud": False},
+    )
+
+    return {
+        "id": payload["sub"],
+        "email": payload.get("email"),
+    }
+
+# =====================
+# PRICE → PLAN
 # =====================
 
 PRICE_TO_PLAN = {
-    "price_start": "start",
-    "price_pro": "pro",
-    "price_ent": "ent",
+    os.getenv("STRIPE_PRICE_START"): "start",
+    os.getenv("STRIPE_PRICE_PRO"): "pro",
+    os.getenv("STRIPE_PRICE_ENT"): "ent",
 }
 
 def plan_from_invoice(invoice):
@@ -45,9 +68,7 @@ def plan_from_invoice(invoice):
 
 @router.post("/stripe/checkout")
 def stripe_checkout(plan: str, request: Request):
-    user = request.state.user
-    if not user:
-        raise HTTPException(status_code=401)
+    user = get_user_from_request(request)
 
     price_id = os.getenv(f"STRIPE_PRICE_{plan.upper()}")
     if not price_id:
@@ -57,9 +78,13 @@ def stripe_checkout(plan: str, request: Request):
         mode="subscription",
         payment_method_types=["card"],
         customer_email=user["email"],
+        client_reference_id=user["id"],
+        metadata={
+            "user_id": user["id"]
+        },
         line_items=[{"price": price_id, "quantity": 1}],
-        success_url=f"{os.getenv('FRONTEND_URL')}/work",
-        cancel_url=f"{os.getenv('FRONTEND_URL')}/plans",
+        success_url=f"{FRONTEND_URL}/work",
+        cancel_url=f"{FRONTEND_URL}/plans",
     )
 
     return {"url": session.url}
@@ -86,34 +111,29 @@ async def stripe_webhook(request: Request):
 
     print(f"📨 Stripe event recebido: {event_type}")
 
-    # ---------------------------------
-    # 1️⃣ CUSTOMER + SUBSCRIPTION CREATED
-    # ---------------------------------
-    if event_type == "customer.subscription.created":
-        customer_id = data["customer"]
-        subscription_id = data["id"]
-
-        # Apenas salvar vínculo se existir profile
-        supabase.table("profiles").update({
-            "stripe_customer_id": customer_id,
-            "stripe_subscription_id": subscription_id,
-        }).eq("stripe_customer_id", customer_id).execute()
-
-    # ---------------------------------
-    # 2️⃣ CHECKOUT COMPLETED (garante customer)
-    # ---------------------------------
+    # -------------------------
+    # CHECKOUT COMPLETED
+    # -------------------------
     if event_type == "checkout.session.completed":
         customer_id = data.get("customer")
-        email = data.get("customer_details", {}).get("email")
+        user_id = data.get("client_reference_id") or data.get("metadata", {}).get("user_id")
 
-        if customer_id and email:
+        if customer_id and user_id:
             supabase.table("profiles").update({
                 "stripe_customer_id": customer_id
-            }).eq("email", email).execute()
+            }).eq("id", user_id).execute()
 
-    # ---------------------------------
-    # 3️⃣ INVOICE PAID → AQUI MUDA O PLANO
-    # ---------------------------------
+    # -------------------------
+    # SUBSCRIPTION CREATED
+    # -------------------------
+    if event_type == "customer.subscription.created":
+        supabase.table("profiles").update({
+            "stripe_subscription_id": data["id"]
+        }).eq("stripe_customer_id", data["customer"]).execute()
+
+    # -------------------------
+    # INVOICE PAID → AQUI MUDA PLANO
+    # -------------------------
     if event_type == "invoice.payment_succeeded":
         customer_id = data["customer"]
         subscription_id = data["subscription"]
@@ -130,14 +150,6 @@ async def stripe_webhook(request: Request):
             data["period_end"], tz=timezone.utc
         ).isoformat()
 
-        res = supabase.table("profiles").select("id").eq(
-            "stripe_customer_id", customer_id
-        ).execute()
-
-        if not res.data:
-            print("⚠️ Profile não encontrado para customer:", customer_id)
-            return {"ok": True}
-
         supabase.table("profiles").update({
             "plan_id": plan_id,
             "stripe_subscription_id": subscription_id,
@@ -145,6 +157,6 @@ async def stripe_webhook(request: Request):
             "stripe_current_period_end": period_end,
         }).eq("stripe_customer_id", customer_id).execute()
 
-        print("✅ Plano atualizado:", plan_id)
+        print("✅ Plano aplicado:", plan_id)
 
     return {"ok": True}

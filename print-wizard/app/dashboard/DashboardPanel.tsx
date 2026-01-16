@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useSession } from '@/app/providers/SessionProvider'
 import { useUsage } from '@/app/providers/UsageProvider'
 import { useRouter } from 'next/navigation'
@@ -10,7 +10,6 @@ type Plan = 'free' | 'start' | 'pro' | 'ent'
 export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:'30x100'|'57x100', setSheetSize:(v:any)=>void }) {
   const { session } = useSession()
   const { usage, loading } = useUsage()
-  const [error] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -30,14 +29,6 @@ export default function DashboardPanel({ sheetSize, setSheetSize }: { sheetSize:
         <div className="h-4 bg-gray-200 rounded w-1/3" />
         <div className="h-2 bg-gray-200 rounded w-full" />
         <div className="h-2 bg-gray-200 rounded w-full" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="bg-white border rounded-xl shadow p-6 text-sm text-red-600">
-        Não foi possível carregar seu uso agora. Recarregue a página.
       </div>
     )
   }

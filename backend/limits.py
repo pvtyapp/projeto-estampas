@@ -66,29 +66,33 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         supabase.table("usage").insert(row).execute()
 
     # =========================
-    # Define usage window
+    # Define usage window + limit
     # =========================
-    period_start = None
-    period_end = None
 
-    # 1) DAILY PLAN → reset diário
+    # DAILY PLAN (FREE / DAILY)
     if plan.get("daily_limit") is not None:
         period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(days=1)
+        limit = plan.get("daily_limit", 0)
 
-    # 2) MONTHLY / SUBSCRIPTION PLAN → período Stripe
-    elif profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
-        try:
-            period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
-            period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
-        except Exception:
+    # MONTHLY / SUBSCRIPTION PLAN (Stripe period)
+    else:
+        if profile.get("stripe_current_period_start") and profile.get("stripe_current_period_end"):
+            try:
+                period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
+                period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
+            except Exception:
+                period_start = None
+                period_end = None
+        else:
             period_start = None
             period_end = None
 
-    # 3) FREE / fallback
-    if not period_start or not period_end:
-        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        period_end = period_start + timedelta(days=1)
+        if not period_start or not period_end:
+            period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            period_end = period_start + timedelta(days=30)
+
+        limit = plan.get("monthly_limit", 0)
 
     # =========================
     # Calculate used in period
@@ -107,17 +111,15 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
 
     used = sum(r.get("amount") or 0 for r in used_rows)
 
-    limit = plan.get("daily_limit") or plan.get("monthly_limit")
-
     # =========================
     # Within plan limit
     # =========================
-    if limit is not None and used + amount <= limit:
+    if limit and used + amount <= limit:
         insert_usage(amount)
         return
 
     needed = amount
-    if limit is not None:
+    if limit:
         needed = max(0, (used + amount) - limit)
 
     # =========================

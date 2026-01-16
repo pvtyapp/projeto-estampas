@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
 
@@ -26,16 +26,30 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
   const [usage, setUsage] = useState<Usage | null>(null)
   const [loading, setLoading] = useState(false)
 
+  const fetchedRef = useRef(false)
+
   const fetchUsage = async () => {
     if (!session) return
     setLoading(true)
-    const res = await api('/me/usage')
-    setUsage(res)
-    setLoading(false)
+    try {
+      const res = await api('/me/usage')
+      setUsage(res)
+      fetchedRef.current = true
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    if (!sessionLoading && session) {
+    // logout → limpa estado
+    if (!sessionLoading && !session) {
+      setUsage(null)
+      fetchedRef.current = false
+      return
+    }
+
+    // login / session ready → fetch uma única vez
+    if (!sessionLoading && session && !fetchedRef.current) {
       fetchUsage()
     }
   }, [sessionLoading, session])
