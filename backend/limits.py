@@ -131,3 +131,4 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         raise LimitExceeded("Limite do plano e créditos esgotados.")
 
     insert_usage(amount, used_credits=True)
+

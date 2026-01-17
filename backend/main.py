@@ -542,7 +542,7 @@ def get_print_stats(
     }
 
 # =========================
-# ACCOUNT / USAGE (ATUALIZADO)
+# ACCOUNT / USAGE (ÚNICO)
 # =========================
 
 @app.get("/me/usage")
@@ -571,13 +571,10 @@ def get_my_usage(user=Depends(current_user)):
 
     now = datetime.now(timezone.utc)
 
-    # FREE / DAILY
     if plan.get("daily_limit") is not None:
         period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(days=1)
         limit = plan.get("daily_limit", 0)
-
-    # PAID / STRIPE 30 DIAS CORRIDOS
     else:
         if not profile.get("stripe_current_period_start") or not profile.get("stripe_current_period_end"):
             return {
@@ -635,11 +632,8 @@ def get_my_usage(user=Depends(current_user)):
         "library_limit": plan.get("library_limit"),
     }
 
-
-
 # =========================
 # SETTINGS
-
 # =========================
 
 @app.get("/me/settings")
@@ -662,7 +656,7 @@ def save_settings(data: SettingsIn, user=Depends(current_user)):
     return {"ok": True}
 
 # =========================
-# Planos
+# PLANOS
 # =========================
 
 @app.get("/plans")
@@ -730,4 +724,3 @@ def register(payload: dict):
         supabase.table("user_fiscal_data").insert(fiscal).execute()
 
     return {"ok": True}
-

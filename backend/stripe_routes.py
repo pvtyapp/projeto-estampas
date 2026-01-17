@@ -1,13 +1,12 @@
 # backend/stripe_routes.py
 
 import os
-import json
 import stripe
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from supabase import create_client, Client
 
-from auth import get_current_user  # IMPORTANTE: já existe no seu projeto
+from auth import get_current_user
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
 
@@ -33,7 +32,6 @@ PRICE_BY_PLAN = {
 
 @router.post("/checkout")
 def stripe_checkout(
-    request: Request,
     plan: str,
     user: dict = Depends(get_current_user),
 ):
@@ -65,7 +63,6 @@ def stripe_checkout(
             email=profile["email"],
             metadata={"user_id": user["id"]},
         )
-
         customer_id = customer.id
 
         supabase.table("profiles").update(
@@ -75,12 +72,7 @@ def stripe_checkout(
     session = stripe.checkout.Session.create(
         customer=customer_id,
         mode="subscription",
-        line_items=[
-            {
-                "price": price_id,
-                "quantity": 1,
-            }
-        ],
+        line_items=[{"price": price_id, "quantity": 1}],
         success_url=f"{FRONTEND_URL}/work?checkout=success",
         cancel_url=f"{FRONTEND_URL}/plans",
     )
@@ -103,22 +95,21 @@ async def stripe_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Webhook inválido")
 
     supabase = get_supabase()
-
     event_type = event["type"]
     data = event["data"]["object"]
 
-    if event_type in [
-        "checkout.session.completed",
-        "invoice.payment_succeeded",
-    ]:
-        subscription_id = data.get("subscription")
+    if event_type in (
+        "customer.subscription.created",
+        "customer.subscription.updated",
+    ):
         customer_id = data.get("customer")
+        subscription_id = data.get("id")
 
-        if not subscription_id or not customer_id:
+        items = data.get("items", {}).get("data", [])
+        if not items:
             return JSONResponse({"status": "ignored"})
 
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        price_id = subscription["items"]["data"][0]["price"]["id"]
+        price_id = items[0]["price"]["id"]
 
         plan_id = None
         for key, value in PRICE_BY_PLAN.items():
@@ -126,15 +117,13 @@ async def stripe_webhook(request: Request):
                 plan_id = key
                 break
 
-        if not plan_id:
-            return JSONResponse({"status": "unknown_plan"})
-
-        supabase.table("profiles").update(
-            {
-                "plan_id": plan_id,
-                "stripe_subscription_id": subscription_id,
-            }
-        ).eq("stripe_customer_id", customer_id).execute()
+        if plan_id:
+            supabase.table("profiles").update(
+                {
+                    "plan_id": plan_id,
+                    "stripe_subscription_id": subscription_id,
+                }
+            ).eq("stripe_customer_id", customer_id).execute()
 
     if event_type == "customer.subscription.deleted":
         customer_id = data.get("customer")

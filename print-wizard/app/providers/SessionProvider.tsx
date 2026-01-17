@@ -27,17 +27,15 @@ export default function SessionProvider({ children }: { children: React.ReactNod
       setLoading(false)
     })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (!mounted) return
-      setSession(session)
+      setSession(newSession)
       setLoading(false)
     })
 
     return () => {
       mounted = false
-      subscription.unsubscribe()
+      listener.subscription.unsubscribe()
     }
   }, [])
 

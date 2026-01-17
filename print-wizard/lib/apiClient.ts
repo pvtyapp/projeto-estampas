@@ -1,43 +1,52 @@
-import { supabase } from './supabaseClient'
+// lib/apiClient.ts
 
-function normalizePath(path: string) {
-  if (!path.startsWith('/')) return '/' + path
-  return path
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+type ApiOptions = {
+  method?: string
+  headers?: Record<string, string>
+  body?: any
+  signal?: AbortSignal
 }
 
-export async function api(path: string, options: RequestInit = {}) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL
-
-  if (!API_URL) {
-    throw new Error('Missing NEXT_PUBLIC_API_URL')
-  }
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  const token = session?.access_token
+export async function api(path: string, options: ApiOptions = {}) {
+  const session = await supabase.auth.getSession()
+  const token = session.data.session?.access_token
 
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string> || {}),
-    'Content-Type': 'application/json',
+    ...(options.headers || {}),
   }
 
   if (token) {
-    headers.Authorization = `Bearer ${token}`
+    headers['Authorization'] = `Bearer ${token}`
   }
 
-  const base = API_URL.replace(/\/$/, '')
+  let body = options.body
 
-  const res = await fetch(`${base}${normalizePath(path)}`, {
-    ...options,
+  if (body && typeof body === 'object' && !(body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+    body = JSON.stringify(body)
+  }
+
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
+    method: options.method || 'GET',
     headers,
-    credentials: 'include',
+    body,
+    signal: options.signal,
   })
 
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(text || res.statusText)
+    let detail = ''
+    try {
+      const err = await res.json()
+      detail = err.detail || ''
+    } catch {}
+    throw new Error(`API error ${res.status} ${detail}`)
   }
 
   return res.json()
