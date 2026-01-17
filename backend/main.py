@@ -546,11 +546,18 @@ def get_print_stats(
 # ACCOUNT / USAGE 
 # =========================
 
+# =========================
+# ACCOUNT / USAGE — FINAL (FREE + PAID)
+# =========================
+
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
     now = datetime.now(timezone.utc)
 
-    subscription = (
+    # =========================
+    # BUSCA ASSINATURA ATIVA (PAID)
+    # =========================
+    sub_res = (
         supabase.table("subscriptions")
         .select("*")
         .eq("user_id", user["sub"])
@@ -561,21 +568,66 @@ def get_my_usage(user=Depends(current_user)):
         or []
     )
 
-    if not subscription:
+    # =========================
+    # FREE USER (SEM STRIPE)
+    # RENOVA DIARIAMENTE
+    # =========================
+    if not sub_res:
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        period_end = period_start + timedelta(days=1)
+
+        plan = (
+            supabase.table("plans")
+            .select("*")
+            .eq("price_id", "free")
+            .limit(1)
+            .execute()
+            .data
+            or [{}]
+        )[0]
+
+        limit = plan.get("daily_limit", 0)
+
+        used_rows = (
+            supabase.table("usage")
+            .select("amount")
+            .eq("user_id", user["sub"])
+            .gte("created_at", period_start.isoformat())
+            .lt("created_at", period_end.isoformat())
+            .execute()
+            .data
+            or []
+        )
+
+        used = sum(r.get("amount", 0) for r in used_rows)
+
+        status = "ok"
+        if limit and used >= limit:
+            status = "blocked"
+        elif limit and used >= limit * 0.8:
+            status = "warning"
+
         return {
-            "plan": "none",
-            "used": 0,
-            "limit": 0,
+            "plan": "free",
+            "used": used,
+            "limit": limit,
             "remaining_days": 0,
-            "status": "blocked",
+            "status": status,
         }
 
-    sub = subscription[0]
+    # =========================
+    # PAID USER (STRIPE)
+    # =========================
+    sub = sub_res[0]
 
-    period_start = datetime.fromtimestamp(sub["current_period_start"], tz=timezone.utc)
-    period_end = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc)
+    period_start = datetime.fromtimestamp(
+        sub["current_period_start"], tz=timezone.utc
+    )
+    period_end = datetime.fromtimestamp(
+        sub["current_period_end"], tz=timezone.utc
+    )
 
-    if now > period_end:
+    if now >= period_end:
         return {
             "plan": sub["price_id"],
             "used": 0,
@@ -627,6 +679,7 @@ def get_my_usage(user=Depends(current_user)):
         "remaining_days": remaining_days,
         "status": status,
     }
+
 
 
 # =========================

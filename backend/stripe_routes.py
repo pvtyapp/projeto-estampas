@@ -38,26 +38,20 @@ def stripe_checkout(
     payload: CheckoutPayload,
     user: dict = Depends(get_current_user),
 ):
-    if payload.plan not in PRICE_BY_PLAN:
-        raise HTTPException(status_code=400, detail="Plano inválido")
-
-    price_id = PRICE_BY_PLAN[payload.plan]
+    price_id = payload.price_id
     if not price_id:
-        raise HTTPException(status_code=500, detail="Price ID não configurado")
+        raise HTTPException(status_code=400, detail="price_id obrigatório")
 
     supabase = get_supabase()
 
     profile = (
         supabase.table("profiles")
-        .select("id, email, stripe_customer_id")
+        .select("id,email,stripe_customer_id")
         .eq("id", user["id"])
         .single()
         .execute()
         .data
     )
-
-    if not profile:
-        raise HTTPException(status_code=404, detail="Perfil não encontrado")
 
     customer_id = profile.get("stripe_customer_id")
 
