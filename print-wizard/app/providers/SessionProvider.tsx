@@ -19,22 +19,24 @@ export default function SessionProvider({ children }: { children: React.ReactNod
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let mounted = true
+    let active = true
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return
+    const init = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!active) return
       setSession(data.session)
       setLoading(false)
-    })
+    }
+
+    init()
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (!mounted) return
+      if (!active) return
       setSession(newSession)
-      setLoading(false)
     })
 
     return () => {
-      mounted = false
+      active = false
       listener.subscription.unsubscribe()
     }
   }, [])

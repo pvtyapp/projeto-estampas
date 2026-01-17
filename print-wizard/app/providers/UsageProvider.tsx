@@ -6,12 +6,11 @@ import { useSession } from '@/app/providers/SessionProvider'
 import { usePathname } from 'next/navigation'
 
 type Usage = {
-  plan: 'free' | 'start' | 'pro' | 'ent'
+  plan: string
   used: number
   limit: number
-  credits: number
   remaining_days: number
-  status: 'ok' | 'warning' | 'blocked' | 'using_credits'
+  status: 'ok' | 'warning' | 'blocked'
 }
 
 type UsageContextType = {
@@ -29,13 +28,10 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
   const [usage, setUsage] = useState<Usage | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const fetchedRef = useRef(false)
-  const sessionRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const fetchUsage = async () => {
     if (!session || sessionLoading) return
-    if (fetchedRef.current) return
 
     abortRef.current?.abort()
     abortRef.current = new AbortController()
@@ -46,36 +42,21 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
         signal: abortRef.current.signal,
       })
       setUsage(res)
-      fetchedRef.current = true
     } catch {
       setUsage(null)
-      fetchedRef.current = false
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    if (pathname.startsWith('/plans') || pathname.startsWith('/auth')) {
-      return
-    }
-
+    if (pathname.startsWith('/plans') || pathname.startsWith('/auth')) return
     if (sessionLoading) return
 
     if (!session) {
       setUsage(null)
-      fetchedRef.current = false
-      sessionRef.current = null
       abortRef.current?.abort()
       return
-    }
-
-    const userObj = session.user as unknown as { id?: string; sub?: string }
-    const currentUser = userObj.id || userObj.sub || null
-
-    if (sessionRef.current !== currentUser) {
-      fetchedRef.current = false
-      sessionRef.current = currentUser
     }
 
     fetchUsage()
@@ -83,7 +64,7 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
     return () => {
       abortRef.current?.abort()
     }
-  }, [sessionLoading, session, pathname])
+  }, [session, sessionLoading, pathname])
 
   return (
     <UsageContext.Provider value={{ usage, loading, refresh: fetchUsage }}>
@@ -94,6 +75,6 @@ export function UsageProvider({ children }: { children: React.ReactNode }) {
 
 export function useUsage() {
   const ctx = useContext(UsageContext)
-  if (!ctx) throw new Error('useUsage must be used inside UsageProvider')
+  if (!ctx) throw new Error('useUsage must be used dentro de UsageProvider')
   return ctx
 }

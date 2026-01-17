@@ -1,9 +1,8 @@
-# backend/stripe_routes.py
-
 import os
 import stripe
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from supabase import create_client, Client
 
 from auth import get_current_user
@@ -30,15 +29,19 @@ PRICE_BY_PLAN = {
 }
 
 
+class CheckoutPayload(BaseModel):
+    plan: str
+
+
 @router.post("/checkout")
 def stripe_checkout(
-    plan: str,
+    payload: CheckoutPayload,
     user: dict = Depends(get_current_user),
 ):
-    if plan not in PRICE_BY_PLAN:
+    if payload.plan not in PRICE_BY_PLAN:
         raise HTTPException(status_code=400, detail="Plano inválido")
 
-    price_id = PRICE_BY_PLAN.get(plan)
+    price_id = PRICE_BY_PLAN[payload.plan]
     if not price_id:
         raise HTTPException(status_code=500, detail="Price ID não configurado")
 
@@ -102,8 +105,11 @@ async def stripe_webhook(request: Request):
         "customer.subscription.created",
         "customer.subscription.updated",
     ):
-        customer_id = data.get("customer")
-        subscription_id = data.get("id")
+        customer_id = data["customer"]
+        subscription_id = data["id"]
+        status = data["status"]
+        period_start = data["current_period_start"]
+        period_end = data["current_period_end"]
 
         items = data.get("items", {}).get("data", [])
         if not items:
@@ -111,28 +117,23 @@ async def stripe_webhook(request: Request):
 
         price_id = items[0]["price"]["id"]
 
-        plan_id = None
-        for key, value in PRICE_BY_PLAN.items():
-            if value == price_id:
-                plan_id = key
-                break
-
-        if plan_id:
-            supabase.table("profiles").update(
-                {
-                    "plan_id": plan_id,
-                    "stripe_subscription_id": subscription_id,
-                }
-            ).eq("stripe_customer_id", customer_id).execute()
+        supabase.table("subscriptions").upsert(
+            {
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "price_id": price_id,
+                "status": status,
+                "current_period_start": period_start,
+                "current_period_end": period_end,
+            },
+            on_conflict="stripe_subscription_id",
+        ).execute()
 
     if event_type == "customer.subscription.deleted":
-        customer_id = data.get("customer")
+        subscription_id = data["id"]
 
-        supabase.table("profiles").update(
-            {
-                "plan_id": "free",
-                "stripe_subscription_id": None,
-            }
-        ).eq("stripe_customer_id", customer_id).execute()
+        supabase.table("subscriptions").update(
+            {"status": "canceled"}
+        ).eq("stripe_subscription_id", subscription_id).execute()
 
     return JSONResponse({"status": "ok"})

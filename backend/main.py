@@ -541,57 +541,60 @@ def get_print_stats(
         },
     }
 
+
 # =========================
-# ACCOUNT / USAGE (ÚNICO)
+# ACCOUNT / USAGE 
 # =========================
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    profile = (
-        supabase.table("profiles")
+    now = datetime.now(timezone.utc)
+
+    subscription = (
+        supabase.table("subscriptions")
         .select("*")
-        .eq("id", user["sub"])
+        .eq("user_id", user["sub"])
+        .eq("status", "active")
         .limit(1)
         .execute()
         .data
-        or [{}]
-    )[0]
+        or []
+    )
 
-    plan_id = profile.get("plan_id") or "free"
+    if not subscription:
+        return {
+            "plan": "none",
+            "used": 0,
+            "limit": 0,
+            "remaining_days": 0,
+            "status": "blocked",
+        }
+
+    sub = subscription[0]
+
+    period_start = datetime.fromtimestamp(sub["current_period_start"], tz=timezone.utc)
+    period_end = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc)
+
+    if now > period_end:
+        return {
+            "plan": sub["price_id"],
+            "used": 0,
+            "limit": 0,
+            "remaining_days": 0,
+            "status": "blocked",
+        }
 
     plan = (
         supabase.table("plans")
         .select("*")
-        .eq("id", plan_id)
+        .eq("price_id", sub["price_id"])
         .limit(1)
         .execute()
         .data
         or [{}]
     )[0]
 
-    now = datetime.now(timezone.utc)
-
-    if plan.get("daily_limit") is not None:
-        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        period_end = period_start + timedelta(days=1)
-        limit = plan.get("daily_limit", 0)
-    else:
-        if not profile.get("stripe_current_period_start") or not profile.get("stripe_current_period_end"):
-            return {
-                "plan": plan_id,
-                "used": 0,
-                "limit": plan.get("monthly_limit", 0),
-                "credits": 0,
-                "remaining_days": 0,
-                "status": "blocked",
-                "library_limit": plan.get("library_limit"),
-            }
-
-        period_start = datetime.fromisoformat(profile["stripe_current_period_start"])
-        period_end = datetime.fromisoformat(profile["stripe_current_period_end"])
-        limit = plan.get("monthly_limit", 0)
-
-    remaining_days = max(0, ceil((period_end - now).total_seconds() / 86400))
+    limit = plan.get("monthly_limit", 0)
 
     used_rows = (
         supabase.table("usage")
@@ -604,33 +607,27 @@ def get_my_usage(user=Depends(current_user)):
         or []
     )
 
-    used = sum(r.get("amount") or 0 for r in used_rows)
+    used = sum(r.get("amount", 0) for r in used_rows)
 
-    credit_rows = (
-        supabase.table("credit_packs")
-        .select("remaining")
-        .eq("user_id", user["sub"])
-        .execute()
-        .data
-        or []
+    remaining_days = max(
+        0,
+        ceil((period_end - now).total_seconds() / 86400)
     )
-    total_credits = sum(c.get("remaining") or 0 for c in credit_rows)
 
     status = "ok"
     if limit and used >= limit:
-        status = "using_credits" if total_credits > 0 else "blocked"
+        status = "blocked"
     elif limit and used >= limit * 0.8:
         status = "warning"
 
     return {
-        "plan": plan_id,
+        "plan": sub["price_id"],
         "used": used,
         "limit": limit,
-        "credits": total_credits,
         "remaining_days": remaining_days,
         "status": status,
-        "library_limit": plan.get("library_limit"),
     }
+
 
 # =========================
 # SETTINGS
@@ -663,23 +660,24 @@ def save_settings(data: SettingsIn, user=Depends(current_user)):
 def get_plans(user=Depends(current_user)):
     plans = supabase.table("plans").select("*").execute().data or []
 
-    profile = (
-        supabase.table("profiles")
-        .select("plan_id")
-        .eq("id", user["sub"])
+    sub = (
+        supabase.table("subscriptions")
+        .select("price_id,status")
+        .eq("user_id", user["sub"])
+        .eq("status", "active")
         .limit(1)
         .execute()
         .data
+        or []
     )
 
-    current_plan = profile[0]["plan_id"] if profile else "free"
+    current_price_id = sub[0]["price_id"] if sub else None
 
     return {
         "plans": plans,
-        "current_plan": current_plan,
+        "current_price_id": current_price_id,
     }
 
-import requests
 
 @app.post("/auth/register")
 def register(payload: dict):

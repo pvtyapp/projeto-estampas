@@ -13,6 +13,7 @@ type Plan = {
   daily_limit: number | null
   library_limit: number | null
   price: number
+  price_id: string
 }
 
 export default function PlansPage() {
@@ -38,13 +39,13 @@ export default function PlansPage() {
     load()
   }, [])
 
-  async function checkout(planId: string) {
+  async function checkout(priceId: string) {
     try {
-      setLoadingCheckout(planId)
+      setLoadingCheckout(priceId)
       const res = await api('/stripe/checkout/', {
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
-        body: JSON.stringify({ plan: planId }),
+        body: JSON.stringify({ price_id: priceId }),
       })
       if (res?.url) {
         window.location.href = res.url
@@ -61,7 +62,7 @@ export default function PlansPage() {
 
   if (!session) return null
 
-  const currentPlan = usage?.plan || null
+  const currentPriceId = usage?.plan || null
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 space-y-24">
@@ -84,7 +85,7 @@ export default function PlansPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map(plan => {
-            const isCurrent = plan.id === currentPlan
+            const isCurrent = plan.price_id === currentPriceId
             const isPopular = plan.id === 'pro'
             const isFree = plan.id === 'free'
 
@@ -105,12 +106,11 @@ export default function PlansPage() {
 
                 <div className="text-3xl font-bold mb-4">
                   {plan.price > 0 ? `R$ ${plan.price.toFixed(2)}` : 'Grátis'}
-                  <span className="text-sm text-gray-500 font-normal"> / mês</span>
+                  <span className="text-sm text-gray-500 font-normal"> / 30 dias</span>
                 </div>
 
                 <ul className="text-sm text-gray-600 space-y-1 mb-6">
-                  {plan.monthly_limit && <li>• {plan.monthly_limit} arquivos / mês</li>}
-                  {plan.daily_limit && <li>• {plan.daily_limit} arquivos / dia</li>}
+                  {plan.monthly_limit && <li>• {plan.monthly_limit} arquivos / ciclo</li>}
                   {plan.library_limit && <li>• {plan.library_limit} na biblioteca</li>}
                   <li>• Geração automática de folhas</li>
                   <li>• Organização e padronização</li>
@@ -132,11 +132,11 @@ export default function PlansPage() {
                     </button>
                   ) : isFree ? null : (
                     <button
-                      onClick={() => checkout(plan.id)}
-                      disabled={loadingCheckout === plan.id}
+                      onClick={() => checkout(plan.price_id)}
+                      disabled={loadingCheckout === plan.price_id}
                       className="w-full py-2 rounded bg-black text-white hover:opacity-90 transition disabled:opacity-50"
                     >
-                      {loadingCheckout === plan.id
+                      {loadingCheckout === plan.price_id
                         ? 'Redirecionando...'
                         : plan.id === 'ent'
                         ? 'Falar com vendas'
@@ -147,36 +147,6 @@ export default function PlansPage() {
               </div>
             )
           })}
-        </div>
-
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="border rounded-2xl p-6 bg-white shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Pacote Extra — 20 arquivos</h3>
-            <div className="flex justify-between items-center">
-              <span className="text-xl font-bold">R$ 20,00</span>
-              <button
-                onClick={() => checkout('extra20')}
-                disabled={loadingCheckout === 'extra20'}
-                className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
-              >
-                {loadingCheckout === 'extra20' ? 'Redirecionando...' : 'Comprar pacote'}
-              </button>
-            </div>
-          </div>
-
-          <div className="border rounded-2xl p-6 bg-white shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Pacote Extra — 50 arquivos</h3>
-            <div className="flex justify-between items-center">
-              <span className="text-xl font-bold">R$ 35,00</span>
-              <button
-                onClick={() => checkout('extra50')}
-                disabled={loadingCheckout === 'extra50'}
-                className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
-              >
-                {loadingCheckout === 'extra50' ? 'Redirecionando...' : 'Comprar pacote'}
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
