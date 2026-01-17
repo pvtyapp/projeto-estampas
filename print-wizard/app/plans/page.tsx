@@ -41,7 +41,8 @@ export default function PlansPage() {
   async function checkout(planId: string) {
     try {
       setLoadingCheckout(planId)
-      const res = await api('/stripe/checkout', {
+      const res = await api('/stripe/checkout/', {
+        headers: { 'Content-Type': 'application/json' },
         method: 'POST',
         body: JSON.stringify({ plan: planId }),
       })
