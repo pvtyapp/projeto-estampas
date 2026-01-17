@@ -42,7 +42,7 @@ export default function PlansPage() {
   async function checkout(priceId: string) {
     try {
       setLoadingCheckout(priceId)
-      const res = await api('/stripe/checkout/', {
+      const res = await api('/stripe/checkout', {
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
         body: JSON.stringify({ price_id: priceId }),
