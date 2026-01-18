@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from backend.print_utils import validate_slots
 from backend.job_queue import queue
 from backend.jobs import process_render
 from backend.auth import get_current_user
@@ -178,8 +177,9 @@ def get_print(print_id: str, user=Depends(get_current_user)):
 
 @app.post("/prints")
 def create_print(payload: PrintCreate, user=Depends(get_current_user)):
-    validate_slots(payload.slots)
+    slots_validated = [Slot(**s) for s in payload.slots]
     print_id = str(uuid.uuid4())
+
 
     supabase.table("prints").insert({
         "id": print_id,
@@ -189,7 +189,7 @@ def create_print(payload: PrintCreate, user=Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
 
-    for s in payload.slots:
+    for s in slots_validated:
         supabase.table("print_slots").upsert({
             "id": str(uuid.uuid4()),
             "print_id": print_id,
@@ -207,18 +207,18 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(get_curren
     if not isinstance(slots, list):
         raise HTTPException(status_code=400, detail="slots inválido")
 
-    validate_slots([Slot(**s) for s in slots])
+    slots_validated = [Slot(**s) for s in slots]
 
     supabase.table("print_slots").delete().eq("print_id", print_id).execute()
 
-    for s in slots:
+    for s in slots_validated:
         supabase.table("print_slots").insert({
             "id": str(uuid.uuid4()),
             "print_id": print_id,
-            "type": s["type"],
-            "width_cm": s["width_cm"],
-            "height_cm": s["height_cm"],
-            "url": s.get("url"),
+            "type": s.type,
+            "width_cm": s.width_cm,
+            "height_cm": s.height_cm,
+            "url": s.url,
         }).execute()
 
     return get_print(print_id, user)
@@ -266,9 +266,9 @@ def build_pieces(print_obj, qty: int):
         {
             "width": s["width_cm"],
             "height": s["height_cm"],
-            "type": s["type"],
+            "type": s.type,
             "print_id": print_obj["id"],
-            "url": s.get("url"),
+            "url": s.url,
         }
         for _ in range(qty)
         for s in print_obj["slots"]
