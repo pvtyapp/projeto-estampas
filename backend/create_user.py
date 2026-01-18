@@ -2,7 +2,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from app.utils.validators import validate_document
+from backend.utils.validators import validate_document
 
 load_dotenv()
 
@@ -22,7 +22,7 @@ REST_URL = f"{SUPABASE_URL}/rest/v1"
 HEADERS = {
     "Authorization": f"Bearer {SERVICE_KEY}",
     "apikey": SERVICE_KEY,
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
 }
 
 # ========================
@@ -58,7 +58,7 @@ zip_code = input("CEP (opcional): ")
 payload = {
     "email": email,
     "password": password,
-    "email_confirm": True
+    "email_confirm": True,
 }
 
 r = requests.post(AUTH_URL, json=payload, headers=HEADERS)
@@ -85,13 +85,13 @@ requests.post(
         "apikey": SERVICE_KEY,
         "Authorization": f"Bearer {SERVICE_KEY}",
         "Content-Type": "application/json",
-        "Prefer": "return=minimal"
+        "Prefer": "return=minimal",
     },
     json={
         "user_id": user_id,
         "plan": "free",
-        "monthly_limit": 2
-    }
+        "monthly_limit": 2,
+    },
 )
 
 print("Plano free criado.")
@@ -114,7 +114,7 @@ if person_type and document:
         "neighborhood": neighborhood,
         "city": city,
         "state": state,
-        "cep": zip_code
+        "cep": zip_code,
     }
 
     fiscal_payload = {k: v for k, v in fiscal_payload.items() if v}
@@ -125,9 +125,9 @@ if person_type and document:
             "apikey": SERVICE_KEY,
             "Authorization": f"Bearer {SERVICE_KEY}",
             "Content-Type": "application/json",
-            "Prefer": "return=minimal"
+            "Prefer": "return=minimal",
         },
-        json=fiscal_payload
+        json=fiscal_payload,
     )
 
     if r.status_code not in (200, 201):
