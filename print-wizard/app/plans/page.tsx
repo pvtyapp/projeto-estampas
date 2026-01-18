@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/apiClient'
+import { request } from '@/lib/apiClient'
 import { useSession } from '@/app/providers/SessionProvider'
-import { useUsage } from '@/app/providers/UsageProvider'
 import { useRouter } from 'next/navigation'
 
 type Plan = {
@@ -18,11 +17,11 @@ type Plan = {
 
 export default function PlansPage() {
   const { session, loading } = useSession()
-  const { usage } = useUsage()
   const router = useRouter()
 
   const [plans, setPlans] = useState<Plan[]>([])
   const [loadingCheckout, setLoadingCheckout] = useState<string | null>(null)
+  const [currentPriceId, setCurrentPriceId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!loading && !session) {
@@ -32,26 +31,31 @@ export default function PlansPage() {
 
   useEffect(() => {
     async function load() {
-      const res = await api('/plans')
-      const sorted = (res.plans || []).sort((a: Plan, b: Plan) => a.price - b.price)
+      const res = await request<{ plans: Plan[] }>('/plans')
+      const sorted = (res.plans || []).sort(
+        (a, b) => a.price - b.price
+      )
       setPlans(sorted)
     }
     load()
   }, [])
 
+  useEffect(() => {
+    async function loadUsage() {
+      const usage = await request<{ plan: string }>('/usage')
+      setCurrentPriceId(usage.plan)
+    }
+    if (session) loadUsage()
+  }, [session])
+
   async function checkout(priceId: string) {
     try {
       setLoadingCheckout(priceId)
-      const res = await api('/stripe/checkout', {
-        headers: { 'Content-Type': 'application/json' },
+      const res = await request<{ url: string }>('/stripe/checkout', {
         method: 'POST',
         body: JSON.stringify({ price_id: priceId }),
       })
-      if (res?.url) {
-        window.location.href = res.url
-      } else {
-        throw new Error('No checkout url returned')
-      }
+      window.location.href = res.url
     } catch (e) {
       console.error(e)
       alert('Erro ao iniciar pagamento')
@@ -61,8 +65,6 @@ export default function PlansPage() {
   }
 
   if (!session) return null
-
-  const currentPriceId = usage?.plan || null
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-12 space-y-24">
