@@ -1,3 +1,4 @@
+# backend/stripe_routes.py
 import os
 import stripe
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -5,42 +6,47 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from supabase import create_client, Client
 
-from auth import get_current_user
+from backend.auth import get_current_user  # ✅ IMPORT CORRIGIDO
 
 router = APIRouter(prefix="/stripe", tags=["stripe"])
 
+# =========================
+# ENVS
+# =========================
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
+if not stripe.api_key:
+    raise RuntimeError("STRIPE_SECRET_KEY não configurada")
+
+if not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY não configurada")
+
 
 def get_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
-PRICE_BY_PLAN = {
-    "start": os.getenv("STRIPE_PRICE_START"),
-    "pro": os.getenv("STRIPE_PRICE_PRO"),
-    "ent": os.getenv("STRIPE_PRICE_ENT"),
-}
-
-
+# =========================
+# PAYLOAD CORRETO
+# =========================
 class CheckoutPayload(BaseModel):
-    plan: str
+    price_id: str
 
 
+# =========================
+# CHECKOUT
+# =========================
 @router.post("/checkout")
 def stripe_checkout(
     payload: CheckoutPayload,
     user: dict = Depends(get_current_user),
 ):
     price_id = payload.price_id
-    if not price_id:
-        raise HTTPException(status_code=400, detail="price_id obrigatório")
 
     supabase = get_supabase()
 
@@ -52,6 +58,9 @@ def stripe_checkout(
         .execute()
         .data
     )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil não encontrado")
 
     customer_id = profile.get("stripe_customer_id")
 
@@ -77,6 +86,9 @@ def stripe_checkout(
     return {"url": session.url}
 
 
+# =========================
+# WEBHOOK
+# =========================
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -95,6 +107,9 @@ async def stripe_webhook(request: Request):
     event_type = event["type"]
     data = event["data"]["object"]
 
+    # =========================
+    # SUBSCRIPTION CREATED / UPDATED
+    # =========================
     if event_type in (
         "customer.subscription.created",
         "customer.subscription.updated",
@@ -123,6 +138,9 @@ async def stripe_webhook(request: Request):
             on_conflict="stripe_subscription_id",
         ).execute()
 
+    # =========================
+    # SUBSCRIPTION DELETED
+    # =========================
     if event_type == "customer.subscription.deleted":
         subscription_id = data["id"]
 

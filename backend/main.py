@@ -438,25 +438,75 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
 def confirm_print_job(job_id: str, user=Depends(current_user)):
     uuid.UUID(job_id)
 
-    updated = supabase.table("jobs").update({"status": "confirming"}).eq("id", job_id).eq("status", "preview_done").execute()
+    updated = (
+        supabase.table("jobs")
+        .update({"status": "confirming"})
+        .eq("id", job_id)
+        .eq("status", "preview_done")
+        .execute()
+    )
+
     if not updated.data:
         raise HTTPException(status_code=409, detail="Job já foi confirmado ou está em processamento")
 
-    job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
+    job = (
+        supabase.table("jobs")
+        .select("*")
+        .eq("id", job_id)
+        .eq("user_id", user["sub"])
+        .single()
+        .execute()
+        .data
+    )
 
     sheets = (job.get("payload") or {}).get("sheets") or 0
     if sheets <= 0:
         raise HTTPException(status_code=400, detail="Nenhum kit no job")
 
-    try:
-        check_and_consume_limits(supabase, user["sub"], sheets, job_id=job_id)
-    except LimitExceeded as e:
-        raise HTTPException(status_code=402, detail=str(e))
+    # =========================
+    # USAGE / PLANO
+    # =========================
+    usage = get_my_usage(user)
 
-    supabase.table("jobs").update({"status": "queued"}).eq("id", job_id).execute()
+    # FREE → limite diário (NÃO passa por Stripe logic)
+    if usage["plan"] == "free":
+        if usage["status"] == "blocked":
+            raise HTTPException(
+                status_code=402,
+                detail="Limite diário do plano FREE atingido"
+            )
+
+        # registra usage manualmente (FREE)
+        supabase.table("usage").insert({
+            "user_id": user["sub"],
+            "amount": sheets,
+            "job_id": job_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+
+    # PAID → Stripe / subscription
+    else:
+        try:
+            check_and_consume_limits(
+                supabase,
+                user["sub"],
+                sheets,
+                job_id=job_id
+            )
+        except LimitExceeded as e:
+            raise HTTPException(status_code=402, detail=str(e))
+
+    # =========================
+    # SEGUE O JOB
+    # =========================
+    supabase.table("jobs").update(
+        {"status": "queued"}
+    ).eq("id", job_id).execute()
+
     queue.enqueue(process_render, job_id, preview=False, job_timeout=600)
 
     return {"status": "confirmed", "sheets": sheets}
+
 
 # =========================
 # STATS 

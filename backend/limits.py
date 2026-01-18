@@ -1,16 +1,28 @@
+# backend/limits.py
 from datetime import datetime, timezone
+
 
 class LimitExceeded(Exception):
     pass
 
 
-def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = None):
+def check_and_consume_limits(
+    supabase,
+    user_id: str,
+    amount: int,
+    job_id: str = None,
+):
+    """
+    ⚠️ ATENÇÃO:
+    Esta função é EXCLUSIVA para usuários PAID.
+    FREE NUNCA deve chamar este método.
+    """
+
     now = datetime.now(timezone.utc)
 
     # =========================
-    # SUBSCRIPTION = FONTE ÚNICA
+    # SUBSCRIPTION (PAID ONLY)
     # =========================
-
     sub_res = (
         supabase
         .table("subscriptions")
@@ -24,20 +36,26 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
     )
 
     if not sub_res:
-        raise LimitExceeded("Nenhuma assinatura ativa.")
+        # Blindagem absoluta
+        raise LimitExceeded("Nenhuma assinatura ativa (usuário não é PAID).")
 
     sub = sub_res[0]
 
-    period_start = datetime.fromtimestamp(sub["current_period_start"], tz=timezone.utc)
-    period_end = datetime.fromtimestamp(sub["current_period_end"], tz=timezone.utc)
+    period_start = datetime.fromtimestamp(
+        sub["current_period_start"],
+        tz=timezone.utc,
+    )
+    period_end = datetime.fromtimestamp(
+        sub["current_period_end"],
+        tz=timezone.utc,
+    )
 
     if now >= period_end:
         raise LimitExceeded("Período da assinatura expirado.")
 
     # =========================
-    # PLANO PELO PRICE_ID
+    # PLANO VIA PRICE_ID
     # =========================
-
     plan_res = (
         supabase
         .table("plans")
@@ -58,7 +76,6 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
     # =========================
     # USAGE NO PERÍODO STRIPE
     # =========================
-
     used_rows = (
         supabase
         .table("usage")
@@ -77,9 +94,8 @@ def check_and_consume_limits(supabase, user_id: str, amount: int, job_id: str = 
         raise LimitExceeded("Limite do plano atingido.")
 
     # =========================
-    # REGISTRA USAGE
+    # REGISTRA USAGE (PAID)
     # =========================
-
     row = {
         "user_id": user_id,
         "amount": amount,
