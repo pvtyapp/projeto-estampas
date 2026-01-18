@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react'
 import { useState } from 'react'
-import { api } from '@/lib/apiClient'
+import { request } from '@/lib/apiClient'
 
 type Slot = {
   type: 'front' | 'back' | 'extra'
@@ -25,11 +25,20 @@ type Props = {
   onDeleted: () => void
 }
 
-export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }: Props) {
+export default function EditPrintModal({
+  print,
+  onClose,
+  onUpdated,
+  onDeleted,
+}: Props) {
   const [local, setLocal] = useState<Print>(print)
   const [loading, setLoading] = useState(false)
 
-  function updateSlot(type: Slot['type'], field: 'width_cm' | 'height_cm', value: number) {
+  function updateSlot(
+    type: Slot['type'],
+    field: 'width_cm' | 'height_cm',
+    value: number
+  ) {
     setLocal(p => ({
       ...p,
       slots: p.slots.map(s =>
@@ -52,7 +61,7 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
 
     setLoading(true)
     try {
-      await api(`/prints/${local.id}`, {
+      await request(`/prints/${local.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ slots: local.slots }),
       })
@@ -68,7 +77,7 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
     if (loading) return
     setLoading(true)
     try {
-      await api(`/prints/${local.id}`, { method: 'DELETE' })
+      await request(`/prints/${local.id}`, { method: 'DELETE' })
       onDeleted()
       onClose()
     } finally {
@@ -83,7 +92,10 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl w-full max-w-lg p-4 shadow-xl relative space-y-3">
-        <button onClick={onClose} className="absolute top-3 right-3 text-gray-400 hover:text-black">
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-gray-400 hover:text-black"
+        >
           <X size={18} />
         </button>
 
@@ -91,10 +103,18 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
 
         {[front, back, extra].map(slot => {
           if (!slot) return null
-          const label = slot.type === 'front' ? 'Frente' : slot.type === 'back' ? 'Costas' : 'Extra'
+          const label =
+            slot.type === 'front'
+              ? 'Frente'
+              : slot.type === 'back'
+              ? 'Costas'
+              : 'Extra'
 
           return (
-            <div key={slot.type} className="flex items-center gap-3 border rounded p-2">
+            <div
+              key={slot.type}
+              className="flex items-center gap-3 border rounded p-2"
+            >
               {slot.url && (
                 <img
                   src={slot.url}
@@ -109,7 +129,13 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
                     type="number"
                     step="0.1"
                     value={slot.width_cm}
-                    onChange={e => updateSlot(slot.type, 'width_cm', Number(e.target.value) || 0)}
+                    onChange={e =>
+                      updateSlot(
+                        slot.type,
+                        'width_cm',
+                        Number(e.target.value) || 0
+                      )
+                    }
                     className="border rounded px-2 py-1 w-full text-sm"
                     placeholder="Largura"
                   />
@@ -117,7 +143,13 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
                     type="number"
                     step="0.1"
                     value={slot.height_cm}
-                    onChange={e => updateSlot(slot.type, 'height_cm', Number(e.target.value) || 0)}
+                    onChange={e =>
+                      updateSlot(
+                        slot.type,
+                        'height_cm',
+                        Number(e.target.value) || 0
+                      )
+                    }
                     className="border rounded px-2 py-1 w-full text-sm"
                     placeholder="Altura"
                   />
@@ -128,15 +160,26 @@ export default function EditPrintModal({ print, onClose, onUpdated, onDeleted }:
         })}
 
         <div className="flex justify-between items-center pt-2">
-          <button onClick={remove} disabled={loading} className="text-red-600 text-sm">
+          <button
+            onClick={remove}
+            disabled={loading}
+            className="text-red-600 text-sm"
+          >
             Excluir
           </button>
 
           <div className="flex gap-2">
-            <button onClick={onClose} className="px-3 py-1 border rounded text-sm">
+            <button
+              onClick={onClose}
+              className="px-3 py-1 border rounded text-sm"
+            >
               Cancelar
             </button>
-            <button onClick={save} disabled={loading} className="px-3 py-1 bg-black text-white rounded text-sm">
+            <button
+              onClick={save}
+              disabled={loading}
+              className="px-3 py-1 bg-black text-white rounded text-sm"
+            >
               Salvar
             </button>
           </div>

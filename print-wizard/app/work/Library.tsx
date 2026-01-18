@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { api } from '@/lib/apiClient'
+import { request } from '@/lib/apiClient'
 import { Pencil, StickyNote } from 'lucide-react'
 import EditPrintModal from '@/components/EditPrintModal'
-import { useUsage } from '@/app/providers/UsageProvider'
 
 type Slot = {
   type: 'front' | 'back' | 'extra'
@@ -41,14 +40,12 @@ export default function Library({ onPreview, version }: Props) {
   const [prints, setPrints] = useState<Print[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-
-  const { usage } = useUsage() as { usage: UsageLocal | null }
+  const [usage, setUsage] = useState<UsageLocal | null>(null)
 
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [openNote, setOpenNote] = useState<string | null>(null)
   const [editing, setEditing] = useState<Print | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-
   const [qty, setQty] = useState<Record<string, number>>({})
 
   const noteRef = useRef<HTMLDivElement>(null)
@@ -64,11 +61,14 @@ export default function Library({ onPreview, version }: Props) {
   const load = useCallback(async () => {
     try {
       setLoading(true)
-      const [printsData, notesData] = await Promise.all([
-        api('/prints'),
-        api('/print-notes'),
+      const [printsData, notesData, usageData] = await Promise.all([
+        request<Print[]>('/prints'),
+        request<any[]>('/print-notes'),
+        request<UsageLocal>('/usage'),
       ])
+
       setPrints(printsData)
+      setUsage(usageData)
 
       const map: Record<string, string> = {}
       for (const n of notesData || []) {
@@ -177,7 +177,7 @@ export default function Library({ onPreview, version }: Props) {
     clearTimeout(saveTimers.current[printId])
     saveTimers.current[printId] = setTimeout(async () => {
       try {
-        await api('/print-notes', {
+        await request('/print-notes', {
           method: 'POST',
           body: JSON.stringify({ print_id: printId, note: value }),
         })
@@ -283,7 +283,7 @@ export default function Library({ onPreview, version }: Props) {
                     type="button"
                     onClick={async e => {
                       e.stopPropagation()
-                      const full = await api(`/prints/${p.id}`)
+                      const full = await request<Print>(`/prints/${p.id}`)
                       setEditing(full)
                     }}
                     className="text-gray-400 hover:text-black"

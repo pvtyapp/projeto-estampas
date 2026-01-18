@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { api } from '@/lib/apiClient'
+import { request } from '@/lib/apiClient'
 import { supabase } from '@/lib/supabaseClient'
 import { useRouter } from 'next/navigation'
 
@@ -64,14 +64,14 @@ export default function SkuUploadWizard({ onComplete }: Props) {
 
     setLoading(true)
     try {
-      const slots = [{ type: 'front', width_cm: fw, height_cm: fh }]
+      const slots: any[] = [{ type: 'front', width_cm: fw, height_cm: fh }]
 
       if (hasBack) {
         slots.push({ type: 'back', width_cm: bw!, height_cm: bh! })
         if (hasExtra) slots.push({ type: 'extra', width_cm: ew!, height_cm: eh! })
       }
 
-      const print = await api('/prints', {
+      const print = await request<any>('/prints', {
         method: 'POST',
         body: JSON.stringify({ name, sku, slots }),
       })
@@ -86,7 +86,7 @@ export default function SkuUploadWizard({ onComplete }: Props) {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session?.access_token) throw new Error('Sessão expirada. Faça login novamente.')
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL!
+        const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL!
         const res = await fetch(`${API_URL}/prints/${print.id}/upload`, {
           method: 'POST',
           body: form,

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/apiClient'
+import { request } from '@/lib/apiClient'
 
 type Job = {
   id: string
@@ -47,7 +47,7 @@ export default function JobHistory({ onSelect }: Props) {
   }, [silenced])
 
   useEffect(() => {
-    api('/me/settings').then(data => {
+    request<any>('/me/settings').then(data => {
       if (data?.price_per_meter !== undefined) {
         setPrice(String(data.price_per_meter))
       }
@@ -102,8 +102,8 @@ export default function JobHistory({ onSelect }: Props) {
 
     try {
       const [jobsData, statsData] = await Promise.all([
-        api(`/jobs/history${qs}`),
-        api(`/stats/prints${qs}`),
+        request<Job[]>(`/jobs/history${qs}`),
+        request<Stats>(`/stats/prints${qs}`),
       ])
       if (isCancelled()) return
       setJobs(jobsData || [])
@@ -122,9 +122,8 @@ export default function JobHistory({ onSelect }: Props) {
 
   async function savePrice(v: string) {
     setPrice(v)
-    await api('/me/settings', {
+    await request('/me/settings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ price_per_meter: Number(v.replace(',', '.')) || 0 }),
     })
   }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { api } from '@/lib/apiClient'
+import { request } from '@/lib/apiClient'
 
 type PreviewItem = {
   print_id: string
@@ -12,7 +12,14 @@ type PreviewItem = {
 
 type Job = {
   id: string
-  status: 'preview' | 'preview_done' | 'confirming' | 'queued' | 'processing' | 'done' | 'error'
+  status:
+    | 'preview'
+    | 'preview_done'
+    | 'confirming'
+    | 'queued'
+    | 'processing'
+    | 'done'
+    | 'error'
   zip_url?: string
   error?: string
 }
@@ -68,18 +75,23 @@ export default function PreviewPanel(props: Props) {
     return groupByPrint(props.items)
   }, [props])
 
-  async function preview(items: PreviewItem[], onJobCreated: (id: string) => void) {
+  async function preview(
+    items: PreviewItem[],
+    onJobCreated: (id: string) => void
+  ) {
     if (creating) return
     if (!isPreviewProps(props)) return
     setCreating(true)
     try {
       const grouped = groupByPrint(items)
 
-      const res: { job_id: string } = await api('/print-jobs', {
+      const res = await request<{ job_id: string }>('/print-jobs', {
         method: 'POST',
-        
         body: JSON.stringify({
-          items: grouped.map(i => ({ print_id: i.print_id, qty: i.qty })),
+          items: grouped.map(i => ({
+            print_id: i.print_id,
+            qty: i.qty,
+          })),
           sheet_size: props.sheetSize,
         }),
       })
@@ -94,7 +106,7 @@ export default function PreviewPanel(props: Props) {
     if (!job || job.status !== 'preview_done' || confirming) return
     setConfirming(true)
     try {
-      await api(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
+      await request(`/print-jobs/${jobId}/confirm`, { method: 'POST' })
       setJob(j => (j ? { ...j, status: 'queued' } : j))
       setSeconds(0)
     } finally {
@@ -111,18 +123,13 @@ export default function PreviewPanel(props: Props) {
       if (stop) return
 
       try {
-        const data: Job = await api(`/jobs/${props.jobId}`)
+        const data = await request<Job>(`/jobs/${props.jobId}`)
         setJob(data)
 
-        if (data.status === 'preview_done') {
-          const f: GeneratedFile[] = await api(`/jobs/${props.jobId}/files`)
-          setFiles(f)
-          setProgress(100)
-          return
-        }
-
-        if (data.status === 'done') {
-          const f: GeneratedFile[] = await api(`/jobs/${props.jobId}/files`)
+        if (data.status === 'preview_done' || data.status === 'done') {
+          const f = await request<GeneratedFile[]>(
+            `/jobs/${props.jobId}/files`
+          )
           setFiles(f)
           setProgress(100)
           return
@@ -169,9 +176,14 @@ export default function PreviewPanel(props: Props) {
         </div>
 
         <div className="flex justify-between items-center">
-          <span className="text-sm text-gray-500">{total} kits selecionados</span>
+          <span className="text-sm text-gray-500">
+            {total} kits selecionados
+          </span>
           <div className="flex gap-3">
-            <button onClick={props.onReset} className="border px-5 py-2 rounded-lg">
+            <button
+              onClick={props.onReset}
+              className="border px-5 py-2 rounded-lg"
+            >
               Cancelar
             </button>
             <button
@@ -193,7 +205,11 @@ export default function PreviewPanel(props: Props) {
     <div className="border rounded-2xl p-10 bg-white min-h-[320px] flex flex-col justify-between">
       <div className="space-y-6">
         <h2 className="text-xl font-semibold text-center">
-          {job?.status === 'done' ? 'Concluído' : job?.status === 'confirming' ? 'Confirmando' : 'Processando'}
+          {job?.status === 'done'
+            ? 'Concluído'
+            : job?.status === 'confirming'
+            ? 'Confirmando'
+            : 'Processando'}
         </h2>
 
         {job?.status !== 'done' && (
@@ -214,7 +230,8 @@ export default function PreviewPanel(props: Props) {
         {job?.status === 'preview_done' && (
           <div className="space-y-4 text-center">
             <p className="text-sm text-gray-600">
-              {files.length} folhas geradas (prévia) — consumo estimado: {files.length} créditos
+              {files.length} folhas geradas (prévia) — consumo estimado:{' '}
+              {files.length} créditos
             </p>
 
             <div className="flex justify-center gap-4 flex-wrap max-h-[220px] overflow-y-auto">
@@ -224,7 +241,10 @@ export default function PreviewPanel(props: Props) {
                   onClick={() => setZoom(f.url)}
                   className="relative w-32 h-24 border rounded-lg overflow-hidden hover:ring-2 hover:ring-black"
                 >
-                  <img src={f.url} className="w-full h-full object-cover blur-[0.5px] opacity-90" />
+                  <img
+                    src={f.url}
+                    className="w-full h-full object-cover blur-[0.5px] opacity-90"
+                  />
                   <div className="absolute inset-0 flex items-center justify-center text-white text-xs font-bold bg-black/30">
                     PRÉVIA
                   </div>
@@ -237,7 +257,10 @@ export default function PreviewPanel(props: Props) {
             </p>
 
             <div className="flex justify-center gap-4 pt-4">
-              <button onClick={() => window.location.reload()} className="border px-6 py-2 rounded-lg">
+              <button
+                onClick={() => window.location.reload()}
+                className="border px-6 py-2 rounded-lg"
+              >
                 Refazer
               </button>
 
@@ -246,7 +269,9 @@ export default function PreviewPanel(props: Props) {
                 disabled={confirming}
                 className="bg-black text-white px-6 py-2 rounded-lg disabled:opacity-50"
               >
-                {confirming ? 'Concluindo…' : `Concluir (${files.length} créditos)`}
+                {confirming
+                  ? 'Concluindo…'
+                  : `Concluir (${files.length} créditos)`}
               </button>
             </div>
           </div>
@@ -254,7 +279,9 @@ export default function PreviewPanel(props: Props) {
 
         {job?.status === 'done' && job.zip_url && (
           <div className="space-y-4 text-center">
-            <p className="text-sm font-medium">Foram gerados {files.length} arquivos com sucesso.</p>
+            <p className="text-sm font-medium">
+              Foram gerados {files.length} arquivos com sucesso.
+            </p>
             <a
               href={job.zip_url}
               onClick={() => setTimeout(() => window.location.reload(), 5000)}
@@ -272,7 +299,9 @@ export default function PreviewPanel(props: Props) {
           </div>
         )}
 
-        {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+        {error && (
+          <p className="text-sm text-red-600 text-center">{error}</p>
+        )}
       </div>
 
       <div className="flex justify-end">
@@ -286,8 +315,14 @@ export default function PreviewPanel(props: Props) {
           onClick={() => setZoom(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
         >
-          <div onClick={e => e.stopPropagation()} className="bg-white p-4 rounded-xl shadow-lg">
-            <img src={zoom} className="max-w-[90vw] max-h-[85vh] object-contain rounded" />
+          <div
+            onClick={e => e.stopPropagation()}
+            className="bg-white p-4 rounded-xl shadow-lg"
+          >
+            <img
+              src={zoom}
+              className="max-w-[90vw] max-h-[85vh] object-contain rounded"
+            />
           </div>
         </div>
       )}
