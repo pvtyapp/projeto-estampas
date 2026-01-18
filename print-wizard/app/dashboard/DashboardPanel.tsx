@@ -42,7 +42,7 @@ export default function DashboardPanel({
 
     async function loadUsage() {
       try {
-        const data = await request<Usage>('/usage')
+        const data = await request<Usage>('/me/usage')
         if (!cancelled) setUsage(data)
       } catch (err) {
         console.error('Erro ao carregar usage', err)

@@ -64,7 +64,7 @@ export default function Library({ onPreview, version }: Props) {
       const [printsData, notesData, usageData] = await Promise.all([
         request<Print[]>('/prints'),
         request<any[]>('/print-notes'),
-        request<UsageLocal>('/usage'),
+        request<UsageLocal>('/me/usage'),
       ])
 
       setPrints(printsData)

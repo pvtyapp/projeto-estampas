@@ -4,7 +4,7 @@ from fastapi import Header, HTTPException, status
 from jose import jwt, JWTError, ExpiredSignatureError
 from typing import Optional
 
-from app.utils.validators import validate_document
+from backend.utils.validators import validate_document
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,16 @@ async def get_current_user(
 
     token_header = authorization or x_authorization
     if not token_header:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Header Authorization ausente")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Header Authorization ausente",
+        )
 
     if not token_header.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Formato de token inválido")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Formato de token inválido",
+        )
 
     token = token_header.split(" ", 1)[1]
 
@@ -47,14 +53,19 @@ async def get_current_user(
             issuer=SUPABASE_ISSUER,
         )
 
-        # normaliza id para o backend inteiro
         user_id = payload.get("sub")
         payload["id"] = user_id
 
         return payload
 
     except ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expirado")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado",
+        )
 
     except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido",
+        )

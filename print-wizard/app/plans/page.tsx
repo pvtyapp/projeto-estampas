@@ -42,7 +42,7 @@ export default function PlansPage() {
 
   useEffect(() => {
     async function loadUsage() {
-      const usage = await request<{ plan: string }>('/usage')
+      const usage = await request<{ plan: string }>('/me/usage')
       setCurrentPriceId(usage.plan)
     }
     if (session) loadUsage()
