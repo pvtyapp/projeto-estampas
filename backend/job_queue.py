@@ -5,10 +5,10 @@ from rq import Queue
 REDIS_URL = os.getenv("REDIS_URL")
 
 if not REDIS_URL:
-    raise RuntimeError("REDIS_URL não configurada")
+    raise RuntimeError("REDIS_URL nao configurada")
 
 # Log simples para debug (sem expor senha)
-print(f"🔌 Conectando no Redis: {REDIS_URL.split('@')[-1]}")
+print(f"Conectando no Redis: {REDIS_URL.split('@')[-1]}")
 
 redis_conn = Redis.from_url(
     REDIS_URL,
@@ -21,5 +21,5 @@ redis_conn = Redis.from_url(
 queue = Queue(
     "default",
     connection=redis_conn,
-    default_timeout=int(os.getenv("RQ_DEFAULT_TIMEOUT", "900")),  # 15 minutos
+    default_timeout=int(os.getenv("RQ_DEFAULT_TIMEOUT", "900")),
 )

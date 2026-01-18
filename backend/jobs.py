@@ -128,7 +128,9 @@ def process_render(job_id: str, preview: bool = False):
             print(f"📦 ZIP generated and uploaded: {zip_url}")
 
         else:
-            supabase.table("jobs").update({"status": "preview_done"}).eq("id", job_id).execute()
+            supabase.table("jobs").update({
+                "status": "preview_done"
+            }).eq("id", job_id).execute()
 
         print(f"✅ Job {job_id} finished with {sheets} sheets")
 

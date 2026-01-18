@@ -12,6 +12,7 @@ from backend.jobs import process_render
 from backend.auth import get_current_user
 from backend.supabase_client import supabase
 from backend.limits import check_and_consume_limits, LimitExceeded
+from backend.services.usage_service import get_usage, consume_usage
 from backend.app.routes import fiscal
 from fastapi import Header
 import stripe
@@ -117,6 +118,56 @@ def current_user(user=Depends(get_current_user)):
     return user
 
 @app.post("/auth/after-signup")
+# =========================
+# AUTH REGISTER (CORRETO)
+# =========================
+class RegisterPayload(BaseModel):
+    name: str | None = None
+    document: str | None = None
+    document_type: str | None = None
+    company_name: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip_code: str | None = None
+
+
+@app.post("/auth/register")
+def auth_register(
+    payload: RegisterPayload,
+    user=Depends(current_user),
+):
+    user_id = user["sub"]
+    email = user.get("email")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Email não encontrado no token")
+
+    supabase.table("profiles").upsert(
+        {
+            "id": user_id,
+            "email": email,
+            "name": payload.name,
+        },
+        on_conflict="id",
+    ).execute()
+
+    supabase.table("user_fiscal_data").upsert(
+        {
+            "user_id": user_id,
+            "document": payload.document,
+            "document_type": payload.document_type,
+            "company_name": payload.company_name,
+            "address": payload.address,
+            "city": payload.city,
+            "state": payload.state,
+            "zip_code": payload.zip_code,
+        },
+        on_conflict="user_id",
+    ).execute()
+
+    return {"status": "ok"}
+
 def after_signup(payload: dict, x_internal_key: str = Header(None)):
     if x_internal_key != INTERNAL_KEY:
         raise HTTPException(status_code=401, detail="unauthorized")
@@ -466,25 +517,15 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
     # =========================
     # USAGE / PLANO
     # =========================
-    usage = get_my_usage(user)
+    usage = get_usage(supabase, user["sub"])
 
-    # FREE → limite diário (NÃO passa por Stripe logic)
     if usage["plan"] == "free":
         if usage["status"] == "blocked":
             raise HTTPException(
                 status_code=402,
                 detail="Limite diário do plano FREE atingido"
             )
-
-        # registra usage manualmente (FREE)
-        supabase.table("usage").insert({
-            "user_id": user["sub"],
-            "amount": sheets,
-            "job_id": job_id,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }).execute()
-
-    # PAID → Stripe / subscription
+        consume_usage(supabase, user["sub"], sheets, job_id=job_id)
     else:
         try:
             check_and_consume_limits(
@@ -602,132 +643,13 @@ def get_print_stats(
 
 @app.get("/me/usage")
 def get_my_usage(user=Depends(current_user)):
-    now = datetime.now(timezone.utc)
-
-    # =========================
-    # BUSCA ASSINATURA ATIVA (PAID)
-    # =========================
-    sub_res = (
-        supabase.table("subscriptions")
-        .select("*")
-        .eq("user_id", user["sub"])
-        .eq("status", "active")
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-
-    # =========================
-    # FREE USER (SEM STRIPE)
-    # RENOVA DIARIAMENTE
-    # =========================
-    if not sub_res:
-        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        period_end = period_start + timedelta(days=1)
-
-        plan = (
-            supabase.table("plans")
-            .select("*")
-            .eq("price_id", "free")
-            .limit(1)
-            .execute()
-            .data
-            or [{}]
-        )[0]
-
-        limit = plan.get("daily_limit", 0)
-
-        used_rows = (
-            supabase.table("usage")
-            .select("amount")
-            .eq("user_id", user["sub"])
-            .gte("created_at", period_start.isoformat())
-            .lt("created_at", period_end.isoformat())
-            .execute()
-            .data
-            or []
-        )
-
-        used = sum(r.get("amount", 0) for r in used_rows)
-
-        status = "ok"
-        if limit and used >= limit:
-            status = "blocked"
-        elif limit and used >= limit * 0.8:
-            status = "warning"
-
-        return {
-            "plan": "free",
-            "used": used,
-            "limit": limit,
-            "remaining_days": 0,
-            "status": status,
-        }
-
-    # =========================
-    # PAID USER (STRIPE)
-    # =========================
-    sub = sub_res[0]
-
-    period_start = datetime.fromtimestamp(
-        sub["current_period_start"], tz=timezone.utc
-    )
-    period_end = datetime.fromtimestamp(
-        sub["current_period_end"], tz=timezone.utc
-    )
-
-    if now >= period_end:
-        return {
-            "plan": sub["price_id"],
-            "used": 0,
-            "limit": 0,
-            "remaining_days": 0,
-            "status": "blocked",
-        }
-
-    plan = (
-        supabase.table("plans")
-        .select("*")
-        .eq("price_id", sub["price_id"])
-        .limit(1)
-        .execute()
-        .data
-        or [{}]
-    )[0]
-
-    limit = plan.get("monthly_limit", 0)
-
-    used_rows = (
-        supabase.table("usage")
-        .select("amount")
-        .eq("user_id", user["sub"])
-        .gte("created_at", period_start.isoformat())
-        .lt("created_at", period_end.isoformat())
-        .execute()
-        .data
-        or []
-    )
-
-    used = sum(r.get("amount", 0) for r in used_rows)
-
-    remaining_days = max(
-        0,
-        ceil((period_end - now).total_seconds() / 86400)
-    )
-
-    status = "ok"
-    if limit and used >= limit:
-        status = "blocked"
-    elif limit and used >= limit * 0.8:
-        status = "warning"
-
+    usage = get_usage(supabase, user["sub"])
     return {
-        "plan": sub["price_id"],
-        "used": used,
-        "limit": limit,
-        "remaining_days": remaining_days,
-        "status": status,
+        "plan": usage["plan"],
+        "used": usage["used"],
+        "limit": usage["limit"],
+        "remaining_days": usage["remaining_days"],
+        "status": usage["status"],
     }
 
 
@@ -825,3 +747,61 @@ def register(payload: dict):
         supabase.table("user_fiscal_data").insert(fiscal).execute()
 
     return {"ok": True}
+
+
+# =========================
+# HEALTHCHECK
+# =========================
+
+@app.get("/health")
+def health():
+    try:
+        supabase.table("profiles").select("id").limit(1).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"healthcheck failed: {e}")
+
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# =========================
+# RATE LIMIT (IN-MEMORY)
+# =========================
+
+RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+RATE_LIMIT_MAX = int(os.getenv("RATE_LIMIT_MAX", "60"))
+
+_rate_limit_bucket: dict[str, list[datetime]] = {}
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    path = request.url.path
+
+    protected = (
+        path.startswith("/print-jobs")
+        or path.startswith("/jobs")
+        or path.startswith("/stripe")
+    )
+
+    if not protected:
+        return await call_next(request)
+
+    key = request.headers.get("authorization") or request.client.host
+    now = datetime.now(timezone.utc)
+
+    hits = _rate_limit_bucket.get(key, [])
+    hits = [t for t in hits if (now - t).total_seconds() < RATE_LIMIT_WINDOW]
+
+    if len(hits) >= RATE_LIMIT_MAX:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "rate limit exceeded"},
+        )
+
+    hits.append(now)
+    _rate_limit_bucket[key] = hits
+
+    return await call_next(request)

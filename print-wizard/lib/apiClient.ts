@@ -1,52 +1,42 @@
-// lib/apiClient.ts
+'use client'
 
-import { createClient } from '@supabase/supabase-js'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ''
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-type ApiOptions = {
-  method?: string
-  headers?: Record<string, string>
-  body?: any
-  signal?: AbortSignal
+type RequestOptions = RequestInit & {
+  auth?: boolean
 }
 
-export async function api(path: string, options: ApiOptions = {}) {
-  const session = await supabase.auth.getSession()
-  const token = session.data.session?.access_token
+type AuthHeader = Record<string, string>
 
-  const headers: Record<string, string> = {
-    ...(options.headers || {}),
+async function getAuthHeader(): Promise<AuthHeader> {
+  const token = localStorage.getItem('token')
+  if (!token) return {}
+
+  return {
+    Authorization: `Bearer ${token}`,
   }
+}
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
+export async function request<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<T> {
+  const { auth = true, headers, ...rest } = options
 
-  let body = options.body
+  const authHeader = auth ? await getAuthHeader() : {}
 
-  if (body && typeof body === 'object' && !(body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json'
-    body = JSON.stringify(body)
-  }
-
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${path}`, {
-    method: options.method || 'GET',
-    headers,
-    body,
-    signal: options.signal,
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...rest,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(headers as HeadersInit),
+      ...(authHeader as HeadersInit),
+    },
   })
 
   if (!res.ok) {
-    let detail = ''
-    try {
-      const err = await res.json()
-      detail = err.detail || ''
-    } catch {}
-    throw new Error(`API error ${res.status} ${detail}`)
+    const text = await res.text()
+    throw new Error(text || 'Erro na requisição')
   }
 
   return res.json()

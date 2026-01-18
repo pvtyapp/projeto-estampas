@@ -1,35 +1,68 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useSession } from '@/app/providers/SessionProvider'
-import { useUsage } from '@/app/providers/UsageProvider'
 import { useRouter } from 'next/navigation'
+import { request } from '@/lib/apiClient'
+
+type Usage = {
+  plan: string
+  used: number
+  limit: number
+  status: 'ok' | 'warning' | 'blocked'
+  remaining_days: number
+}
 
 export default function DashboardPanel({
   sheetSize,
   setSheetSize,
 }: {
   sheetSize: '30x100' | '57x100'
-  setSheetSize: (v: any) => void
+  setSheetSize: (v: '30x100' | '57x100') => void
 }) {
   const { session } = useSession()
-  const { usage, loading } = useUsage()
   const router = useRouter()
 
+  const [usage, setUsage] = useState<Usage | null>(null)
+  const [loading, setLoading] = useState(true)
+
   useEffect(() => {
-    const ss = localStorage.getItem('sheet_size') as any
+    const ss = localStorage.getItem('sheet_size') as '30x100' | '57x100'
     if (ss) setSheetSize(ss)
-  }, [])
+  }, [setSheetSize])
 
   useEffect(() => {
     localStorage.setItem('sheet_size', sheetSize)
   }, [sheetSize])
 
+  useEffect(() => {
+    if (!session) return
+
+    let cancelled = false
+
+    async function loadUsage() {
+      try {
+        const data = await request<Usage>('/usage')
+        if (!cancelled) setUsage(data)
+      } catch (err) {
+        console.error('Erro ao carregar usage', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadUsage()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session])
+
   if (!session) return null
 
   if (loading || !usage) {
     return (
-      <div className="bg-white border rounded-xl shadow p-6 flex flex-col gap-4 opacity-30 animate-pulse">
+      <div className="bg-white border rounded-xl shadow p-6 flex flex-col gap-4 animate-pulse">
         <div className="h-4 bg-gray-200 rounded w-1/3" />
         <div className="h-2 bg-gray-200 rounded w-full" />
         <div className="h-2 bg-gray-200 rounded w-full" />
@@ -42,13 +75,13 @@ export default function DashboardPanel({
       ? Math.min(100, Math.round((usage.used / usage.limit) * 100))
       : 0
 
-  const statusLabel: Record<string, string> = {
+  const statusLabel = {
     ok: 'Tudo certo',
     warning: 'Atenção',
     blocked: 'Bloqueado',
   }
 
-  const statusColor: Record<string, string> = {
+  const statusColor = {
     ok: 'bg-green-100 text-green-700',
     warning: 'bg-yellow-100 text-yellow-700',
     blocked: 'bg-red-100 text-red-700',
@@ -105,10 +138,13 @@ export default function DashboardPanel({
       </div>
 
       <div className="border-t pt-4">
-        <div className="text-sm font-medium mb-2">Configuração de impressão</div>
+        <div className="text-sm font-medium mb-2">
+          Configuração de impressão
+        </div>
         <div className="flex gap-6 text-sm">
           <div className="flex flex-col gap-1">
             <span className="text-gray-500">Folha</span>
+
             <label>
               <input
                 type="radio"
@@ -117,6 +153,7 @@ export default function DashboardPanel({
               />{' '}
               30x100
             </label>
+
             <label>
               <input
                 type="radio"

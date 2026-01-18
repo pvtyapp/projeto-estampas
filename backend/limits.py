@@ -1,5 +1,5 @@
 # backend/limits.py
-from datetime import datetime, timezone
+from backend.services.usage_service import get_usage, consume_usage
 
 
 class LimitExceeded(Exception):
@@ -10,99 +10,56 @@ def check_and_consume_limits(
     supabase,
     user_id: str,
     amount: int,
-    job_id: str = None,
+    job_id: str | None = None,
 ):
     """
-    ⚠️ ATENÇÃO:
-    Esta função é EXCLUSIVA para usuários PAID.
-    FREE NUNCA deve chamar este método.
+    ATENCAO:
+    Esta funcao e EXCLUSIVA para usuarios PAID.
+    FREE NUNCA deve chamar este metodo.
+
+    Blindagem:
+    - Idempotente por job_id
     """
 
-    now = datetime.now(timezone.utc)
+    if not job_id:
+        raise LimitExceeded("job_id obrigatorio para consumo PAID")
 
     # =========================
-    # SUBSCRIPTION (PAID ONLY)
+    # IDEMPOTENCIA (job_id)
     # =========================
-    sub_res = (
-        supabase
-        .table("subscriptions")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("status", "active")
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-
-    if not sub_res:
-        # Blindagem absoluta
-        raise LimitExceeded("Nenhuma assinatura ativa (usuário não é PAID).")
-
-    sub = sub_res[0]
-
-    period_start = datetime.fromtimestamp(
-        sub["current_period_start"],
-        tz=timezone.utc,
-    )
-    period_end = datetime.fromtimestamp(
-        sub["current_period_end"],
-        tz=timezone.utc,
-    )
-
-    if now >= period_end:
-        raise LimitExceeded("Período da assinatura expirado.")
-
-    # =========================
-    # PLANO VIA PRICE_ID
-    # =========================
-    plan_res = (
-        supabase
-        .table("plans")
-        .select("*")
-        .eq("price_id", sub["price_id"])
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
-
-    if not plan_res:
-        raise LimitExceeded("Plano não encontrado para esta assinatura.")
-
-    plan = plan_res[0]
-    limit = plan.get("monthly_limit", 0)
-
-    # =========================
-    # USAGE NO PERÍODO STRIPE
-    # =========================
-    used_rows = (
+    exists = (
         supabase
         .table("usage")
-        .select("amount")
-        .eq("user_id", user_id)
-        .gte("created_at", period_start.isoformat())
-        .lt("created_at", period_end.isoformat())
+        .select("id")
+        .eq("job_id", job_id)
+        .limit(1)
         .execute()
         .data
         or []
     )
 
-    used = sum(r.get("amount", 0) for r in used_rows)
+    if exists:
+        # consumo ja registrado
+        return
+
+    usage = get_usage(supabase, user_id)
+
+    # Somente PAID
+    if usage.get("plan") == "free":
+        raise LimitExceeded("Usuario FREE nao deve passar por check_and_consume_limits.")
+
+    if usage.get("status") == "blocked":
+        raise LimitExceeded("Limite do plano atingido ou assinatura expirada.")
+
+    limit = usage.get("limit", 0) or 0
+    used = usage.get("used", 0) or 0
 
     if limit and used + amount > limit:
         raise LimitExceeded("Limite do plano atingido.")
 
-    # =========================
-    # REGISTRA USAGE (PAID)
-    # =========================
-    row = {
-        "user_id": user_id,
-        "amount": amount,
-        "created_at": now.isoformat(),
-    }
-
-    if job_id:
-        row["job_id"] = job_id
-
-    supabase.table("usage").insert(row).execute()
+    consume_usage(
+        supabase=supabase,
+        user_id=user_id,
+        amount=amount,
+        job_id=job_id,
+    )

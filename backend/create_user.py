@@ -1,7 +1,8 @@
 import os
-import re
 import requests
 from dotenv import load_dotenv
+
+from app.utils.validators import validate_document
 
 load_dotenv()
 
@@ -25,23 +26,6 @@ HEADERS = {
 }
 
 # ========================
-# Utilidades
-# ========================
-
-def clean_document(doc: str) -> str:
-    return re.sub(r"\D", "", doc or "")
-
-def validate_document(person_type: str, document: str) -> str:
-    doc = clean_document(document)
-
-    if person_type == "cpf" and len(doc) != 11:
-        raise ValueError("CPF deve ter exatamente 11 dígitos")
-    if person_type == "cnpj" and len(doc) != 14:
-        raise ValueError("CNPJ deve ter exatamente 14 dígitos")
-
-    return doc
-
-# ========================
 # Entrada de dados
 # ========================
 
@@ -53,7 +37,7 @@ document = None
 
 if person_type in ("cpf", "cnpj"):
     document = input(f"Digite o {person_type.upper()}: ")
-    document = validate_document(person_type, document)
+    validate_document(person_type, document)
 else:
     person_type = None
 
@@ -133,7 +117,6 @@ if person_type and document:
         "cep": zip_code
     }
 
-    # remove campos vazios
     fiscal_payload = {k: v for k, v in fiscal_payload.items() if v}
 
     r = requests.post(
@@ -148,10 +131,8 @@ if person_type and document:
     )
 
     if r.status_code not in (200, 201):
-        # rollback user
         requests.delete(f"{AUTH_URL}/{user_id}", headers=HEADERS)
         print("Rollback: usuário removido")
-
         print("Erro ao criar dados fiscais:", r.text)
     else:
         print("Dados fiscais criados.")

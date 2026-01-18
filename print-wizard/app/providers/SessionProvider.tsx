@@ -14,7 +14,11 @@ const SessionContext = createContext<SessionContextType>({
   loading: true,
 })
 
-export default function SessionProvider({ children }: { children: React.ReactNode }) {
+export default function SessionProvider({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -30,10 +34,12 @@ export default function SessionProvider({ children }: { children: React.ReactNod
 
     init()
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (!active) return
-      setSession(newSession)
-    })
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, newSession) => {
+        if (!active) return
+        setSession(newSession)
+      }
+    )
 
     return () => {
       active = false

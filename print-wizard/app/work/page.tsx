@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/app/providers/SessionProvider'
+
 import DashboardPanel from '@/app/dashboard/DashboardPanel'
 import Library from '@/app/work/Library'
-import { PreviewItem } from '@/app/types/preview'
-import PreviewPanel from '@/components/PreviewPanel'
 import SkuUploadWizard from '@/app/work/SkuUploadWizard'
 import JobHistory from '@/app/work/JobHistory'
+import PreviewPanel from '@/components/PreviewPanel'
 import UserMenu from '@/components/UserMenu'
+
+import { PreviewItem } from '@/app/types/preview'
 
 export default function WorkPage() {
   const router = useRouter()
@@ -26,14 +28,21 @@ export default function WorkPage() {
     }
   }, [loading, session, router])
 
-  if (loading) return <p className="p-6 text-gray-500">Carregando sessão...</p>
-  if (!session) return null
+  if (loading) {
+    return <p className="p-6 text-gray-500">Carregando sessão...</p>
+  }
+
+  if (!session) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-20 bg-white border-b shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-4 grid grid-cols-3 items-center">
-          <span className="text-sm text-gray-600">Olá, {session?.user?.email ?? ''}</span>
+          <span className="text-sm text-gray-600">
+            Olá, {session.user?.email ?? ''}
+          </span>
 
           <div className="text-xl font-semibold tracking-widest text-center">
             PVTY
@@ -46,11 +55,17 @@ export default function WorkPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-10">
-        <DashboardPanel sheetSize={sheetSize} setSheetSize={setSheetSize} />
+        {/* DASHBOARD – único responsável por usage, stats, limites */}
+        <DashboardPanel
+          sheetSize={sheetSize}
+          setSheetSize={setSheetSize}
+        />
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="min-h-[720px]">
-            <SkuUploadWizard onComplete={() => setLibraryVersion(v => v + 1)} />
+            <SkuUploadWizard
+              onComplete={() => setLibraryVersion(v => v + 1)}
+            />
           </div>
 
           <div className="min-h-[720px]">
@@ -77,7 +92,10 @@ export default function WorkPage() {
               onReset={() => setPreviewItems(null)}
             />
           ) : selectedJob ? (
-            <PreviewPanel key={`job-${selectedJob}`} jobId={selectedJob} />
+            <PreviewPanel
+              key={`job-${selectedJob}`}
+              jobId={selectedJob}
+            />
           ) : (
             <div className="text-gray-400 text-sm text-center">
               Preencha as quantidades na biblioteca e clique em “Gerar folhas”.
@@ -105,8 +123,7 @@ export default function WorkPage() {
               <li>Informe corretamente os tamanhos e salve na biblioteca.</li>
               <li>Defina as quantidades que precisa na biblioteca.</li>
               <li>Clique em “Gerar folhas” para montar o layout.</li>
-              <li>Abra a última folha do preview e veja se cabe mais estampas.</li>
-              <li>Use as anotações para marcar devoluções ou camisetas prontas.</li>
+              <li>Abra a última folha do preview e valide o aproveitamento.</li>
               <li>Baixe o arquivo final e envie para impressão.</li>
             </ul>
           </div>
@@ -114,14 +131,15 @@ export default function WorkPage() {
           <div>
             <h3 className="font-semibold mb-2 text-gray-800">Sobre o PVTY</h3>
             <p>
-              O PVTY é uma plataforma criada para automatizar a montagem de folhas de impressão
-              para DTF. Nosso objetivo é reduzir desperdício, economizar tempo e padronizar
-              o seu fluxo de produção.
+              O PVTY automatiza a montagem de folhas de impressão DTF,
+              reduzindo desperdício, tempo operacional e erros manuais.
             </p>
           </div>
 
           <div className="flex flex-col gap-2">
-            <h3 className="font-semibold mb-2 text-gray-800">Institucional & Suporte</h3>
+            <h3 className="font-semibold mb-2 text-gray-800">
+              Institucional & Suporte
+            </h3>
             <a href="/termos" className="hover:underline">Termos de Uso</a>
             <a href="/privacidade" className="hover:underline">Política de Privacidade</a>
             <a href="/seguranca" className="hover:underline">Segurança</a>
