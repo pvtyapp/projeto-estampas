@@ -610,13 +610,18 @@ def get_plans(user=Depends(get_current_user)):
     }
 
 
+from fastapi import HTTPException
+
 @app.post("/auth/register")
 def register(payload: dict):
     email = payload.get("email")
     password = payload.get("password")
 
     if not email or not password:
-        raise HTTPException(status_code=400, detail="email e password obrigatórios")
+        raise HTTPException(
+            status_code=400,
+            detail="email e password obrigatórios"
+        )
 
     try:
         res = supabase.auth.sign_up({
@@ -624,51 +629,65 @@ def register(payload: dict):
             "password": password
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
-    data = res.get("user") if isinstance(res, dict) else getattr(res, "user", None)
+    user = None
+    if isinstance(res, dict):
+        user = res.get("user")
+    else:
+        user = getattr(res, "user", None)
 
-    if not data:
-        raise HTTPException(status_code=500, detail="Usuário não retornado pelo Supabase")
+    if not user:
+        raise HTTPException(
+            status_code=500,
+            detail="Usuário não retornado pelo Supabase"
+        )
 
-    return {"ok": True}
+    return {
+        "ok": True,
+        "user_id": user.id if hasattr(user, "id") else user["id"]
+    }
 
 
+from fastapi import Depends, HTTPException
 
 @app.post("/auth/after-signup")
-def after_signup(payload: dict, user=Depends(get_current_user)):
-    user_id = user["sub"]
-
-    person_type = payload.get("person_type")
-    document = payload.get("document")
-
-    if person_type and document:
-        document = validate_document(person_type, document)
-
+def after_signup(
+    payload: dict,
+    user=Depends(get_current_user)
+):
     fiscal = {
-        "user_id": user_id,
-        "person_type": person_type,
-        "document": document,
-        "full_name": payload.get("name"),
+        "user_id": user["sub"],
+        "person_type": payload.get("person_type"),
+        "document": payload.get("document"),
+        "full_name": payload.get("full_name"),
         "email": payload.get("email"),
         "phone": payload.get("phone"),
         "street": payload.get("street"),
         "number": payload.get("number"),
         "cep": payload.get("cep"),
-        "city": payload.get("city"),
-        "state": payload.get("state"),
     }
 
     fiscal = {k: v for k, v in fiscal.items() if v}
 
-    if not fiscal:
-        return {"ok": True}
+    if not fiscal.get("document"):
+        raise HTTPException(
+            status_code=400,
+            detail="Documento obrigatório"
+        )
 
-    supabase.table("user_fiscal_data").insert(fiscal).execute()
+    try:
+        supabase.table("user_fiscal_data").insert(fiscal).execute()
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
     return {"ok": True}
-
-
 
 
 # =========================
