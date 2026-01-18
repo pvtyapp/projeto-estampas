@@ -1,232 +1,232 @@
-import io
-import threading
-from concurrent.futures import ThreadPoolExecutor
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+# backend/stripe_routes.py
 
-from backend.print_utils import load_print_image, cm_to_px
-from backend.print_config import SPACING_PX
+import os
+import stripe
+from datetime import datetime
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import JSONResponse
+
 from backend.supabase_client import supabase
 
-_IMAGE_CACHE: dict[str, Image.Image] = {}
-_CACHE_LOCK = threading.Lock()
+# ======================================================
+# STRIPE CONFIG
+# ======================================================
+
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+if not STRIPE_SECRET_KEY or not STRIPE_WEBHOOK_SECRET:
+    raise RuntimeError("Stripe env vars não configuradas")
+
+stripe.api_key = STRIPE_SECRET_KEY
+
+# ======================================================
+# ROUTER
+# ======================================================
+
+router = APIRouter(
+    prefix="/stripe",
+    tags=["stripe"],
+)
+
+# ======================================================
+# HELPERS
+# ======================================================
+
+def get_plan_by_price_id(price_id: str):
+    res = (
+        supabase
+        .table("plans")
+        .select("id")
+        .eq("stripe_price_id", price_id)
+        .single()
+        .execute()
+    )
+    return res.data if res and res.data else None
 
 
-class Shelf:
-    def __init__(self, y):
-        self.y = y
-        self.height = 0
-        self.used_width = 0
+def upsert_subscription(user_id: str, plan_id: str, stripe_sub: dict):
+    supabase.table("subscriptions").upsert(
+        {
+            "user_id": user_id,
+            "plan_id": plan_id,
+            "stripe_subscription_id": stripe_sub["id"],
+            "status": stripe_sub["status"],
+            "current_period_end": datetime.fromtimestamp(
+                stripe_sub["current_period_end"]
+            ).isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+    ).execute()
 
 
-class Sheet:
-    def __init__(self):
-        self.shelves = []
-        self.used_height = 0
-        self.items = []
+def update_user_plan(user_id: str, plan_id: str):
+    supabase.table("profiles").update(
+        {
+            "current_plan_id": plan_id,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+    ).eq("id", user_id).execute()
 
+# ======================================================
+# CHECKOUT
+# ======================================================
 
-def trim_transparency(img: Image.Image) -> Image.Image:
-    bg = Image.new(img.mode, img.size, (0, 0, 0, 0))
-    diff = ImageChops.difference(img, bg)
-    bbox = diff.getbbox()
-    return img.crop(bbox) if bbox else img
+@router.post("/checkout")
+async def create_checkout(payload: dict):
+    """
+    payload:
+    {
+      "user_id": "...",
+      "email": "...",
+      "plan_id": "...",
+      "success_url": "...",
+      "cancel_url": "..."
+    }
+    """
 
-
-def resize_to_slot(img: Image.Image, w: int, h: int) -> Image.Image:
-    return img.resize((w, h), Image.LANCZOS)
-
-
-def apply_watermark(img: Image.Image, text: str = "PREVIA • PVTY") -> Image.Image:
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
-
-    w, h = img.size
-    step = 260
-
-    for y in range(0, h, step):
-        for x in range(0, w, step):
-            draw.text((x, y), text, fill=(0, 0, 0, 30))
-
-    text_w, text_h = draw.textbbox((0, 0), text)[2:]
-    draw.text(((w - text_w) / 2, (h - text_h) / 2), text, fill=(0, 0, 0, 80))
-
-    img = Image.alpha_composite(img, overlay)
-    img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
-    return img
-
-
-def pack_items_hybrid(raw_items, sheet_width, sheet_height):
-    items = [{**i} for i in raw_items]
-    SHEET_AREA = sheet_width * sheet_height
-
-    large, medium, small = [], [], []
-
-    for i in items:
-        area = i["w"] * i["h"]
-        if area >= 0.25 * SHEET_AREA:
-            large.append(i)
-        elif area >= 0.05 * SHEET_AREA:
-            medium.append(i)
-        else:
-            small.append(i)
-
-    for group in (large, medium, small):
-        group.sort(key=lambda i: max(i["w"], i["h"]), reverse=True)
-
-    sheets: list[Sheet] = []
-
-    def place(item):
-        for sheet in sheets:
-            for shelf in sheet.shelves:
-                for w, h, r in (
-                    (item["w"], item["h"], False),
-                    (item["h"], item["w"], True),
-                ):
-                    if (
-                        shelf.used_width + w + SPACING_PX <= sheet_width
-                        and shelf.y + h + SPACING_PX <= sheet_height
-                    ):
-                        item.update({"x": shelf.used_width, "y": shelf.y, "rotated": r})
-                        shelf.used_width += w + SPACING_PX
-                        shelf.height = max(shelf.height, h + SPACING_PX)
-                        sheet.items.append(item)
-                        return True
-        return False
-
-    for group in (large, medium, small):
-        for item in group:
-            if place(item):
-                continue
-
-            placed = False
-            for sheet in sheets:
-                for w, h, r in (
-                    (item["w"], item["h"], False),
-                    (item["h"], item["w"], True),
-                ):
-                    if sheet.used_height + h + SPACING_PX <= sheet_height:
-                        shelf = Shelf(sheet.used_height)
-                        shelf.used_width = w + SPACING_PX
-                        shelf.height = h + SPACING_PX
-                        item.update({"x": 0, "y": shelf.y, "rotated": r})
-                        sheet.shelves.append(shelf)
-                        sheet.used_height += shelf.height
-                        sheet.items.append(item)
-                        placed = True
-                        break
-                if placed:
-                    break
-
-            if placed:
-                continue
-
-            sheet = Sheet()
-            for w, h, r in (
-                (item["w"], item["h"], False),
-                (item["h"], item["w"], True),
-            ):
-                if h + SPACING_PX <= sheet_height:
-                    shelf = Shelf(0)
-                    shelf.used_width = w + SPACING_PX
-                    shelf.height = h + SPACING_PX
-                    item.update({"x": 0, "y": 0, "rotated": r})
-                    sheet.shelves.append(shelf)
-                    sheet.used_height = shelf.height
-                    sheet.items.append(item)
-                    sheets.append(sheet)
-                    placed = True
-                    break
-
-            if not placed:
-                raise ValueError(f"Item nao coube: {item}")
-
-    return sheets
-
-
-def _load_cached_image(url: str) -> Image.Image:
-    with _CACHE_LOCK:
-        if url in _IMAGE_CACHE:
-            return _IMAGE_CACHE[url].copy()
-
-    img = load_print_image(url)
-
-    with _CACHE_LOCK:
-        _IMAGE_CACHE[url] = img
-
-    return img.copy()
-
-
-def process_print_job(job_id: str, pieces: list[dict], preview: bool = False):
-    job = (
-        supabase.table("jobs")
-        .select("payload")
-        .eq("id", job_id)
+    plan = (
+        supabase
+        .table("plans")
+        .select("stripe_price_id")
+        .eq("id", payload["plan_id"])
         .single()
         .execute()
         .data
-        or {}
     )
-    payload = job.get("payload") or {}
 
-    sheet_size = payload.get("sheet_size", "30x100")
-    if sheet_size == "57x100":
-        width_cm, height_cm = 57, 100
-    else:
-        width_cm, height_cm = 30, 100
+    if not plan or not plan.get("stripe_price_id"):
+        raise HTTPException(400, "Plano inválido")
 
-    items = [
-        {
-            "print_url": p["url"],
-            "w": cm_to_px(p["width"]),
-            "h": cm_to_px(p["height"]),
-        }
-        for p in pieces
-    ]
-
-    sheet_w = cm_to_px(width_cm)
-    sheet_h = cm_to_px(height_cm)
-
-    sheets = pack_items_hybrid(items, sheet_w, sheet_h)
-
-    unique_urls = list({i["print_url"] for i in items})
-    with ThreadPoolExecutor(max_workers=8) as ex:
-        list(ex.map(_load_cached_image, unique_urls))
-
-    def render_only(args):
-        idx, sheet = args
-        img = Image.new("RGBA", (sheet_w, sheet_h), (255, 255, 255, 0))
-
-        for item in sheet.items:
-            art = _load_cached_image(item["print_url"])
-            art = trim_transparency(art)
-            art = resize_to_slot(art, item["w"], item["h"])
-            if item.get("rotated"):
-                art = art.rotate(90, expand=True)
-            img.alpha_composite(art, dest=(item["x"], item["y"]))
-
-        if preview:
-            img = apply_watermark(img)
-
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        buf.seek(0)
-        return idx, buf.read()
-
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        rendered = list(ex.map(render_only, enumerate(sheets)))
-
-    results = []
-    for idx, data in rendered:
-        filename = f"jobs/{job_id}/{ 'preview' if preview else 'final' }/{idx}.png"
-
-        supabase.storage.from_("jobs-output").upload(
-            filename,
-            data,
-            {"content-type": "image/png", "upsert": "true"},
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            payment_method_types=["card"],
+            customer_email=payload["email"],
+            line_items=[
+                {
+                    "price": plan["stripe_price_id"],
+                    "quantity": 1,
+                }
+            ],
+            success_url=payload["success_url"],
+            cancel_url=payload["cancel_url"],
+            metadata={
+                "user_id": payload["user_id"],
+                "plan_id": payload["plan_id"],
+            },
         )
 
-        results.append(
-            supabase.storage.from_("jobs-output").get_public_url(filename)
+        return {"checkout_url": session.url}
+
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+# ======================================================
+# CUSTOMER PORTAL
+# ======================================================
+
+@router.post("/portal")
+async def customer_portal(payload: dict):
+    """
+    payload:
+    {
+      "customer_id": "...",
+      "return_url": "..."
+    }
+    """
+
+    try:
+        portal = stripe.billing_portal.Session.create(
+            customer=payload["customer_id"],
+            return_url=payload["return_url"],
+        )
+        return {"url": portal.url}
+    except Exception as e:
+        raise HTTPException(400, str(e))
+
+# ======================================================
+# WEBHOOK
+# ======================================================
+
+@router.post("/webhook")
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig, STRIPE_WEBHOOK_SECRET
+        )
+    except Exception:
+        raise HTTPException(400, "Webhook inválido")
+
+    event_type = event["type"]
+    obj = event["data"]["object"]
+
+    # ==================================================
+    # CHECKOUT COMPLETED
+    # ==================================================
+
+    if event_type == "checkout.session.completed":
+        user_id = obj["metadata"]["user_id"]
+        plan_id = obj["metadata"]["plan_id"]
+
+        sub = stripe.Subscription.retrieve(obj["subscription"])
+
+        upsert_subscription(user_id, plan_id, sub)
+        update_user_plan(user_id, plan_id)
+
+    # ==================================================
+    # SUBSCRIPTION UPDATED
+    # ==================================================
+
+    elif event_type == "customer.subscription.updated":
+        sub = obj
+        price_id = sub["items"]["data"][0]["price"]["id"]
+
+        plan = get_plan_by_price_id(price_id)
+        if not plan:
+            return JSONResponse({"ignored": True})
+
+        res = (
+            supabase
+            .table("subscriptions")
+            .select("user_id")
+            .eq("stripe_subscription_id", sub["id"])
+            .single()
+            .execute()
         )
 
-    return results
+        if res.data:
+            upsert_subscription(res.data["user_id"], plan["id"], sub)
+            update_user_plan(res.data["user_id"], plan["id"])
+
+    # ==================================================
+    # SUBSCRIPTION DELETED
+    # ==================================================
+
+    elif event_type == "customer.subscription.deleted":
+        sub = obj
+
+        res = (
+            supabase
+            .table("subscriptions")
+            .select("user_id")
+            .eq("stripe_subscription_id", sub["id"])
+            .single()
+            .execute()
+        )
+
+        if res.data:
+            # plano free = NULL ou ID do free
+            update_user_plan(res.data["user_id"], None)
+
+            supabase.table("subscriptions").update(
+                {
+                    "status": "canceled",
+                    "updated_at": datetime.utcnow().isoformat(),
+                }
+            ).eq("stripe_subscription_id", sub["id"]).execute()
+
+    return JSONResponse({"status": "ok"})
