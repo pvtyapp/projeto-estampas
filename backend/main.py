@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from backend.print_utils import validate_slots
 from backend.job_queue import queue
 from backend.jobs import process_render
 from backend.auth import get_current_user
@@ -15,7 +16,7 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 from backend.services.usage_service import get_usage, consume_usage
 from backend.app.routes import fiscal
 from fastapi import Header
-from backend.auth import current_user
+from backend.auth import get_current_user
 from backend.utils.validators import validate_document
 import stripe
 
@@ -142,11 +143,11 @@ def root():
 # =========================
 
 @app.get("/print-notes")
-def list_print_notes(user=Depends(current_user)):
+def list_print_notes(user=Depends(get_current_user)):
     return supabase.table("print_notes").select("print_id,note").eq("user_id", user["sub"]).execute().data or []
 
 @app.post("/print-notes")
-def save_print_note(data: PrintNoteIn, user=Depends(current_user)):
+def save_print_note(data: PrintNoteIn, user=Depends(get_current_user)):
     supabase.table("print_notes").upsert({
         "id": str(uuid.uuid4()),
         "user_id": user["sub"],
@@ -161,14 +162,14 @@ def save_print_note(data: PrintNoteIn, user=Depends(current_user)):
 # =========================
 
 @app.get("/prints")
-def list_prints(user=Depends(current_user)):
+def list_prints(user=Depends(get_current_user)):
     prints = supabase.table("prints").select("*").eq("user_id", user["sub"]).order("created_at", desc=True).execute().data or []
     for p in prints:
         p["slots"] = load_slots(p["id"])
     return prints
 
 @app.get("/prints/{print_id}")
-def get_print(print_id: str, user=Depends(current_user)):
+def get_print(print_id: str, user=Depends(get_current_user)):
     p = supabase.table("prints").select("*").eq("id", print_id).eq("user_id", user["sub"]).single().execute().data
     if not p:
         raise HTTPException(status_code=404, detail="Print não encontrado")
@@ -176,7 +177,7 @@ def get_print(print_id: str, user=Depends(current_user)):
     return p
 
 @app.post("/prints")
-def create_print(payload: PrintCreate, user=Depends(current_user)):
+def create_print(payload: PrintCreate, user=Depends(get_current_user)):
     validate_slots(payload.slots)
     print_id = str(uuid.uuid4())
 
@@ -201,7 +202,7 @@ def create_print(payload: PrintCreate, user=Depends(current_user)):
     return get_print(print_id, user)
 
 @app.patch("/prints/{print_id}")
-def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_user)):
+def update_print(print_id: str, payload: Dict[str, Any], user=Depends(get_current_user)):
     slots = payload.get("slots")
     if not isinstance(slots, list):
         raise HTTPException(status_code=400, detail="slots inválido")
@@ -223,7 +224,7 @@ def update_print(print_id: str, payload: Dict[str, Any], user=Depends(current_us
     return get_print(print_id, user)
 
 @app.delete("/prints/{print_id}")
-def delete_print(print_id: str, user=Depends(current_user)):
+def delete_print(print_id: str, user=Depends(get_current_user)):
     supabase.table("print_slots").delete().eq("print_id", print_id).execute()
     supabase.table("prints").delete().eq("id", print_id).eq("user_id", user["sub"]).execute()
     return {"status": "deleted"}
@@ -235,7 +236,7 @@ def upload_print_file(
     type: str = Form(...),
     width_cm: float = Form(...),
     height_cm: float = Form(...),
-    user=Depends(current_user),
+    user=Depends(get_current_user),
 ):
     content = file.file.read()
     if not content:
@@ -274,7 +275,7 @@ def build_pieces(print_obj, qty: int):
     ]
 
 @app.get("/jobs/history")
-def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(current_user)):
+def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user=Depends(get_current_user)):
     q = supabase.table("jobs").select("id,status,created_at,finished_at,zip_url,payload").eq("user_id", user["sub"])
     if from_:
         q = q.gte("created_at", from_)
@@ -304,7 +305,7 @@ def list_job_history(from_: Optional[str] = None, to: Optional[str] = None, user
     return result
 
 @app.get("/jobs/{job_id}")
-def get_job(job_id: str, user=Depends(current_user)):
+def get_job(job_id: str, user=Depends(get_current_user)):
     job = supabase.table("jobs").select("*").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
     if not job:
         raise HTTPException(status_code=404, detail="Job não encontrado")
@@ -326,7 +327,7 @@ def get_job(job_id: str, user=Depends(current_user)):
     }
 
 @app.get("/jobs/{job_id}/files")
-def get_job_files(job_id: str, user=Depends(current_user)):
+def get_job_files(job_id: str, user=Depends(get_current_user)):
     uuid.UUID(job_id)
 
     job = supabase.table("jobs").select("id").eq("id", job_id).eq("user_id", user["sub"]).single().execute().data
@@ -356,7 +357,7 @@ def get_job_files(job_id: str, user=Depends(current_user)):
     ]
 
 @app.post("/print-jobs")
-def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
+def create_print_job(payload: PrintJobRequest, user=Depends(get_current_user)):
     if not payload.items:
         raise HTTPException(status_code=400, detail="Nenhum item enviado")
 
@@ -391,7 +392,7 @@ def create_print_job(payload: PrintJobRequest, user=Depends(current_user)):
     return {"job_id": job_id, "total_kits": total_kits}
 
 @app.post("/print-jobs/{job_id}/confirm")
-def confirm_print_job(job_id: str, user=Depends(current_user)):
+def confirm_print_job(job_id: str, user=Depends(get_current_user)):
     uuid.UUID(job_id)
 
     updated = (
@@ -461,7 +462,7 @@ def confirm_print_job(job_id: str, user=Depends(current_user)):
 @app.get("/stats/prints")
 def get_print_stats(
     request: Request,
-    user=Depends(current_user),
+    user=Depends(get_current_user),
     from_: str = Query(..., alias="from"),
     to: str = Query(..., alias="to"),
 ):
@@ -547,7 +548,7 @@ def get_print_stats(
 # =========================
 
 @app.get("/me/usage")
-def get_my_usage(user=Depends(current_user)):
+def get_my_usage(user=Depends(get_current_user)):
     usage = get_usage(supabase, user["sub"])
     return {
         "plan": usage["plan"],
@@ -564,7 +565,7 @@ def get_my_usage(user=Depends(current_user)):
 # =========================
 
 @app.get("/me/settings")
-def get_settings(user=Depends(current_user)):
+def get_settings(user=Depends(get_current_user)):
     res = supabase.table("user_settings").select("*").eq("user_id", user["sub"]).execute()
     data = res.data if res and hasattr(res, "data") else None
 
@@ -574,7 +575,7 @@ def get_settings(user=Depends(current_user)):
     return data[0]
 
 @app.post("/me/settings")
-def save_settings(data: SettingsIn, user=Depends(current_user)):
+def save_settings(data: SettingsIn, user=Depends(get_current_user)):
     supabase.table("user_settings").upsert({
         "user_id": user["sub"],
         "price_per_meter": data.price_per_meter,
@@ -587,7 +588,7 @@ def save_settings(data: SettingsIn, user=Depends(current_user)):
 # =========================
 
 @app.get("/plans")
-def get_plans(user=Depends(current_user)):
+def get_plans(user=Depends(get_current_user)):
     plans = supabase.table("plans").select("*").execute().data or []
 
     sub = (
@@ -635,7 +636,7 @@ def register(payload: dict):
 
 
 @app.post("/auth/after-signup")
-def after_signup(payload: dict, user=Depends(current_user)):
+def after_signup(payload: dict, user=Depends(get_current_user)):
     user_id = user["sub"]
 
     person_type = payload.get("person_type")
