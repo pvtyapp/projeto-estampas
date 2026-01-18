@@ -15,6 +15,8 @@ from backend.limits import check_and_consume_limits, LimitExceeded
 from backend.services.usage_service import get_usage, consume_usage
 from backend.app.routes import fiscal
 from fastapi import Header
+from backend.auth import current_user
+from backend.utils.validators import validate_document
 import stripe
 
 INTERNAL_KEY = os.getenv("INTERNAL_API_KEY")
@@ -116,32 +118,6 @@ def current_user(user=Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Não autenticado")
     return user
-
-@app.post("/auth/after-signup")
-# =========================
-# AUTH REGISTER (CORRETO)
-# =========================
-class RegisterPayload(BaseModel):
-    name: str | None = None
-    document: str | None = None
-    document_type: str | None = None
-    company_name: str | None = None
-    address: str | None = None
-    city: str | None = None
-    state: str | None = None
-    zip_code: str | None = None
-
-
-
-# =========================
-# HELPERS
-# =========================
-
-def validate_slots(slots: List[Slot]):
-    types = [s.type for s in slots]
-
-    if "front" not in types:
-        raise HTTPException(status_code=400, detail="Slot 'front' é obrigatório")
 
     if "extra" in types and "back" not in types:
         raise HTTPException(status_code=400, detail="Slot 'extra' só pode existir se 'back' existir")
@@ -637,45 +613,61 @@ def get_plans(user=Depends(current_user)):
 def register(payload: dict):
     email = payload.get("email")
     password = payload.get("password")
-    meta = payload.get("meta") or payload.get("user_metadata") or {}
 
     if not email or not password:
         raise HTTPException(status_code=400, detail="email e password obrigatórios")
 
-    res = supabase.auth.sign_up({
-        "email": email,
-        "password": password,
-        "options": {"data": meta}
-    })
-
-    if getattr(res, "error", None):
-        raise HTTPException(status_code=400, detail=str(res.error))
+    try:
+        res = supabase.auth.sign_up({
+            "email": email,
+            "password": password
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     data = res.get("user") if isinstance(res, dict) else getattr(res, "user", None)
 
     if not data:
         raise HTTPException(status_code=500, detail="Usuário não retornado pelo Supabase")
 
-    user_id = data.id if hasattr(data, "id") else data["id"]
+    return {"ok": True}
+
+
+
+@app.post("/auth/after-signup")
+def after_signup(payload: dict, user=Depends(current_user)):
+    user_id = user["sub"]
+
+    person_type = payload.get("person_type")
+    document = payload.get("document")
+
+    if person_type and document:
+        document = validate_document(person_type, document)
 
     fiscal = {
         "user_id": user_id,
-        "person_type": meta.get("person_type"),
-        "document": meta.get("document"),
-        "full_name": meta.get("name"),
-        "email": email,
-        "phone": meta.get("phone"),
-        "street": meta.get("street"),
-        "number": meta.get("number"),
-        "cep": meta.get("cep"),
+        "person_type": person_type,
+        "document": document,
+        "full_name": payload.get("name"),
+        "email": payload.get("email"),
+        "phone": payload.get("phone"),
+        "street": payload.get("street"),
+        "number": payload.get("number"),
+        "cep": payload.get("cep"),
+        "city": payload.get("city"),
+        "state": payload.get("state"),
     }
 
     fiscal = {k: v for k, v in fiscal.items() if v}
 
-    if fiscal:
-        supabase.table("user_fiscal_data").insert(fiscal).execute()
+    if not fiscal:
+        return {"ok": True}
+
+    supabase.table("user_fiscal_data").insert(fiscal).execute()
 
     return {"ok": True}
+
+
 
 
 # =========================
